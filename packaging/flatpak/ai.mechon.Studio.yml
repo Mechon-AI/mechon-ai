@@ -1,0 +1,29 @@
+app-id: ai.mechon.Studio
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: mechon-ai
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --filesystem=xdg-data/mechon-ai:create
+  - --filesystem=xdg-config/mechon-ai:create
+  - --filesystem=home:ro
+  - --filesystem=xdg-download:rw
+modules:
+  - name: mechon-ai
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 mechon-ai /app/bin/mechon-ai
+      - install -Dm644 mechon-ai.desktop /app/share/applications/ai.mechon.Studio.desktop
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/ai.mechon.Studio.png
+    sources:
+      - type: file
+        path: src-tauri/target/release/mechon-ai
+      - type: file
+        path: packaging/arch/mechon-ai.desktop
+      - type: file
+        path: src-tauri/icons/icon.png
