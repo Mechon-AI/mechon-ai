@@ -79,29 +79,33 @@ impl ModelProvider for AnthropicAdapter {
         let req = self.apply_headers(self.client.get(&url));
         let res = req.send().await.map_err(|e| ProviderError::from_reqwest(&e, &url))?;
 
-        if res.status().is_success() {
-            if let Ok(json) = res.json::<Value>().await {
-                if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
-                    let mut models = Vec::new();
-                    for m in data {
-                        if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
-                            models.push(ModelInfo {
-                                id: id.to_string(),
-                                name: id.to_string(),
-                                context_window: Some(200000),
-                                max_output_tokens: Some(8192),
-                                capabilities: self.capabilities,
-                            });
-                        }
+        if !res.status().is_success() {
+            let status = res.status().as_u16();
+            let body = res.text().await.unwrap_or_default();
+            return Err(ProviderError::from_status(status, &body, &url));
+        }
+
+        if let Ok(json) = res.json::<Value>().await {
+            if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                let mut models = Vec::new();
+                for m in data {
+                    if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                        models.push(ModelInfo {
+                            id: id.to_string(),
+                            name: id.to_string(),
+                            context_window: Some(200000),
+                            max_output_tokens: Some(8192),
+                            capabilities: self.capabilities,
+                        });
                     }
-                    if !models.is_empty() {
-                        return Ok(models);
-                    }
+                }
+                if !models.is_empty() {
+                    return Ok(models);
                 }
             }
         }
 
-        // Curated fallback
+        // Curated fallback only when endpoint responded 200 OK but model list was empty
         Ok(vec![
             ModelInfo {
                 id: "claude-3-5-sonnet-20241022".to_string(),

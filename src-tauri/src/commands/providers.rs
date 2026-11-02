@@ -3,7 +3,9 @@ use tauri::{AppHandle, Emitter, State};
 use sqlx::SqlitePool;
 use serde_json::json;
 use tokio::sync::mpsc;
-use crate::credentials::{CredentialStatus, CredentialStore};
+use crate::credentials::{
+    legacy_credential_ref, make_credential_ref, CredentialStatus, CredentialStore,
+};
 use crate::errors::AppError;
 use crate::models::{Provider, ProviderCreateInput, ProviderUpdateInput};
 use crate::providers::definition::ProviderDefinition;
@@ -80,7 +82,7 @@ pub async fn save_provider_credentials(
     provider_id: String,
     api_key: String,
 ) -> Result<CredentialStatus, AppError> {
-    let ref_id = format!("provider_{}", provider_id);
+    let ref_id = make_credential_ref(&provider_id);
     let trimmed = api_key.trim();
     if trimmed.is_empty() {
         return Err(AppError::Validation("API key cannot be empty".to_string()));
@@ -95,8 +97,16 @@ pub fn get_provider_credential_status(
     vault: State<'_, Arc<dyn CredentialStore>>,
     provider_id: String,
 ) -> CredentialStatus {
-    let ref_id = format!("provider_{}", provider_id);
-    vault.inner().as_ref().get_status(&ref_id)
+    let ref_id = make_credential_ref(&provider_id);
+    let mut status = vault.inner().as_ref().get_status(&ref_id);
+    if !status.has_api_key {
+        let leg = legacy_credential_ref(&provider_id);
+        let alt = vault.inner().as_ref().get_status(&leg);
+        if alt.has_api_key {
+            status = alt;
+        }
+    }
+    status
 }
 
 #[tauri::command]
@@ -113,9 +123,9 @@ pub async fn delete_provider_credentials(
     vault: State<'_, Arc<dyn CredentialStore>>,
     provider_id: String,
 ) -> Result<CredentialStatus, AppError> {
-    let ref_id = format!("provider_{}", provider_id);
-    vault.inner().as_ref().delete_credential(&ref_id)
-        .map_err(|e| AppError::Internal(format!("Failed to delete credential: {}", e)))?;
+    let ref_id = make_credential_ref(&provider_id);
+    let _ = vault.inner().as_ref().delete_credential(&ref_id);
+    let _ = vault.inner().as_ref().delete_credential(&legacy_credential_ref(&provider_id));
     Ok(vault.inner().as_ref().get_status(&ref_id))
 }
 

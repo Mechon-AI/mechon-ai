@@ -92,6 +92,11 @@ impl ProviderError {
                 format!("Authentication failed (HTTP 401). Verify that your API key is valid: {}", snippet),
                 401,
             ),
+            402 => Self::with_status(
+                ProviderErrorCode::QuotaExceeded,
+                format!("Payment or billing required (HTTP 402). Check provider credit balance or billing setup: {}", snippet),
+                402,
+            ),
             403 => Self::with_status(
                 ProviderErrorCode::AuthenticationFailed,
                 format!("Access forbidden (HTTP 403). Check API key permissions and model access: {}", snippet),

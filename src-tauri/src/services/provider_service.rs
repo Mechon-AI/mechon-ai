@@ -3,7 +3,9 @@ use uuid::Uuid;
 use chrono::Utc;
 use serde_json::Value;
 use tracing::info;
-use crate::credentials::CredentialStore;
+use crate::credentials::{
+    compute_fingerprint, legacy_credential_ref, make_credential_ref, CredentialStore,
+};
 use crate::errors::AppError;
 use crate::models::{Provider, ProviderCreateInput, ProviderUpdateInput};
 use crate::providers::models::ConnectionTestResult;
@@ -27,8 +29,16 @@ impl ProviderService {
 
         let mut providers = Vec::new();
         for r in rows {
-            let cred_ref = r.4.as_deref().unwrap_or(&r.0);
-            let status = vault.get_status(cred_ref);
+            let primary_ref = r.4.clone().unwrap_or_else(|| make_credential_ref(&r.0));
+            let mut status = vault.get_status(&primary_ref);
+            if !status.has_api_key {
+                let alt_ref = legacy_credential_ref(&r.0);
+                let alt_status = vault.get_status(&alt_ref);
+                if alt_status.has_api_key {
+                    status = alt_status;
+                }
+            }
+
             let models_cache: Vec<String> = serde_json::from_str(&r.6).unwrap_or_default();
             let settings: Value = serde_json::from_str(&r.9).unwrap_or(serde_json::json!({}));
 
@@ -67,8 +77,16 @@ impl ProviderService {
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Provider {} not found", id)))?;
 
-        let cred_ref = row.4.as_deref().unwrap_or(&row.0);
-        let status = vault.get_status(cred_ref);
+        let primary_ref = row.4.clone().unwrap_or_else(|| make_credential_ref(&row.0));
+        let mut status = vault.get_status(&primary_ref);
+        if !status.has_api_key {
+            let alt_ref = legacy_credential_ref(&row.0);
+            let alt_status = vault.get_status(&alt_ref);
+            if alt_status.has_api_key {
+                status = alt_status;
+            }
+        }
+
         let models_cache: Vec<String> = serde_json::from_str(&row.6).unwrap_or_default();
         let settings: Value = serde_json::from_str(&row.9).unwrap_or(serde_json::json!({}));
 
@@ -103,23 +121,47 @@ impl ProviderService {
         .await?;
 
         if let Some((cred_ref, legacy_key)) = row {
-            let ref_id = cred_ref.unwrap_or_else(|| format!("provider_{}", id));
-            if let Ok(Some(secret)) = vault.get_credential(&ref_id) {
-                if !secret.trim().is_empty() {
-                    return Ok(Some(secret));
+            // 1. Try DB-stored credential_ref
+            if let Some(ref cr) = cred_ref {
+                if let Ok(Some(secret)) = vault.get_credential(cr) {
+                    let trimmed = secret.trim();
+                    if !trimmed.is_empty() {
+                        return Ok(Some(trimmed.to_string()));
+                    }
                 }
             }
 
-            // Fallback: migrate legacy key if present
+            // 2. Try standard reference provider:{id}:api_key
+            let std_ref = make_credential_ref(id);
+            if let Ok(Some(secret)) = vault.get_credential(&std_ref) {
+                let trimmed = secret.trim();
+                if !trimmed.is_empty() {
+                    return Ok(Some(trimmed.to_string()));
+                }
+            }
+
+            // 3. Try legacy reference provider_{id}
+            let leg_ref = legacy_credential_ref(id);
+            if let Ok(Some(secret)) = vault.get_credential(&leg_ref) {
+                let trimmed = secret.trim();
+                if !trimmed.is_empty() {
+                    return Ok(Some(trimmed.to_string()));
+                }
+            }
+
+            // 4. Fallback: migrate legacy plaintext/encrypted key from DB
             if let Some(legacy) = legacy_key {
-                if !legacy.trim().is_empty() {
-                    let _ = vault.save_credential(&ref_id, &legacy);
-                    let _ = sqlx::query("UPDATE providers SET credential_ref = ?, api_key_encrypted = NULL WHERE id = ?")
-                        .bind(&ref_id)
-                        .bind(id)
-                        .execute(pool)
-                        .await;
-                    return Ok(Some(legacy));
+                let trimmed = legacy.trim();
+                if !trimmed.is_empty() {
+                    let _ = vault.save_credential(&std_ref, trimmed);
+                    let _ = sqlx::query(
+                        "UPDATE providers SET credential_ref = ?, api_key_encrypted = NULL WHERE id = ?"
+                    )
+                    .bind(&std_ref)
+                    .bind(id)
+                    .execute(pool)
+                    .await;
+                    return Ok(Some(trimmed.to_string()));
                 }
             }
         }
@@ -151,18 +193,40 @@ impl ProviderService {
         let default_model = input.default_model.or_else(|| Some(definition.default_model.clone()));
         let initial_cache = serde_json::to_string(&definition.curated_models)?;
 
+        let ref_id = make_credential_ref(&id);
         let mut credential_ref = None;
+
         if let Some(ref key) = input.api_key {
             let trimmed = key.trim();
             if !trimmed.is_empty() {
-                let ref_id = format!("provider_{}", id);
+                info!("[Credential] Provider ID: {}", id);
+                info!("[Credential] Vault backend: {}", vault.backend_name());
+                info!("[Credential] Vault availability: AVAILABLE");
+
                 vault.save_credential(&ref_id, trimmed)
                     .map_err(|e| AppError::Internal(format!("Failed to save credential to vault: {}", e)))?;
-                credential_ref = Some(ref_id);
+
+                // Read-back verification
+                match vault.get_credential(&ref_id) {
+                    Ok(Some(retrieved)) if retrieved == trimmed => {
+                        let fp = compute_fingerprint(trimmed);
+                        info!("[Credential] Save operation: SUCCESS");
+                        info!("[Credential] Read-back verification: SUCCESS");
+                        info!("[Credential] Credential length: {}", trimmed.len());
+                        info!("[Credential] Credential fingerprint: {}", fp);
+                        credential_ref = Some(ref_id.clone());
+                    }
+                    _ => {
+                        let _ = vault.delete_credential(&ref_id);
+                        return Err(AppError::Internal(
+                            "Credential save failed: immediate vault read-back verification failed".to_string()
+                        ));
+                    }
+                }
             }
         }
 
-        sqlx::query(
+        let insert_res = sqlx::query(
             "INSERT INTO providers (id, name, provider_type, base_url, credential_ref, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)"
         )
@@ -178,7 +242,15 @@ impl ProviderService {
         .bind(&now)
         .bind(&now)
         .execute(pool)
-        .await?;
+        .await;
+
+        if let Err(e) = insert_res {
+            // Rollback vault write if database transaction fails
+            if credential_ref.is_some() {
+                let _ = vault.delete_credential(&ref_id);
+            }
+            return Err(AppError::from(e));
+        }
 
         Self::get(pool, &id, vault).await
     }
@@ -199,25 +271,56 @@ impl ProviderService {
         let is_active = input.is_active.map(|b| if b { 1 } else { 0 }).unwrap_or(if existing.is_active { 1 } else { 0 });
         let settings_str = input.settings.map(|v| v.to_string()).unwrap_or_else(|| existing.settings.to_string());
 
-        let ref_id = format!("provider_{}", id);
+        let ref_id = make_credential_ref(id);
         let credential_ref = if input.clear_api_key == Some(true) {
+            info!("[Credential] Explicit credential removal requested for provider {}", id);
             let _ = vault.delete_credential(&ref_id);
+            let _ = vault.delete_credential(&legacy_credential_ref(id));
             None
         } else if let Some(ref new_key) = input.api_key {
             let trimmed = new_key.trim();
             if !trimmed.is_empty() {
+                info!("[Credential] Updating credential for provider {}", id);
                 vault.save_credential(&ref_id, trimmed)
                     .map_err(|e| AppError::Internal(format!("Failed to update credential in vault: {}", e)))?;
-                Some(ref_id)
+
+                // Read-back verification
+                match vault.get_credential(&ref_id) {
+                    Ok(Some(retrieved)) if retrieved == trimmed => {
+                        let fp = compute_fingerprint(trimmed);
+                        info!("[Credential] Save operation: SUCCESS");
+                        info!("[Credential] Read-back verification: SUCCESS");
+                        info!("[Credential] Credential length: {}", trimmed.len());
+                        info!("[Credential] Credential fingerprint: {}", fp);
+                        Some(ref_id)
+                    }
+                    _ => {
+                        return Err(AppError::Internal(
+                            "Credential update failed: vault read-back verification failed".to_string()
+                        ));
+                    }
+                }
             } else {
-                // Left empty: preserve existing
-                let status = vault.get_status(&ref_id);
-                if status.has_api_key { Some(ref_id) } else { None }
+                // Empty string in update means preserve existing credential reference!
+                let cur = sqlx::query_scalar::<_, Option<String>>(
+                    "SELECT credential_ref FROM providers WHERE id = ?"
+                )
+                .bind(id)
+                .fetch_one(pool)
+                .await
+                .unwrap_or(None);
+                cur.or_else(|| Some(ref_id))
             }
         } else {
-            // Unchanged: preserve existing
-            let status = vault.get_status(&ref_id);
-            if status.has_api_key { Some(ref_id) } else { None }
+            // Unchanged: preserve existing credential reference!
+            let cur = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT credential_ref FROM providers WHERE id = ?"
+            )
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(None);
+            cur
         };
 
         sqlx::query(
@@ -241,13 +344,16 @@ impl ProviderService {
     }
 
     pub async fn delete(pool: &SqlitePool, id: &str, vault: &dyn CredentialStore) -> Result<(), AppError> {
-        let ref_id = format!("provider_{}", id);
+        let std_ref = make_credential_ref(id);
+        let leg_ref = legacy_credential_ref(id);
+
         sqlx::query("DELETE FROM providers WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
-        let _ = vault.delete_credential(&ref_id);
+        let _ = vault.delete_credential(&std_ref);
+        let _ = vault.delete_credential(&leg_ref);
         Ok(())
     }
 
@@ -257,13 +363,18 @@ impl ProviderService {
         vault: &dyn CredentialStore,
     ) -> Result<ConnectionTestResult, AppError> {
         let provider = Self::get(pool, id, vault).await?;
-        let ref_id = format!("provider_{}", id);
+        let api_key = Self::get_raw_key(pool, id, vault).await?;
 
-        let result = ConnectionTester::test_provider(
+        let key_fingerprint = api_key.as_ref().map(|k| compute_fingerprint(k));
+        info!(
+            "[Credential] Testing provider '{}' ({}), key present: {}, fingerprint: {:?}",
+            provider.name, provider.provider_type, api_key.is_some(), key_fingerprint
+        );
+
+        let result = ConnectionTester::test_provider_with_key(
             &provider.provider_type,
             &provider.base_url,
-            Some(&ref_id),
-            vault,
+            api_key,
             provider.timeout_seconds,
         ).await;
 
@@ -304,11 +415,11 @@ impl ProviderService {
             if let Some(key) = legacy_key {
                 let trimmed = key.trim();
                 if !trimmed.is_empty() {
-                    let ref_id = format!("provider_{}", id);
-                    if let Ok(_) = vault.save_credential(&ref_id, trimmed) {
-                        info!("Migrated legacy credential for provider {} to vault", id);
+                    let std_ref = make_credential_ref(&id);
+                    if vault.save_credential(&std_ref, trimmed).is_ok() {
+                        info!("Migrated legacy credential for provider {} to vault (ref={})", id, std_ref);
                         let _ = sqlx::query("UPDATE providers SET credential_ref = ?, api_key_encrypted = NULL WHERE id = ?")
-                            .bind(&ref_id)
+                            .bind(&std_ref)
                             .bind(&id)
                             .execute(pool)
                             .await;
