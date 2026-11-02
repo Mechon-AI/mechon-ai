@@ -11,9 +11,9 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub Organization](https://img.shields.io/badge/GitHub-Mechon--AI-181717.svg?logo=github)](https://github.com/Mechon-AI)
 [![Target Platform](https://img.shields.io/badge/Platform-Arch_Linux_%7C_Linux-informational.svg)](#installation)
-[![Backend](https://img.shields.io/badge/Backend-FastAPI_%2B_SQLite_WAL-success.svg)](#technology-stack)
-[![Desktop Shell](https://img.shields.io/badge/Desktop-Tauri_2_%2B_Rust-orange.svg)](#technology-stack)
-[![Frontend](https://img.shields.io/badge/Frontend-React_18_%2B_Vite_%2B_Tailwind-blueviolet.svg)](#technology-stack)
+[![Core](https://img.shields.io/badge/Core-Native_Rust_%2B_Tokio_%2B_SQLx-orange.svg)](#technology-stack)
+[![Desktop Shell](https://img.shields.io/badge/Desktop-Tauri_2-brightgreen.svg)](#technology-stack)
+[![Frontend](https://img.shields.io/badge/Frontend-React_18_%2B_Vite_%2B_TypeScript-blueviolet.svg)](#technology-stack)
 
 </div>
 
@@ -25,8 +25,9 @@
 
 Modern foundation models are only as good as the data that shapes them. Mechon AI bridges the gap between raw text generation and rigorous dataset curation by replacing fragile scripts and web dashboards with a purpose-built desktop workstation.
 
-- **Local-First & Offline**: 100% self-contained on loopback interface `127.0.0.1`. Zero telemetry, zero external cloud dependencies, zero remote sync.
-- **Engineered Precision**: Native SQLite database with Write-Ahead Logging (WAL), foreign key validation, automated schema checks, and SHA-256 cryptographic dataset snapshots.
+- **100% Native Architecture**: Built with Rust, Tauri 2, and SQLite. **Zero Python required at runtime.**
+- **Local-First & Offline**: Direct in-process SQLite database with Write-Ahead Logging (WAL) and foreign-key integrity. Zero telemetry, zero external cloud dependencies.
+- **Engineered Precision**: Direct Tauri IPC command architecture without HTTP server overhead. SHA-256 cryptographic dataset snapshots and rollback.
 - **Full Workflow Breadth**: From multi-turn human-in-the-loop conversation crafting to pairwise preference evaluation and one-click Hugging Face TRL-compliant export.
 
 ---
@@ -41,7 +42,7 @@ Modern foundation models are only as good as the data that shapes them. Mechon A
 | **Model Playground** | **Production** | Fast local inference testing workbench supporting multiple providers simultaneously with adjustable sampling parameters. |
 | **Quality Control** | **Production** | Diagnostic engine auditing role alternations, prompt overlap, token length imbalances, and empty turn anomalies. |
 | **Version Snapshots** | **Production** | Point-in-time immutable dataset versioning with SHA-256 hashing, diff viewers, and one-click rollback. |
-| **Export Center** | **Production** | Multi-format export engine outputting to Hugging Face TRL JSONL (ShareGPT, Alpaca, Standard chosen/rejected) and Apache Parquet. |
+| **Export Center** | **Production** | Multi-format export engine outputting to Hugging Face TRL JSONL (ShareGPT, Alpaca, Standard chosen/rejected) and CSV. |
 | **Provider Manager** | **Production** | Provider orchestration for Ollama, OpenAI-compatible backends (vLLM, LM Studio, SGLang), and built-in offline Mock LLM. |
 | **Mechon Train** | *Planned* | Integrated local LoRA/QLoRA runner for direct on-device model fine-tuning against curated datasets. |
 
@@ -51,16 +52,17 @@ Modern foundation models are only as good as the data that shapes them. Mechon A
 
 ### Mechon SFT Workflow (Supervised Fine-Tuning)
 1. **Initiate Session**: Create a drafting session with a system prompt and target model.
-2. **Iterative Dialogue**: Add alternating `user` and `assistant` turns, or prompt a connected local provider to generate candidate responses.
+2. **Iterative Dialogue**: Add alternating `user` and `assistant` turns, or prompt a connected local provider to stream candidate responses.
 3. **In-Flight Editing**: Modify any turn at any stage; truncate downstream turns or branch new variations.
-4. **Atomic Commitment**: Commit the draft into an immutable SFT record. Multi-turn dialogue is packaged into **exactly one atomic record** with the complete messages array (`[{role: 'system', ...}, {role: 'user', ...}, {role: 'assistant', ...}]`).
+4. **Atomic Commitment**: Commit the draft into an immutable SFT record. Multi-turn dialogue is packaged into **exactly one atomic record** with the complete messages array (`[{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]`).
+5. **Idempotent Retention**: Multiple conversations append to the project's dataset; retrying a commit updates the existing record rather than duplicating it.
 
 ### Mechon DPO Workflow (Direct Preference Optimization)
 1. **Task Creation**: Input a prompt and optional system instructions.
 2. **Dual-Model Generation**: Generate Response A and Response B concurrently via Ollama, vLLM, or manual drafting.
 3. **Pairwise Ranking**: Inspect side-by-side completions with live markdown rendering and token counters.
 4. **Decision & Annotation**: Designate Winner (`A` or `B`), mark `Tie`, or `Flag` for low quality using keyboard shortcuts (`A`, `B`, `T`, `X`, `S`). Document rationale directly in the metadata.
-5. **TRL Export**: Export preference pairs directly to format: `{"prompt": "...", "chosen": "...", "rejected": "..."}`.
+5. **TRL Export**: Export preference pairs directly to standard format: `{"prompt": "...", "chosen": "...", "rejected": "..."}`.
 
 ---
 
@@ -79,51 +81,43 @@ Modern foundation models are only as good as the data that shapes them. Mechon A
 
 ## 5. Technology Stack
 
-```
-+-------------------------------------------------------------+
-|                     MECHON AI WORKSTATION                   |
-+-------------------------------------------------------------+
-|                                                             |
-|   Tauri 2 Desktop Shell (Rust)                              |
-|   ├── Process Lifecycle & Python Subprocess Supervision     |
-|   ├── Loopback Dynamic Port Allocation (127.0.0.1:18420)    |
-|   └── Native Window & OS Filesystem Integration             |
-|                                                             |
-|   React 18 + Vite 6 + Tailwind CSS Frontend                 |
-|   ├── Zustand State Stores (Projects, Providers, Settings)  |
-|   ├── TanStack Query Server-State Caching                   |
-|   ├── Recharts Dataset Analytics                            |
-|   └── Lucide React Iconography                              |
-|                                                             |
-|   Python 3.11+ Managed Backend (FastAPI + Uvicorn)          |
-|   ├── SFT & DPO Processing Engines                          |
-|   ├── Quality Control & Audit Engine                        |
-|   ├── Cryptographic Versioning (SHA-256)                    |
-|   ├── Export/Import Serializers (JSONL, Parquet)            |
-|   └── SQLAlchemy 2 ORM + SQLite 3 (WAL Mode Enabled)        |
-|                                                             |
-+-------------------------------------------------------------+
+```text
+Mechon AI Desktop Workstation
+│
+├── Tauri 2 Desktop Shell
+│   └── Rust Application Core
+│       ├── Command Handlers (Tauri generate_handler!)
+│       ├── Application Services (Project, SFT, DPO, Dataset, Validation, Versioning)
+│       ├── Provider Manager (Async trait ModelProvider: OpenAI, Ollama, Mock)
+│       ├── Model Communication (Reqwest + Tokio SSE streaming)
+│       ├── Validation Engine (Multi-turn dialogue and preference audits)
+│       ├── Import / Export (JSONL, JSON, CSV)
+│       └── SQLite Repository (SQLx + WAL Mode + Automatic Migrations)
+│
+├── React 18 + Vite 6 + TypeScript Frontend
+│   ├── Application Shell (AppLayout with persistent theme toggle)
+│   ├── Project Workspace
+│   ├── Provider Manager
+│   ├── SFT Studio (Multi-turn conversational tree & streaming inference)
+│   ├── DPO Studio (Side-by-side pairwise annotation & hotkeys)
+│   ├── Dataset Explorer (Corpus browser, full-text search & pagination)
+│   ├── Analytics (KPIs & growth timelines)
+│   └── Settings & Maintenance (Database integrity & atomic VACUUM backups)
+│
+└── SQLite Database (~/.local/share/mechon-ai/mechon.db)
+    ├── projects
+    ├── providers
+    ├── sft_sessions & sft_messages
+    ├── sft_records (atomic conversation records)
+    ├── dpo_tasks
+    ├── dataset_versions
+    ├── app_settings
+    └── audit_logs
 ```
 
 ---
 
-## 6. Screenshots
-
-<div align="center">
-
-| Mechon SFT Studio | Mechon DPO Studio |
-| :---: | :---: |
-| *[Screenshot Placeholder: Mechon SFT Multi-Turn Curation]* | *[Screenshot Placeholder: Mechon DPO Pairwise Annotation]* |
-
-| Mechon Corpus Explorer | Quality Control & Diagnostics |
-| :---: | :---: |
-| *[Screenshot Placeholder: Mechon Corpus Unified Index]* | *[Screenshot Placeholder: Quality Control Audit]* |
-
-</div>
-
----
-
-## 7. Installation
+## 6. Installation
 
 ### Arch Linux / EndeavourOS / Manjaro / CachyOS (Primary Platform)
 
@@ -141,7 +135,6 @@ makepkg -si
 ### Debian / Ubuntu / Pop!_OS / Linux Mint
 ```bash
 cd mechon-ai/packaging/debian
-# Build .deb package with dpkg-deb / debhelper
 dpkg-buildpackage -us -uc -b
 sudo dpkg -i ../mechon-ai_1.0.0_amd64.deb
 ```
@@ -158,13 +151,14 @@ rpmbuild -ba mechon-ai.spec
 
 ---
 
-## 8. Development Setup
+## 7. Development Setup
 
 ### Prerequisites
 - **Linux** (Arch Linux or any modern distribution)
 - **Rust** & **Cargo** (1.75+)
 - **Node.js** (v18+) & **npm**
-- **Python** (3.11+)
+
+*(Notice: Python is NOT required by Mechon AI at runtime or build time)*
 
 ### Quick Start
 
@@ -176,7 +170,7 @@ cd mechon-ai
 # 2. Run automated setup script
 ./scripts/setup.sh
 
-# 3. Launch in development mode (starts backend + frontend)
+# 3. Launch in development mode
 ./scripts/dev.sh
 ```
 
@@ -193,48 +187,17 @@ The compiled desktop executable will be located at `src-tauri/target/release/mec
 
 ---
 
-## 9. Standards & File Locations
+## 8. Standards & File Locations
 
 Mechon AI strictly follows the **XDG Base Directory Specification**:
 
-- **Data Directory**: `~/.local/share/mechon-ai/` (Database `mechon.db`, exports, snapshots)
+- **Data Directory**: `~/.local/share/mechon-ai/` (SQLite database `mechon.db`, backups, snapshots)
 - **Configuration**: `~/.config/mechon-ai/` (User preferences, provider settings)
 - **Cache**: `~/.cache/mechon-ai/` (Temporary staging and export artifacts)
 
 ---
 
-## 10. Roadmap
-
-### Implemented (v1.0.0)
-- [x] Full Project Management (create, duplicate, archive, search).
-- [x] Mechon SFT: Multi-turn drafting, turn editing, downstream truncation, atomic commitment.
-- [x] Mechon DPO: Dual sampling, side-by-side rating, reasoning capture, keyboard hotkeys.
-- [x] Mechon Corpus: Unified records explorer, full-text filtering, JSON inspector.
-- [x] Offline Mock LLM Provider, Ollama integration, OpenAI-compatible connector.
-- [x] Quality Control diagnostics & anomaly detection.
-- [x] SHA-256 version snapshots and rollback.
-- [x] Multi-format dataset export (ShareGPT, Alpaca, TRL DPO, Parquet).
-- [x] Native Arch Linux PKGBUILD, AppImage, Flatpak, Debian, and RPM manifests.
-
-### Planned (v1.1+)
-- [ ] **Mechon Train**: Local fine-tuning runner (Unsloth / Axolotl integration).
-- [ ] Synthetic data bootstrapping via self-instruct templates.
-- [ ] Direct Hugging Face Hub dataset publishing integration.
-- [ ] Multi-turn DPO conversation tree comparisons.
-- [ ] macOS and Windows cross-compilation builds.
-
----
-
-## 11. Community & Contributing
-
-We welcome contributions from AI researchers, dataset engineers, and developers!
-- Review [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and development workflow.
-- Review [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards.
-- Report vulnerabilities responsibly according to [SECURITY.md](SECURITY.md).
-
----
-
-## 12. License
+## 9. License
 
 Licensed under the **Apache License, Version 2.0**. See [LICENSE](LICENSE) for details.
 

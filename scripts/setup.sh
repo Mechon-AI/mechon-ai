@@ -1,21 +1,29 @@
 #!/bin/bash
 set -e
 
-echo "=== Mechon AI Workstation Setup ==="
+echo "=== Mechon AI Workstation Setup (Rust + TypeScript) ==="
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "1. Checking Python environment..."
-cd "$PROJECT_ROOT/backend"
-if [ ! -d ".venv" ]; then
-    python3 -m venv .venv --system-site-packages
+echo "1. Checking Rust toolchain..."
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "Error: Cargo is not installed. Please install Rust via https://rustup.rs/." >&2
+    exit 1
 fi
-.venv/bin/pip install -r requirements.txt
+echo "   Rust version: $(rustc --version)"
+echo "   Cargo version: $(cargo --version)"
 
 echo "2. Setting up Frontend..."
 cd "$PROJECT_ROOT/frontend"
 if [ ! -d "node_modules" ]; then
     npm install
+else
+    echo "   Frontend dependencies already installed."
 fi
 
+echo "3. Verifying Tauri dependencies..."
+cd "$PROJECT_ROOT/src-tauri"
+cargo check
+
 echo "=== Setup Complete! ==="
-echo "Run './scripts/dev.sh' to launch development mode."
+echo "Python is NOT required by Mechon AI."
+echo "Run './scripts/dev.sh' or 'cargo test --test core_tests' to verify."

@@ -1,7 +1,7 @@
 [package]
 name = "mechon-ai"
 version = "1.0.0"
-description = "Mechon AI — Native Cross-Platform Desktop Workstation for SFT and DPO Dataset Engineering"
+description = "Mechon AI — Native Desktop Workstation for SFT and DPO Dataset Engineering"
 authors = ["Mechon AI Team"]
 edition = "2021"
 
@@ -13,6 +13,19 @@ tauri = { version = "2.11.1", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "migrate"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "5.0"
+futures-util = "0.3"
+async-trait = "0.1"
+sha2 = "0.10"
+hex = "0.4"
+csv = "1.3"
 
 [profile.release]
 panic = "abort"

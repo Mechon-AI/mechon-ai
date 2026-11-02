@@ -241,7 +241,7 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Arch Linux / XDG Storage</span>
+            <span>Linux / XDG Storage</span>
             <span className="font-mono text-emerald-400">Ready</span>
           </div>
         </div>

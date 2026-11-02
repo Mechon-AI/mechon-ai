@@ -142,7 +142,7 @@ export const SettingsView: React.FC = () => {
 
         <div className="space-y-2 text-muted-foreground leading-relaxed">
           <p>
-            • <strong>Loopback-Only Binding:</strong> FastAPI backend runs strictly bound to <code className="text-foreground font-mono">127.0.0.1</code>. No remote or external interfaces exposed.
+            • <strong>Native Desktop Engine:</strong> In-process Rust core with direct IPC commands and SQLite WAL. No external ports or remote interfaces exposed.
           </p>
           <p>
             • <strong>Zero Telemetry:</strong> No tracking, cloud logging, or remote calls. Dataset files remain on local disk.

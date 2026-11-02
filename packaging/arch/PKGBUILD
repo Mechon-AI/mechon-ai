@@ -10,7 +10,6 @@ depends=(
     'webkit2gtk-4.1'
     'gtk3'
     'sqlite'
-    'python>=3.11'
     'openssl'
 )
 makedepends=(
@@ -18,12 +17,9 @@ makedepends=(
     'cargo'
     'nodejs>=18'
     'npm'
-    'python-setuptools'
 )
 optdepends=(
     'ollama: local offline inference runtime'
-    'python-pyarrow: Parquet dataset acceleration'
-    'python-pandas: advanced dataframe analytics'
 )
 source=(
     "$pkgname-$pkgver.tar.gz::https://github.com/Mechon-AI/mechon-ai/archive/v$pkgver.tar.gz"
@@ -45,11 +41,6 @@ package() {
 
     # Install native binary
     install -Dm755 "src-tauri/target/release/mechon-ai" "$pkgdir/usr/bin/mechon-ai"
-
-    # Install backend runtime assets
-    install -d "$pkgdir/usr/lib/$pkgname/backend"
-    cp -r backend/app "$pkgdir/usr/lib/$pkgname/backend/"
-    install -Dm644 backend/requirements.txt "$pkgdir/usr/lib/$pkgname/backend/requirements.txt"
 
     # Install desktop entry
     install -Dm644 "$srcdir/mechon-ai.desktop" "$pkgdir/usr/share/applications/mechon-ai.desktop"

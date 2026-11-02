@@ -8,7 +8,7 @@ URL:            https://github.com/Mechon-AI/mechon-ai
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo, rust, nodejs, npm, webkit2gtk4.1-devel, gtk3-devel
-Requires:       webkit2gtk4.1, gtk3, python3 >= 3.11, sqlite
+Requires:       webkit2gtk4.1, gtk3, sqlite
 
 %description
 Mechon AI is an offline-first desktop workstation for creating,

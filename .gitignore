@@ -60,6 +60,7 @@ pnpm-debug.log*
 # Rust / Tauri
 src-tauri/target/
 target/
+src-tauri/resources/backend/mechon-backend
 *.pdb
 
 # Environment & Secrets
