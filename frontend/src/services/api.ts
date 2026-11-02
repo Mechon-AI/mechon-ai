@@ -10,6 +10,7 @@ import type {
   ProviderCreateInput,
   ProviderUpdateInput,
   CredentialStatus,
+  VaultDiagnostics,
   ConnectionTestResult,
   DatasetVersion,
   ValidationReport
@@ -246,6 +247,9 @@ export const replaceProviderCredentials = (providerId: string, apiKey: string): 
 
 export const deleteProviderCredentials = (providerId: string): Promise<CredentialStatus> =>
   invoke<CredentialStatus>('delete_provider_credentials', { providerId })
+
+export const getVaultDiagnostics = (): Promise<VaultDiagnostics> =>
+  invoke<VaultDiagnostics>('get_vault_diagnostics')
 
 export const generateCompletion = (data: {
   provider_id: string

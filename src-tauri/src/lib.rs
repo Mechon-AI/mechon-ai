@@ -101,6 +101,7 @@ pub fn run() {
             commands::providers::get_provider_credential_status,
             commands::providers::replace_provider_credentials,
             commands::providers::delete_provider_credentials,
+            commands::providers::get_vault_diagnostics,
             commands::providers::generate_completion,
             commands::providers::generate_dpo_pair,
             commands::providers::stream_completion,

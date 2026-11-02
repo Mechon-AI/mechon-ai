@@ -129,6 +129,13 @@ pub async fn delete_provider_credentials(
     Ok(vault.inner().as_ref().get_status(&ref_id))
 }
 
+#[tauri::command]
+pub fn get_vault_diagnostics(
+    vault: State<'_, Arc<dyn CredentialStore>>,
+) -> crate::credentials::VaultDiagnostics {
+    vault.inner().as_ref().run_diagnostics()
+}
+
 // -------------------------------------------------------------
 // Inference & Model Execution (Centralized Model Factory)
 // -------------------------------------------------------------

@@ -5,7 +5,7 @@ use uuid::Uuid;
 use mechon_ai::credentials::{
     compute_fingerprint, make_credential_ref, CredentialError, CredentialStatus,
     CredentialStore, EncryptedVaultStore, InMemoryCredentialStore, KeyringStore,
-    HybridCredentialVault,
+    SecretServiceStore, HybridCredentialVault, VaultDiagnostics,
 };
 use mechon_ai::models::{ProviderCreateInput, ProviderUpdateInput};
 use mechon_ai::providers::registry::ProviderRegistry;
@@ -253,6 +253,21 @@ impl CredentialStore for FailingVaultStore {
     fn backend_name(&self) -> &'static str {
         "failing_vault_mock"
     }
+    fn run_diagnostics(&self) -> VaultDiagnostics {
+        VaultDiagnostics {
+            dbus_available: false,
+            dbus_address: None,
+            secret_service_available: false,
+            secret_service_unlocked: false,
+            secret_tool_installed: false,
+            active_backend: self.backend_name().to_string(),
+            write_test: "FAIL".to_string(),
+            read_back_test: "FAIL".to_string(),
+            delete_test: "FAIL".to_string(),
+            error_details: Some("Mock write failure".to_string()),
+            actionable_guidance: None,
+        }
+    }
 }
 
 #[tokio::test]
@@ -308,6 +323,21 @@ impl CredentialStore for UnavailableVaultStore {
     }
     fn backend_name(&self) -> &'static str {
         "unavailable_vault_mock"
+    }
+    fn run_diagnostics(&self) -> VaultDiagnostics {
+        VaultDiagnostics {
+            dbus_available: false,
+            dbus_address: None,
+            secret_service_available: false,
+            secret_service_unlocked: false,
+            secret_tool_installed: false,
+            active_backend: self.backend_name().to_string(),
+            write_test: "FAIL: daemon unreachable".to_string(),
+            read_back_test: "FAIL".to_string(),
+            delete_test: "FAIL".to_string(),
+            error_details: Some("Mock daemon unreachable".to_string()),
+            actionable_guidance: Some("Check daemon service status".to_string()),
+        }
     }
 }
 
@@ -423,8 +453,9 @@ fn test_hybrid_credential_vault_persistence_and_readback() {
     let temp_path = std::env::temp_dir().join(format!("mechon_hybrid_test_{}.enc", Uuid::new_v4()));
     let enc_store = EncryptedVaultStore::with_path(temp_path.clone());
     let keyring_store = KeyringStore::new();
+    let secret_service = SecretServiceStore::new();
 
-    let hybrid = HybridCredentialVault::with_stores(keyring_store, enc_store);
+    let hybrid = HybridCredentialVault::with_stores(secret_service, keyring_store, enc_store);
 
     let test_ref = make_credential_ref("test-hybrid-provider-1");
     let test_secret = "sk-live-test-hybrid-secret-key-12345";
@@ -487,3 +518,25 @@ async fn test_models_dev_enrichment() {
     let variant = dev.lookup("claude-3-5-sonnet-20241022").expect("Boundary-aware prefix should resolve");
     assert_eq!(variant.id, "claude-3-5-sonnet");
 }
+
+// -------------------------------------------------------------
+// Test 22: Secret Service Store Diagnostics Reporting
+// -------------------------------------------------------------
+#[test]
+fn test_secret_service_diagnostics_structure() {
+    let ss = SecretServiceStore::new();
+    let diag = ss.run_diagnostics();
+
+    // Verify all fields are present and correctly populated
+    assert!(!diag.active_backend.is_empty());
+    assert!(!diag.write_test.is_empty());
+    assert!(!diag.read_back_test.is_empty());
+    assert!(!diag.delete_test.is_empty());
+
+    // Verify diagnostic structure serialization
+    let json = serde_json::to_string(&diag).expect("Diagnostics must serialize to JSON");
+    assert!(json.contains("active_backend"));
+    assert!(json.contains("write_test"));
+    assert!(json.contains("read_back_test"));
+}
+

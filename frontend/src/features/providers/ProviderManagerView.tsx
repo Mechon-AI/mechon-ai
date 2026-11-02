@@ -29,9 +29,10 @@ import {
   createProvider,
   updateProvider,
   deleteProvider,
-  testProvider
+  testProvider,
+  getVaultDiagnostics
 } from '../../services/api'
-import type { Provider, ProviderDefinition, ConnectionTestResult } from '../../types'
+import type { Provider, ProviderDefinition, ConnectionTestResult, VaultDiagnostics } from '../../types'
 
 export const ProviderManagerView: React.FC = () => {
   const {
@@ -65,11 +66,27 @@ export const ProviderManagerView: React.FC = () => {
   const [testResults, setTestResults] = useState<Record<string, ConnectionTestResult>>({})
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [customModelInput, setCustomModelInput] = useState<Record<string, string>>({})
+  const [vaultDiag, setVaultDiag] = useState<VaultDiagnostics | null>(null)
+  const [showDiagModal, setShowDiagModal] = useState(false)
+  const [diagLoading, setDiagLoading] = useState(false)
 
   useEffect(() => {
     fetchProviders()
     loadDefinitions()
+    loadDiagnostics()
   }, [])
+
+  const loadDiagnostics = async () => {
+    try {
+      setDiagLoading(true)
+      const diag = await getVaultDiagnostics()
+      setVaultDiag(diag)
+    } catch (e) {
+      console.error('Failed to run vault diagnostics', e)
+    } finally {
+      setDiagLoading(false)
+    }
+  }
 
   const loadDefinitions = async () => {
     try {
@@ -309,13 +326,53 @@ export const ProviderManagerView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => openAddModal()}
-          className="px-3.5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-        >
-          <Plus className="h-4 w-4" /> Add Provider Endpoint
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowDiagModal(true); loadDiagnostics(); }}
+            className={`px-3 py-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              vaultDiag?.secret_service_unlocked
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+            }`}
+            title="Inspect Freedesktop Secret Service / KDE Wallet status"
+          >
+            {vaultDiag?.secret_service_unlocked ? (
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <ShieldAlert className="h-4 w-4 text-amber-400" />
+            )}
+            <span>{vaultDiag?.secret_service_unlocked ? 'KDE Wallet: Active' : 'Vault Diagnostics'}</span>
+          </button>
+
+          <button
+            onClick={() => openAddModal()}
+            className="px-3.5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+          >
+            <Plus className="h-4 w-4" /> Add Provider Endpoint
+          </button>
+        </div>
       </div>
+
+      {/* KDE Plasma / Secret Service Actionable Guidance Banner */}
+      {vaultDiag && (!vaultDiag.secret_service_available || !vaultDiag.secret_service_unlocked) && (
+        <div className="p-3.5 rounded-lg text-xs bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-start justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-amber-200">KDE Secret Service / KWallet Notice</div>
+              <div className="text-[11px] text-amber-300/80 mt-0.5">
+                {vaultDiag.actionable_guidance || vaultDiag.error_details || 'Secret Service is currently locked or inactive.'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => { setShowDiagModal(true); loadDiagnostics(); }}
+            className="px-2.5 py-1 text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded font-medium border border-amber-500/40 shrink-0"
+          >
+            Inspect Details
+          </button>
+        </div>
+      )}
 
       {/* Notification Toast */}
       {notification && (
@@ -740,6 +797,109 @@ export const ProviderManagerView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Vault Diagnostics Modal */}
+      {showDiagModal && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border w-full max-w-lg rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                <h3 className="font-bold text-sm">Credential Vault Diagnostics</h3>
+              </div>
+              <button
+                onClick={() => setShowDiagModal(false)}
+                className="p-1 rounded-md text-muted-foreground hover:bg-secondary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="bg-secondary/40 p-3.5 rounded-lg space-y-2 border border-border/50">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Active Storage Backend:</span>
+                  <span className="font-mono font-medium text-foreground">{vaultDiag?.active_backend || 'Loading...'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">D-Bus Session Bus:</span>
+                  <span className={`font-mono text-[11px] ${vaultDiag?.dbus_available ? 'text-emerald-400' : 'text-destructive'}`}>
+                    {vaultDiag?.dbus_available ? (vaultDiag.dbus_address || 'Available') : 'Not Found'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Secret Service Daemon:</span>
+                  <span className={`font-semibold ${vaultDiag?.secret_service_available ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {vaultDiag?.secret_service_available ? 'Registered on D-Bus (Active)' : 'Not Registered'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Secret Service Unlocked:</span>
+                  <span className={`font-semibold ${vaultDiag?.secret_service_unlocked ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {vaultDiag?.secret_service_unlocked ? 'Yes (Ready)' : 'No / Locked'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">secret-tool Utility:</span>
+                  <span className={`font-semibold ${vaultDiag?.secret_tool_installed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {vaultDiag?.secret_tool_installed ? 'Installed (/usr/bin/secret-tool)' : 'Missing'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider mb-2">Live Store Verification Probe</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/60 text-center">
+                    <div className="text-[10px] text-muted-foreground mb-1">Write Probe</div>
+                    <span className={`font-bold font-mono text-[11px] ${vaultDiag?.write_test.startsWith('PASS') ? 'text-emerald-400' : 'text-destructive'}`}>
+                      {vaultDiag?.write_test || '...'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/60 text-center">
+                    <div className="text-[10px] text-muted-foreground mb-1">Read-Back Probe</div>
+                    <span className={`font-bold font-mono text-[11px] ${vaultDiag?.read_back_test.startsWith('PASS') ? 'text-emerald-400' : 'text-destructive'}`}>
+                      {vaultDiag?.read_back_test || '...'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/60 text-center">
+                    <div className="text-[10px] text-muted-foreground mb-1">Delete Probe</div>
+                    <span className={`font-bold font-mono text-[11px] ${vaultDiag?.delete_test.startsWith('PASS') ? 'text-emerald-400' : 'text-destructive'}`}>
+                      {vaultDiag?.delete_test || '...'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {vaultDiag?.actionable_guidance && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200">
+                  <div className="font-bold text-[11px] mb-1">Actionable Guidance:</div>
+                  <div className="text-[11px] leading-relaxed opacity-90">{vaultDiag.actionable_guidance}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-border flex items-center justify-between">
+              <button
+                type="button"
+                onClick={loadDiagnostics}
+                disabled={diagLoading}
+                className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${diagLoading ? 'animate-spin' : ''}`} />
+                {diagLoading ? 'Testing...' : 'Re-run Tests'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDiagModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -107,6 +107,20 @@ export interface CredentialStatus {
   masked_hint?: string
 }
 
+export interface VaultDiagnostics {
+  dbus_available: boolean
+  dbus_address?: string
+  secret_service_available: boolean
+  secret_service_unlocked: boolean
+  secret_tool_installed: boolean
+  active_backend: string
+  write_test: string
+  read_back_test: string
+  delete_test: string
+  error_details?: string
+  actionable_guidance?: string
+}
+
 export interface ConnectionTestResult {
   success: boolean
   code: string
