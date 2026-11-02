@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS providers (
     provider_type TEXT NOT NULL,
     base_url TEXT NOT NULL,
     api_key_encrypted TEXT,
+    credential_ref TEXT,
     default_model TEXT,
     models_cache_json TEXT NOT NULL DEFAULT '[]',
     timeout_seconds INTEGER NOT NULL DEFAULT 60,

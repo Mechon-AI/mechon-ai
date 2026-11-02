@@ -1,12 +1,15 @@
 pub mod commands;
+pub mod credentials;
 pub mod database;
 pub mod errors;
 pub mod models;
 pub mod providers;
 pub mod services;
 
+use std::sync::Arc;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use credentials::{CredentialStore, HybridCredentialVault};
 
 pub fn run() {
     // Initialize structured tracing
@@ -18,15 +21,27 @@ pub fn run() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let vault: Arc<dyn CredentialStore> = Arc::new(HybridCredentialVault::new());
+
+    let vault_for_setup = Arc::clone(&vault);
+
     tauri::Builder::default()
-        .setup(|app| {
+        .manage(vault)
+        .setup(move |app| {
             // Asynchronously initialize SQLite pool and run migrations
             let app_handle = app.handle().clone();
+            let vault_inner = Arc::clone(&vault_for_setup);
             tauri::async_runtime::block_on(async move {
                 match database::init_pool().await {
                     Ok(pool) => {
+                        // Migrate any legacy plaintext credentials into vault
+                        let _ = services::provider_service::ProviderService::migrate_legacy_credentials(
+                            &pool,
+                            vault_inner.as_ref(),
+                        ).await;
+
                         app_handle.manage(pool);
-                        tracing::info!("SQLite connection pool managed in Tauri state successfully.");
+                        tracing::info!("SQLite connection pool and Credential Vault managed in Tauri state successfully.");
                     }
                     Err(e) => {
                         tracing::error!("FATAL: Failed to initialize SQLite database: {}", e);
@@ -75,12 +90,17 @@ pub fn run() {
             commands::dpo::duplicate_dpo_task,
 
             // Providers & Inference
+            commands::providers::get_provider_definitions,
             commands::providers::get_providers,
             commands::providers::get_provider,
             commands::providers::create_provider_cmd,
             commands::providers::update_provider_cmd,
             commands::providers::delete_provider_cmd,
             commands::providers::test_provider,
+            commands::providers::save_provider_credentials,
+            commands::providers::get_provider_credential_status,
+            commands::providers::replace_provider_credentials,
+            commands::providers::delete_provider_credentials,
             commands::providers::generate_completion,
             commands::providers::generate_dpo_pair,
             commands::providers::stream_completion,

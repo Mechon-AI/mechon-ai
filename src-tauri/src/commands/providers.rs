@@ -1,64 +1,127 @@
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use sqlx::SqlitePool;
 use serde_json::json;
 use tokio::sync::mpsc;
+use crate::credentials::{CredentialStatus, CredentialStore};
 use crate::errors::AppError;
 use crate::models::{Provider, ProviderCreateInput, ProviderUpdateInput};
-use crate::providers::{create_provider, ChatMessage, ChatRequest};
+use crate::providers::definition::ProviderDefinition;
+use crate::providers::factory::ProviderFactory;
+use crate::providers::models::{ChatMessage, ChatRequest, ConnectionTestResult};
+use crate::providers::registry::ProviderRegistry;
 use crate::services::provider_service::ProviderService;
+
+#[tauri::command]
+pub fn get_provider_definitions() -> Vec<ProviderDefinition> {
+    ProviderRegistry::global().all()
+}
 
 #[tauri::command]
 pub async fn get_providers(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
 ) -> Result<Vec<Provider>, AppError> {
-    ProviderService::list(&pool).await
+    ProviderService::list(&pool, vault.inner().as_ref()).await
 }
 
 #[tauri::command]
 pub async fn get_provider(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     id: String,
 ) -> Result<Provider, AppError> {
-    ProviderService::get(&pool, &id).await
+    ProviderService::get(&pool, &id, vault.inner().as_ref()).await
 }
 
 #[tauri::command]
 pub async fn create_provider_cmd(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     data: ProviderCreateInput,
 ) -> Result<Provider, AppError> {
-    ProviderService::create(&pool, data).await
+    ProviderService::create(&pool, data, vault.inner().as_ref()).await
 }
 
 #[tauri::command]
 pub async fn update_provider_cmd(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     id: String,
     data: ProviderUpdateInput,
 ) -> Result<Provider, AppError> {
-    ProviderService::update(&pool, &id, data).await
+    ProviderService::update(&pool, &id, data, vault.inner().as_ref()).await
 }
 
 #[tauri::command]
 pub async fn delete_provider_cmd(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     id: String,
 ) -> Result<(), AppError> {
-    ProviderService::delete(&pool, &id).await
+    ProviderService::delete(&pool, &id, vault.inner().as_ref()).await
 }
 
 #[tauri::command]
 pub async fn test_provider(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     id: String,
-) -> Result<serde_json::Value, AppError> {
-    let (healthy, models) = ProviderService::test_provider(&pool, &id).await?;
-    Ok(json!({
-        "healthy": healthy,
-        "models": models
-    }))
+) -> Result<ConnectionTestResult, AppError> {
+    ProviderService::test_provider(&pool, &id, vault.inner().as_ref()).await
 }
 
+// -------------------------------------------------------------
+// Credential Vault Management Commands
+// -------------------------------------------------------------
+#[tauri::command]
+pub async fn save_provider_credentials(
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    provider_id: String,
+    api_key: String,
+) -> Result<CredentialStatus, AppError> {
+    let ref_id = format!("provider_{}", provider_id);
+    let trimmed = api_key.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Validation("API key cannot be empty".to_string()));
+    }
+    vault.inner().as_ref().save_credential(&ref_id, trimmed)
+        .map_err(|e| AppError::Internal(format!("Failed to save credential: {}", e)))?;
+    Ok(vault.inner().as_ref().get_status(&ref_id))
+}
+
+#[tauri::command]
+pub fn get_provider_credential_status(
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    provider_id: String,
+) -> CredentialStatus {
+    let ref_id = format!("provider_{}", provider_id);
+    vault.inner().as_ref().get_status(&ref_id)
+}
+
+#[tauri::command]
+pub async fn replace_provider_credentials(
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    provider_id: String,
+    api_key: String,
+) -> Result<CredentialStatus, AppError> {
+    save_provider_credentials(vault, provider_id, api_key).await
+}
+
+#[tauri::command]
+pub async fn delete_provider_credentials(
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    provider_id: String,
+) -> Result<CredentialStatus, AppError> {
+    let ref_id = format!("provider_{}", provider_id);
+    vault.inner().as_ref().delete_credential(&ref_id)
+        .map_err(|e| AppError::Internal(format!("Failed to delete credential: {}", e)))?;
+    Ok(vault.inner().as_ref().get_status(&ref_id))
+}
+
+// -------------------------------------------------------------
+// Inference & Model Execution (Centralized Model Factory)
+// -------------------------------------------------------------
 #[derive(serde::Deserialize)]
 pub struct GenerateCompletionInput {
     pub provider_id: String,
@@ -74,10 +137,11 @@ pub struct GenerateCompletionInput {
 #[tauri::command]
 pub async fn generate_completion(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     data: GenerateCompletionInput,
 ) -> Result<serde_json::Value, AppError> {
-    let provider = ProviderService::get(&pool, &data.provider_id).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id).await?;
+    let provider = ProviderService::get(&pool, &data.provider_id, vault.inner().as_ref()).await?;
+    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id, vault.inner().as_ref()).await?;
 
     let model = data.model
         .or(provider.default_model)
@@ -102,7 +166,7 @@ pub async fn generate_completion(
         });
     }
 
-    let instance = create_provider(
+    let instance = ProviderFactory::create(
         &provider.provider_type,
         &provider.base_url,
         api_key,
@@ -118,7 +182,8 @@ pub async fn generate_completion(
         stream: false,
     };
 
-    let resp = instance.chat(chat_req).await?;
+    let resp = instance.chat(chat_req).await
+        .map_err(|e| AppError::Provider(e.message))?;
 
     Ok(json!({
         "role": resp.role,
@@ -142,10 +207,11 @@ pub struct GenerateDPOPairInput {
 #[tauri::command]
 pub async fn generate_dpo_pair(
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     params: GenerateDPOPairInput,
 ) -> Result<serde_json::Value, AppError> {
-    let provider = ProviderService::get(&pool, &params.provider_id).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &params.provider_id).await?;
+    let provider = ProviderService::get(&pool, &params.provider_id, vault.inner().as_ref()).await?;
+    let api_key = ProviderService::get_raw_key(&pool, &params.provider_id, vault.inner().as_ref()).await?;
 
     let model_a = params.model_a
         .or_else(|| provider.default_model.clone())
@@ -167,7 +233,7 @@ pub async fn generate_dpo_pair(
     messages_a.push(ChatMessage { role: "user".to_string(), content: params.prompt.clone() });
     messages_b.push(ChatMessage { role: "user".to_string(), content: params.prompt.clone() });
 
-    let instance = create_provider(
+    let instance = ProviderFactory::create(
         &provider.provider_type,
         &provider.base_url,
         api_key,
@@ -186,18 +252,20 @@ pub async fn generate_dpo_pair(
     let req_b = ChatRequest {
         model: model_b.clone(),
         messages: messages_b,
-        temperature: params.temp_b.or(Some(0.9)), // slightly higher temperature for diversity
+        temperature: params.temp_b.or(Some(0.9)),
         top_p: Some(0.95),
         max_tokens: Some(2048),
         stream: false,
     };
 
     let start_a = std::time::Instant::now();
-    let resp_a = instance.chat(req_a).await?;
+    let resp_a = instance.chat(req_a).await
+        .map_err(|e| AppError::Provider(format!("Model A generation failed: {}", e.message)))?;
     let latency_a = start_a.elapsed().as_millis() as i64;
 
     let start_b = std::time::Instant::now();
-    let resp_b = instance.chat(req_b).await?;
+    let resp_b = instance.chat(req_b).await
+        .map_err(|e| AppError::Provider(format!("Model B generation failed: {}", e.message)))?;
     let latency_b = start_b.elapsed().as_millis() as i64;
 
     Ok(json!({
@@ -226,10 +294,11 @@ pub struct StreamCompletionInput {
 pub async fn stream_completion(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
     data: StreamCompletionInput,
 ) -> Result<String, AppError> {
-    let provider = ProviderService::get(&pool, &data.provider_id).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id).await?;
+    let provider = ProviderService::get(&pool, &data.provider_id, vault.inner().as_ref()).await?;
+    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id, vault.inner().as_ref()).await?;
 
     let model = data.model
         .or(provider.default_model)
@@ -246,7 +315,7 @@ pub async fn stream_completion(
     }
     chat_messages.extend(data.messages);
 
-    let instance = create_provider(
+    let instance = ProviderFactory::create(
         &provider.provider_type,
         &provider.base_url,
         api_key,
@@ -270,7 +339,7 @@ pub async fn stream_completion(
     // Spawn provider stream task
     tokio::spawn(async move {
         if let Err(e) = instance.chat_stream(chat_req, tx).await {
-            let _ = app_clone.emit(&format!("sft-stream-error-{}", session_id_clone), json!({ "error": e.to_string() }));
+            let _ = app_clone.emit(&format!("sft-stream-error-{}", session_id_clone), json!({ "error": e.message }));
         }
     });
 

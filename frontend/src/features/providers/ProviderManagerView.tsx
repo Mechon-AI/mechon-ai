@@ -8,22 +8,30 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
+  ShieldCheck,
   ShieldAlert,
   Server,
   Key,
   Clock,
   Sparkles,
   Check,
-  X
+  X,
+  Lock,
+  EyeOff,
+  Zap,
+  Globe,
+  Radio,
+  Sliders
 } from 'lucide-react'
 import { useProviderStore } from '../../stores/useProviderStore'
 import {
+  getProviderDefinitions,
   createProvider,
   updateProvider,
   deleteProvider,
   testProvider
 } from '../../services/api'
-import type { Provider } from '../../types'
+import type { Provider, ProviderDefinition, ConnectionTestResult } from '../../types'
 
 export const ProviderManagerView: React.FC = () => {
   const {
@@ -35,41 +43,73 @@ export const ProviderManagerView: React.FC = () => {
     fetchProviders
   } = useProviderStore()
 
+  // Definitions from Rust Registry
+  const [definitions, setDefinitions] = useState<ProviderDefinition[]>([])
+
   // Modal states
   const [showModal, setShowModal] = useState(false)
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
 
   // Form states
+  const [selectedDefId, setSelectedDefId] = useState('ollama')
   const [name, setName] = useState('')
-  const [providerType, setProviderType] = useState('openai_compatible')
-  const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:11434/v1')
+  const [providerType, setProviderType] = useState('ollama')
+  const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:11434')
   const [apiKey, setApiKey] = useState('')
+  const [willClearKey, setWillClearKey] = useState(false)
   const [defaultModel, setDefaultModel] = useState('')
   const [timeoutSeconds, setTimeoutSeconds] = useState(60)
 
   // Feedback states
   const [testingId, setTestingId] = useState<string | null>(null)
-  const [testResults, setTestResults] = useState<Record<string, { healthy: boolean; models: string[]; message?: string }>>({})
+  const [testResults, setTestResults] = useState<Record<string, ConnectionTestResult>>({})
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [customModelInput, setCustomModelInput] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetchProviders()
+    loadDefinitions()
   }, [])
+
+  const loadDefinitions = async () => {
+    try {
+      const defs = await getProviderDefinitions()
+      setDefinitions(defs)
+    } catch (e) {
+      console.error('Failed to load provider definitions', e)
+    }
+  }
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message })
-    setTimeout(() => setNotification(null), 4000)
+    setTimeout(() => setNotification(null), 5000)
   }
 
-  const openAddModal = () => {
+  const openAddModal = (presetId?: string) => {
     setEditingProvider(null)
-    setName('')
-    setProviderType('ollama')
-    setBaseUrl('http://127.0.0.1:11434')
+    setWillClearKey(false)
     setApiKey('')
-    setDefaultModel('llama3:latest')
-    setTimeoutSeconds(60)
+
+    const targetDefId = presetId || 'ollama'
+    const def = definitions.find(d => d.id === targetDefId) || definitions[0]
+
+    if (def) {
+      setSelectedDefId(def.id)
+      setName(def.name)
+      setProviderType(def.provider_type)
+      const url = def.default_path ? `${def.default_host}${def.default_path}` : def.default_host
+      setBaseUrl(url)
+      setDefaultModel(def.default_model)
+      setTimeoutSeconds(60)
+    } else {
+      setSelectedDefId('ollama')
+      setName('Ollama (Local)')
+      setProviderType('ollama')
+      setBaseUrl('http://127.0.0.1:11434')
+      setDefaultModel('llama3:latest')
+      setTimeoutSeconds(60)
+    }
+
     setShowModal(true)
   }
 
@@ -79,21 +119,26 @@ export const ProviderManagerView: React.FC = () => {
     setProviderType(p.provider_type)
     setBaseUrl(p.base_url)
     setApiKey('')
+    setWillClearKey(false)
     setDefaultModel(p.default_model || '')
     setTimeoutSeconds(p.timeout_seconds || 60)
+
+    const def = definitions.find(d => d.provider_type === p.provider_type || d.id === p.provider_type)
+    if (def) {
+      setSelectedDefId(def.id)
+    }
     setShowModal(true)
   }
 
-  const handleProtocolChange = (type: string) => {
-    setProviderType(type)
-    if (type === 'ollama') {
-      setBaseUrl('http://127.0.0.1:11434')
-      if (!defaultModel || defaultModel === 'default') setDefaultModel('llama3:latest')
-    } else if (type === 'openai_compatible') {
-      setBaseUrl('http://127.0.0.1:8000/v1')
-      if (!defaultModel) setDefaultModel('')
-    } else if (type === 'custom_http') {
-      setBaseUrl('http://127.0.0.1:8080/v1')
+  const handleSelectDefinition = (defId: string) => {
+    setSelectedDefId(defId)
+    const def = definitions.find(d => d.id === defId)
+    if (def) {
+      setName(def.name)
+      setProviderType(def.provider_type)
+      const url = def.default_path ? `${def.default_host}${def.default_path}` : def.default_host
+      setBaseUrl(url)
+      setDefaultModel(def.default_model)
     }
   }
 
@@ -109,7 +154,8 @@ export const ProviderManagerView: React.FC = () => {
         await updateProvider(editingProvider.id, {
           name: name.trim(),
           base_url: baseUrl.trim(),
-          api_key: apiKey.trim() || undefined,
+          api_key: apiKey.trim() ? apiKey.trim() : undefined,
+          clear_api_key: willClearKey,
           default_model: defaultModel.trim() || undefined,
           timeout_seconds: timeoutSeconds
         })
@@ -119,25 +165,25 @@ export const ProviderManagerView: React.FC = () => {
           name: name.trim(),
           provider_type: providerType,
           base_url: baseUrl.trim(),
-          api_key: apiKey.trim() || undefined,
+          api_key: apiKey.trim() ? apiKey.trim() : undefined,
           default_model: defaultModel.trim() || undefined,
           timeout_seconds: timeoutSeconds
         })
-        showFeedback('success', `Provider "${name.trim()}" created successfully.`)
+        showFeedback('success', `Provider "${name.trim()}" registered successfully.`)
       }
       await fetchProviders()
       setShowModal(false)
     } catch (err: any) {
-      showFeedback('error', `Failed to save provider: ${err.message}`)
+      showFeedback('error', `Failed to save provider: ${err.message || err}`)
     }
   }
 
   const handleDelete = async (p: Provider) => {
     if (p.id === 'mock') {
-      showFeedback('error', 'The built-in Mock provider cannot be deleted.')
+      showFeedback('error', 'The built-in offline mock provider cannot be deleted.')
       return
     }
-    if (confirm(`Are you sure you want to delete the provider endpoint "${p.name}"?`)) {
+    if (confirm(`Are you sure you want to delete the provider endpoint "${p.name}"? Any stored credentials in the secure vault will be deleted.`)) {
       try {
         await deleteProvider(p.id)
         if (activeProviderId === p.id) {
@@ -146,7 +192,7 @@ export const ProviderManagerView: React.FC = () => {
         await fetchProviders()
         showFeedback('success', `Provider "${p.name}" deleted.`)
       } catch (err: any) {
-        showFeedback('error', `Delete failed: ${err.message}`)
+        showFeedback('error', `Delete failed: ${err.message || err}`)
       }
     }
   }
@@ -157,17 +203,21 @@ export const ProviderManagerView: React.FC = () => {
       const res = await testProvider(id)
       setTestResults(prev => ({ ...prev, [id]: res }))
       await fetchProviders()
-      if (res.healthy) {
-        showFeedback('success', `Connection to provider succeeded! Discovered ${res.models.length} model(s).`)
+      if (res.success) {
+        showFeedback('success', `${res.message}`)
       } else {
-        showFeedback('error', `Connection test failed. Server is unreachable or returned error.`)
+        showFeedback('error', `${res.message}`)
       }
     } catch (err: any) {
-      setTestResults(prev => ({
-        ...prev,
-        [id]: { healthy: false, models: [], message: err.message }
-      }))
-      showFeedback('error', `Connection error: ${err.message}`)
+      const fallbackResult: ConnectionTestResult = {
+        success: false,
+        code: 'UNKNOWN_ERROR',
+        message: err.message || String(err),
+        models: [],
+        latency_ms: 0
+      }
+      setTestResults(prev => ({ ...prev, [id]: fallbackResult }))
+      showFeedback('error', `Connection error: ${err.message || err}`)
     } finally {
       setTestingId(null)
     }
@@ -182,24 +232,88 @@ export const ProviderManagerView: React.FC = () => {
     showFeedback('success', `Active model set to "${modelTag}".`)
   }
 
+  // Active definition for modal
+  const activeDef = definitions.find(d => d.id === selectedDefId)
+
+  // Categorize definitions for quick adding
+  const cloudDefs = definitions.filter(d => ['openai', 'anthropic', 'gemini', 'deepseek', 'groq', 'openrouter', 'xai', 'together', 'fireworks', 'siliconflow'].includes(d.id))
+  const localDefs = definitions.filter(d => ['ollama', 'lmstudio', 'vllm', 'sglang'].includes(d.id))
+  const otherDefs = definitions.filter(d => ['custom_http', 'mock'].includes(d.id))
+
+  const renderDiagnosticBadge = (result?: ConnectionTestResult) => {
+    if (!result) {
+      return (
+        <span className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+          <Clock className="h-3 w-3" /> Untested (click 'Test Connection')
+        </span>
+      )
+    }
+
+    if (result.success) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-emerald-400 flex items-center gap-1 text-[11px]">
+            <CheckCircle className="h-3 w-3" /> Connected ({result.latency_ms} ms)
+          </span>
+          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+            {result.models.length} model(s) discovered
+          </span>
+        </div>
+      )
+    }
+
+    const codeLabelMap: Record<string, { label: string; desc: string }> = {
+      AUTHENTICATION_FAILED: { label: 'Auth Failed (401/403)', desc: 'Check your API key.' },
+      CONNECTION_REFUSED: { label: 'Connection Refused', desc: 'Is local server running?' },
+      DNS_FAILURE: { label: 'DNS Failure', desc: 'Cannot resolve hostname.' },
+      TIMEOUT: { label: 'Request Timeout', desc: 'Endpoint timed out.' },
+      RATE_LIMITED: { label: 'Rate Limited (429)', desc: 'Exceeded rate quota.' },
+      QUOTA_EXCEEDED: { label: 'Quota Exceeded', desc: 'Account credit exhausted.' },
+      MODEL_NOT_FOUND: { label: 'Model Not Found (404)', desc: 'Check model ID.' },
+      UNSUPPORTED_ENDPOINT: { label: 'Endpoint Unsupported', desc: 'Endpoint URL path rejected.' },
+      INVALID_URL: { label: 'Invalid URL', desc: 'Malformed protocol or host.' },
+      INVALID_RESPONSE: { label: 'Invalid Response', desc: 'Unparseable JSON response.' },
+      TLS_ERROR: { label: 'TLS / SSL Error', desc: 'Certificate verification failed.' },
+      UNKNOWN_ERROR: { label: 'Connection Error', desc: 'Network communication failed.' }
+    }
+
+    const info = codeLabelMap[result.code] || { label: result.code, desc: result.message }
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-rose-400 flex items-center gap-1 text-[11px]">
+            <AlertCircle className="h-3 w-3" /> {info.label}
+          </span>
+          {result.latency_ms > 0 && (
+            <span className="text-[10px] font-mono text-muted-foreground">({result.latency_ms} ms)</span>
+          )}
+        </div>
+        <p className="text-[10px] text-rose-300/80 leading-tight truncate" title={result.message}>
+          {result.message}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
-            <Cpu className="h-5 w-5 text-primary" /> Model Provider Manager
+            <Cpu className="h-5 w-5 text-primary" /> Model Provider Registry & Vault
           </h2>
           <p className="text-xs text-muted-foreground">
-            Configure local endpoints (Ollama, vLLM, LM Studio, SGLang) or remote OpenAI-compatible servers.
+            Manage local runtimes (Ollama, vLLM, LM Studio) and cloud APIs with secure OS Keyring / encrypted vault credential isolation.
           </p>
         </div>
 
         <button
-          onClick={openAddModal}
+          onClick={() => openAddModal()}
           className="px-3.5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
         >
-          <Plus className="h-4 w-4" /> Add Provider
+          <Plus className="h-4 w-4" /> Add Provider Endpoint
         </button>
       </div>
 
@@ -248,13 +362,13 @@ export const ProviderManagerView: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] font-mono text-muted-foreground block truncate mt-0.5">
+                    <span className="text-[11px] font-mono text-muted-foreground block truncate mt-0.5" title={p.base_url}>
                       {p.base_url}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-secondary border border-border text-muted-foreground">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-secondary border border-border text-muted-foreground uppercase">
                       {p.provider_type}
                     </span>
                     {p.id !== 'mock' && (
@@ -279,29 +393,32 @@ export const ProviderManagerView: React.FC = () => {
                 </div>
 
                 {/* Connection Status & Details */}
-                <div className="p-3 rounded-lg bg-secondary/40 border border-border/70 space-y-2 text-xs">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground">Endpoint Health:</span>
-                    {testStatus ? (
-                      <span className={`font-semibold flex items-center gap-1 ${testStatus.healthy ? 'text-emerald-400' : 'text-destructive'}`}>
-                        {testStatus.healthy ? <CheckCircle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                        {testStatus.healthy ? 'Connected & Verified' : 'Connection Failed'}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground italic">Untested (click 'Test Connection')</span>
-                    )}
+                <div className="p-3 rounded-lg bg-secondary/40 border border-border/70 space-y-2.5 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold mb-1">Health & Diagnostic Status</span>
+                    {renderDiagnosticBadge(testStatus)}
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
                     <span>Default Model:</span>
-                    <span className="font-mono text-foreground font-medium truncate max-w-[200px]">
+                    <span className="font-mono text-foreground font-medium truncate max-w-[220px]">
                       {p.default_model || (p.models_cache && p.models_cache[0]) || 'default'}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>Authentication:</span>
-                    <span>{p.has_api_key ? 'API Key Configured' : 'None (Local / Public)'}</span>
+                    <span>Credential Vault:</span>
+                    {p.has_api_key ? (
+                      <span className="font-medium text-emerald-400 flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3" />
+                        Stored in Vault {p.masked_hint && <span className="font-mono text-[10px] text-muted-foreground">({p.masked_hint})</span>}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Key className="h-3 w-3 opacity-50" />
+                        No API Key (Local / Public)
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -315,7 +432,7 @@ export const ProviderManagerView: React.FC = () => {
                   </div>
 
                   {p.models_cache && p.models_cache.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 rounded-md bg-secondary/20 border border-border/40">
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 rounded-md bg-secondary/20 border border-border/40">
                       {p.models_cache.map(m => (
                         <button
                           key={m}
@@ -336,7 +453,7 @@ export const ProviderManagerView: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-[11px] text-muted-foreground italic p-2 rounded bg-secondary/20 border border-border/30">
-                      No models cached. Click "Test Connection" to query available models from endpoint.
+                      No models cached. Click "Test Connection" to discover models.
                     </div>
                   )}
 
@@ -401,10 +518,10 @@ export const ProviderManagerView: React.FC = () => {
       {/* Add / Edit Provider Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
+          <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <h3 className="text-base font-bold text-foreground">
-                {editingProvider ? 'Edit Model Provider' : 'Add Model Provider'}
+                {editingProvider ? `Configure: ${editingProvider.name}` : 'Add New Model Provider'}
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground">
                 <X className="h-4 w-4" />
@@ -412,32 +529,90 @@ export const ProviderManagerView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
+              {/* Preset Selector for New Providers */}
+              {!editingProvider && (
+                <div className="space-y-2">
+                  <label className="font-semibold text-foreground block">Select Provider Template</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {definitions.map(def => {
+                      const isSelected = selectedDefId === def.id
+                      return (
+                        <button
+                          key={def.id}
+                          type="button"
+                          onClick={() => handleSelectDefinition(def.id)}
+                          className={`p-2 text-left rounded-lg border transition-all text-xs ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary text-foreground font-semibold shadow-xs'
+                              : 'bg-secondary/40 border-border hover:bg-secondary text-muted-foreground'
+                          }`}
+                        >
+                          <div className="font-medium truncate">{def.name}</div>
+                          <div className="text-[10px] text-muted-foreground truncate uppercase">{def.provider_type}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Provider Capabilities Pill Bar */}
+              {activeDef && (
+                <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-foreground">Declared Capabilities:</span>
+                    {activeDef.documentation_url && (
+                      <a
+                        href={activeDef.documentation_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline flex items-center gap-1 text-[10px]"
+                      >
+                        Docs <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeDef.capabilities.streaming && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-primary/15 text-primary border border-primary/25">
+                        Streaming
+                      </span>
+                    )}
+                    {activeDef.capabilities.vision && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                        Vision
+                      </span>
+                    )}
+                    {activeDef.capabilities.tool_use && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-purple-500/15 text-purple-400 border border-purple-500/25">
+                        Tool Use
+                      </span>
+                    )}
+                    {activeDef.capabilities.reasoning && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                        Reasoning
+                      </span>
+                    )}
+                    {activeDef.capabilities.structured_output && (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                        Structured Output
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
-                <label className="font-semibold text-foreground">Provider Name</label>
+                <label className="font-semibold text-foreground">Provider Display Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Local Ollama, vLLM Server, LM Studio"
+                  placeholder="e.g. Production Anthropic, Local Ollama"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
-
-              {!editingProvider && (
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Protocol Architecture</label>
-                  <select
-                    value={providerType}
-                    onChange={e => handleProtocolChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="ollama">Native Ollama API (e.g. http://127.0.0.1:11434)</option>
-                    <option value="openai_compatible">OpenAI-Compatible (vLLM, LM Studio, SGLang, OpenAI)</option>
-                    <option value="custom_http">Custom HTTP Inference Server</option>
-                  </select>
-                </div>
-              )}
 
               <div className="space-y-1">
                 <label className="font-semibold text-foreground">Base URL Endpoint</label>
@@ -449,20 +624,34 @@ export const ProviderManagerView: React.FC = () => {
                   className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
                 />
                 <span className="text-[10px] text-muted-foreground block">
-                  Loopback or intranet URL. For OpenAI compatible: append /v1.
+                  Host and API root URL. Native adapters format individual endpoint paths automatically.
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Default Model Name</label>
+                  <label className="font-semibold text-foreground">Default Model ID</label>
                   <input
                     type="text"
-                    placeholder="e.g. llama3:latest, gpt-4o"
+                    placeholder="e.g. gpt-4o, claude-3-5-sonnet"
                     value={defaultModel}
                     onChange={e => setDefaultModel(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
                   />
+                  {activeDef?.curated_models && activeDef.curated_models.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {activeDef.curated_models.slice(0, 4).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setDefaultModel(m)}
+                          className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-secondary hover:bg-accent border border-border text-muted-foreground"
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -478,17 +667,61 @@ export const ProviderManagerView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">
-                  API Key {editingProvider?.has_api_key && '(Leave empty to keep existing key)'}
-                </label>
-                <input
-                  type="password"
-                  placeholder={editingProvider?.has_api_key ? '••••••••••••••••' : 'Optional for local endpoints'}
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
-                />
+              {/* Secure Credential Vault Input */}
+              <div className="space-y-2 pt-2 border-t border-border/80">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5 text-primary" /> API Key / Credential Vault
+                  </label>
+                  {editingProvider?.has_api_key && (
+                    <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Key Stored {editingProvider.masked_hint && `(${editingProvider.masked_hint})`}
+                    </span>
+                  )}
+                </div>
+
+                {editingProvider?.has_api_key && (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 space-y-2">
+                    <p>
+                      Your API credential is securely stored in your local encrypted vault / OS Keyring. Leaving the field below empty keeps your existing key intact.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWillClearKey(!willClearKey)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-semibold border transition-all ${
+                          willClearKey
+                            ? 'bg-destructive/20 border-destructive text-destructive font-bold'
+                            : 'bg-secondary hover:bg-accent border-border text-foreground'
+                        }`}
+                      >
+                        {willClearKey ? '✓ Key will be erased on save' : 'Remove Stored Key'}
+                      </button>
+                      {willClearKey && (
+                        <span className="text-[10px] text-destructive">
+                          Key will be permanently purged from the secure credential vault upon saving.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!willClearKey && (
+                  <input
+                    type="password"
+                    placeholder={
+                      editingProvider?.has_api_key
+                        ? 'Enter new API key to replace existing secret...'
+                        : 'Optional for local Ollama / vLLM; required for cloud APIs'
+                    }
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
+                  />
+                )}
+                <span className="text-[10px] text-muted-foreground block">
+                  Mechon AI never stores plaintext keys in database tables or logs. Keys are stored in the host OS Secret Service / Keyring with stream-encrypted file backup.
+                </span>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/80">

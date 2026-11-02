@@ -58,6 +58,12 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
     sqlx::raw_sql(schema_sql)
         .execute(&pool)
         .await?;
+
+    // Ensure credential_ref column exists on existing databases
+    let _ = sqlx::query("ALTER TABLE providers ADD COLUMN credential_ref TEXT")
+        .execute(&pool)
+        .await;
+
     info!("Migrations completed successfully.");
 
     // Seed default data if needed
@@ -99,8 +105,8 @@ pub async fn seed_defaults(pool: &SqlitePool) -> Result<(), AppError> {
         
         // Mock provider for offline testing and verification
         sqlx::query(
-            "INSERT INTO providers (id, name, provider_type, base_url, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 30, 1, '{}', ?, ?)"
+            "INSERT INTO providers (id, name, provider_type, base_url, credential_ref, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, 30, 1, '{}', ?, ?)"
         )
         .bind("mock")
         .bind("Mechon Offline Mock Provider")
@@ -115,8 +121,8 @@ pub async fn seed_defaults(pool: &SqlitePool) -> Result<(), AppError> {
 
         // Local Ollama default provider
         sqlx::query(
-            "INSERT INTO providers (id, name, provider_type, base_url, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 60, 1, '{}', ?, ?)"
+            "INSERT INTO providers (id, name, provider_type, base_url, credential_ref, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, 60, 1, '{}', ?, ?)"
         )
         .bind("ollama-local")
         .bind("Ollama Local")

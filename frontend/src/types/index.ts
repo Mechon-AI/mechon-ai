@@ -76,12 +76,53 @@ export interface DPOTask {
   updated_at: string
 }
 
+export interface ModelCapabilities {
+  vision: boolean
+  tool_use: boolean
+  reasoning: boolean
+  streaming: boolean
+  structured_output: boolean
+  json_mode: boolean
+}
+
+export interface ProviderDefinition {
+  id: string
+  name: string
+  provider_type: string
+  default_host: string
+  default_path: string
+  default_model: string
+  curated_models: string[]
+  capabilities: ModelCapabilities
+  supports_model_discovery: boolean
+  supports_streaming: boolean
+  requires_api_key: boolean
+  auth_header_format?: string
+  documentation_url?: string
+}
+
+export interface CredentialStatus {
+  has_api_key: boolean
+  credential_status: string
+  masked_hint?: string
+}
+
+export interface ConnectionTestResult {
+  success: boolean
+  code: string
+  message: string
+  models: string[]
+  latency_ms: number
+}
+
 export interface Provider {
   id: string
   name: string
-  provider_type: 'openai_compatible' | 'ollama' | 'custom_http' | 'mock'
+  provider_type: string
   base_url: string
   has_api_key: boolean
+  credential_status: string
+  masked_hint?: string
   default_model?: string
   models_cache: string[]
   timeout_seconds: number
@@ -89,6 +130,27 @@ export interface Provider {
   settings: Record<string, any>
   created_at: string
   updated_at: string
+}
+
+export interface ProviderCreateInput {
+  name: string
+  provider_type: string
+  base_url?: string
+  api_key?: string
+  default_model?: string
+  timeout_seconds?: number
+  settings?: Record<string, any>
+}
+
+export interface ProviderUpdateInput {
+  name?: string
+  base_url?: string
+  api_key?: string
+  clear_api_key?: boolean
+  default_model?: string
+  timeout_seconds?: number
+  is_active?: boolean
+  settings?: Record<string, any>
 }
 
 export interface DatasetVersion {

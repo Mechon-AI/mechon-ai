@@ -299,7 +299,7 @@ async fn test_dataset_export_and_versioning() {
 #[tokio::test]
 async fn test_offline_mock_provider() {
     let provider = create_provider("mock", "http://127.0.0.1:0", None, 30);
-    let models = provider.test_connection().await.unwrap();
+    let models = provider.list_models().await.unwrap();
     assert!(!models.is_empty());
 
     let resp = provider.chat(ChatRequest {

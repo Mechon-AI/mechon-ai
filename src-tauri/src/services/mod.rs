@@ -1,10 +1,11 @@
-pub mod project_service;
-pub mod sft_service;
-pub mod dpo_service;
+pub mod analytics_service;
+pub mod connection_tester;
 pub mod dataset_service;
+pub mod dpo_service;
+pub mod export_service;
+pub mod project_service;
 pub mod provider_service;
+pub mod settings_service;
+pub mod sft_service;
 pub mod validation_service;
 pub mod version_service;
-pub mod analytics_service;
-pub mod export_service;
-pub mod settings_service;

@@ -63,7 +63,7 @@ export const useProviderStore = create<ProviderState>()(
         const pId = get().activeProviderId
         try {
           const res = await testProvider(pId)
-          set({ isOnline: res.healthy })
+          set({ isOnline: res.success })
         } catch {
           set({ isOnline: false })
         }

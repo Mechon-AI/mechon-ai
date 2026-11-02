@@ -6,6 +6,11 @@ import type {
   SFTRecord,
   DPOTask,
   Provider,
+  ProviderDefinition,
+  ProviderCreateInput,
+  ProviderUpdateInput,
+  CredentialStatus,
+  ConnectionTestResult,
   DatasetVersion,
   ValidationReport
 } from '../types'
@@ -188,6 +193,13 @@ export const updateDPOTask = (taskId: string, data: Partial<DPOTask>): Promise<D
 // -------------------------------------------------------------
 // Providers & Inference API
 // -------------------------------------------------------------
+export const getProviderDefinitions = async (): Promise<ProviderDefinition[]> => {
+  if (isTauriEnvironment()) {
+    return invoke<ProviderDefinition[]>('get_provider_definitions')
+  }
+  return []
+}
+
 export const getProviders = async (): Promise<Provider[]> => {
   if (isTauriEnvironment()) {
     return invoke<Provider[]>('get_providers')
@@ -199,6 +211,7 @@ export const getProviders = async (): Promise<Provider[]> => {
       provider_type: 'mock',
       base_url: 'http://127.0.0.1:0',
       has_api_key: false,
+      credential_status: 'empty',
       default_model: 'mock-llama-3-8b',
       models_cache: ['mock-llama-3-8b', 'mock-mistral-7b', 'mock-qwen-2.5-7b'],
       timeout_seconds: 30,
@@ -210,17 +223,29 @@ export const getProviders = async (): Promise<Provider[]> => {
   ]
 }
 
-export const createProvider = (data: any): Promise<Provider> =>
+export const createProvider = (data: ProviderCreateInput): Promise<Provider> =>
   invoke<Provider>('create_provider_cmd', { data })
 
-export const updateProvider = (id: string, data: any): Promise<Provider> =>
+export const updateProvider = (id: string, data: ProviderUpdateInput): Promise<Provider> =>
   invoke<Provider>('update_provider_cmd', { id, data })
 
 export const deleteProvider = (id: string): Promise<void> =>
   invoke('delete_provider_cmd', { id })
 
-export const testProvider = (id: string): Promise<{ healthy: boolean; models: string[] }> =>
-  invoke<{ healthy: boolean; models: string[] }>('test_provider', { id })
+export const testProvider = (id: string): Promise<ConnectionTestResult> =>
+  invoke<ConnectionTestResult>('test_provider', { id })
+
+export const saveProviderCredentials = (providerId: string, apiKey: string): Promise<CredentialStatus> =>
+  invoke<CredentialStatus>('save_provider_credentials', { providerId, apiKey })
+
+export const getProviderCredentialStatus = (providerId: string): Promise<CredentialStatus> =>
+  invoke<CredentialStatus>('get_provider_credential_status', { providerId })
+
+export const replaceProviderCredentials = (providerId: string, apiKey: string): Promise<CredentialStatus> =>
+  invoke<CredentialStatus>('replace_provider_credentials', { providerId, apiKey })
+
+export const deleteProviderCredentials = (providerId: string): Promise<CredentialStatus> =>
+  invoke<CredentialStatus>('delete_provider_credentials', { providerId })
 
 export const generateCompletion = (data: {
   provider_id: string
