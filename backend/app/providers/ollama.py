@@ -11,7 +11,7 @@ from app.providers.base import BaseProvider
 
 class OllamaProvider(BaseProvider):
     def __init__(self, name: str, base_url: str = "http://127.0.0.1:11434", api_key: Optional[str] = None, timeout: int = 60, settings: Optional[Dict[str, Any]] = None):
-        super().__init__(name, base_url, api_key, timeout, settings)
+        super().__init__(name, base_url.rstrip("/"), api_key, timeout, settings)
 
     async def list_models(self) -> List[str]:
         url = f"{self.base_url}/api/tags"
@@ -20,10 +20,11 @@ class OllamaProvider(BaseProvider):
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [m.get("name") for m in data.get("models", []) if m.get("name")]
+                    models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+                    return models
         except Exception:
             pass
-        return ["llama3:latest"]
+        return []
 
     async def health_check(self) -> bool:
         url = f"{self.base_url}/api/tags"
@@ -49,8 +50,9 @@ class OllamaProvider(BaseProvider):
             formatted_msgs.append({"role": "system", "content": system_prompt})
         formatted_msgs.extend([{"role": m["role"], "content": m["content"]} for m in messages if m.get("content")])
 
+        target_model = model or "llama3:latest"
         payload = {
-            "model": model or "llama3:latest",
+            "model": target_model,
             "messages": formatted_msgs,
             "stream": False,
             "options": {
@@ -60,16 +62,23 @@ class OllamaProvider(BaseProvider):
             }
         }
 
-        async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            content = data.get("message", {}).get("content", "")
-            return {
-                "content": content,
-                "tokens": data.get("eval_count", len(content.split())),
-                "model": data.get("model", model or "ollama")
-            }
+        try:
+            async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                content = data.get("message", {}).get("content", "")
+                return {
+                    "content": content,
+                    "tokens": data.get("eval_count", len(content.split())),
+                    "model": data.get("model", target_model)
+                }
+        except httpx.ConnectError:
+            raise RuntimeError(f"Could not connect to Ollama at {self.base_url}. Please ensure Ollama is running.")
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"Ollama server returned error {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            raise RuntimeError(f"Ollama inference error: {str(e)}")
 
     async def generate_stream(
         self,

@@ -126,6 +126,9 @@ export const deleteDPOTask = (taskId: string) =>
 export const duplicateDPOTask = (taskId: string) =>
   api.post<DPOTask>(`/dpo/tasks/${taskId}/duplicate`).then(r => r.data)
 
+export const updateDPOTask = (taskId: string, data: Partial<DPOTask>) =>
+  api.put<DPOTask>(`/dpo/tasks/${taskId}`, data).then(r => r.data)
+
 // Providers & Inference
 export const getProviders = () =>
   api.get<Provider[]>('/providers').then(r => r.data)
@@ -145,7 +148,8 @@ export const testProvider = (id: string) =>
 export const generateCompletion = (data: {
   provider_id: string
   model?: string
-  prompt: string
+  prompt?: string
+  messages?: Array<{ role: string; content: string }>
   system_prompt?: string
   temperature?: number
   top_p?: number

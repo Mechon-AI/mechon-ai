@@ -239,3 +239,107 @@ def test_dataset_versioning_and_rollback(db):
     records, total = SFTService.list_records(db, pid)
     assert total == 1
     assert records[0]["id"] == rec["id"]
+
+
+def test_project_update_and_delete(db):
+    # Create project
+    proj = ProjectService.create_project(db, ProjectCreate(name="Initial Name", description="Initial Desc"))
+    pid = proj["id"]
+
+    # Update project
+    from app.schemas.schemas import ProjectUpdate
+    updated = ProjectService.update_project(db, pid, ProjectUpdate(name="Updated Name", description="Updated Desc"))
+    assert updated["name"] == "Updated Name"
+    assert updated["description"] == "Updated Desc"
+
+    # Verify updated
+    fetched = ProjectService.get_project(db, pid)
+    assert fetched["name"] == "Updated Name"
+
+    # Delete project
+    deleted = ProjectService.delete_project(db, pid)
+    assert deleted is True
+
+    # Verify deleted
+    fetched_after_delete = ProjectService.get_project(db, pid)
+    assert fetched_after_delete is None
+
+
+def test_dpo_task_update_and_flag(db):
+    proj = ProjectService.create_project(db, ProjectCreate(name="DPO Edit & Flag"))
+    pid = proj["id"]
+
+    # Create task
+    task = DPOService.create_task(db, DPOTaskCreate(
+        project_id=pid,
+        prompt="Initial prompt",
+        response_a="Initial response A",
+        response_b="Initial response B"
+    ))
+    tid = task["id"]
+
+    # Update task content (editing prompt and responses)
+    from app.schemas.schemas import DPOTaskUpdate
+    updated = DPOService.update_task(db, tid, DPOTaskUpdate(
+        prompt="Refined prompt",
+        response_a="Refined response A with better formatting",
+        response_b="Refined response B with code snippet"
+    ))
+    assert updated["prompt"] == "Refined prompt"
+    assert updated["response_a"] == "Refined response A with better formatting"
+    assert updated["response_b"] == "Refined response B with code snippet"
+
+    # Flag task as unanswerable/toxic/bad
+    flagged = DPOService.annotate_task(db, tid, DPOAnnotationUpdate(
+        preference="flag",
+        rationale="Toxic or unsafe content detected"
+    ))
+    assert flagged["preference"] == "flag"
+    assert flagged["status"] == "flagged"
+
+
+def test_api_multi_turn_inference(client, db):
+    # Test POST /api/v1/inference/generate with multi-turn messages
+    payload = {
+        "provider_id": "mock",
+        "model": "mock-llama-3-8b",
+        "messages": [
+            {"role": "system", "content": "You are a concise tutor."},
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there! How can I help?"},
+            {"role": "user", "content": "What is DPO?"}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 100
+    }
+    response = client.post("/api/v1/inference/generate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "content" in data
+    assert len(data["content"]) > 0
+
+
+def test_api_dpo_task_update(client, db):
+    # Create project first
+    proj = ProjectService.create_project(db, ProjectCreate(name="DPO API Test"))
+    pid = proj["id"]
+
+    # Create task
+    task = DPOService.create_task(db, DPOTaskCreate(
+        project_id=pid,
+        prompt="API Test prompt",
+        response_a="Draft A",
+        response_b="Draft B"
+    ))
+    tid = task["id"]
+
+    # Update via PUT /api/v1/dpo/tasks/{tid}
+    response = client.put(f"/api/v1/dpo/tasks/{tid}", json={
+        "response_a": "Polished text A",
+        "response_b": "Polished text B"
+    })
+    assert response.status_code == 200
+    res_data = response.json()
+    assert res_data["response_a"] == "Polished text A"
+    assert res_data["response_b"] == "Polished text B"
+

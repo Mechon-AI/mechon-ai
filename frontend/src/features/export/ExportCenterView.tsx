@@ -18,7 +18,7 @@ import {
 } from '../../services/api'
 
 export const ExportCenterView: React.FC = () => {
-  const { activeProjectId, getActiveProject } = useProjectStore()
+  const { activeProjectId, getActiveProject, ensureActiveProject } = useProjectStore()
   const activeProject = getActiveProject()
 
   const [pipeline, setPipeline] = useState<'sft' | 'dpo'>('sft')
@@ -32,26 +32,41 @@ export const ExportCenterView: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importReport, setImportReport] = useState<any>(null)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 4000)
+  }
 
   useEffect(() => {
-    if (activeProjectId) {
-      loadPreview()
-    }
+    initView()
   }, [activeProjectId, pipeline, format, includeMetadata])
 
-  const loadPreview = async () => {
-    if (!activeProjectId) return
+  const initView = async () => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (pId) {
+      loadPreview(pId)
+    }
+  }
+
+  const loadPreview = async (projectId?: string) => {
+    const targetProject = projectId || activeProjectId
+    if (!targetProject) return
     setIsLoadingPreview(true)
     try {
       let text = ''
       if (pipeline === 'sft') {
-        text = await exportSFTDataset(activeProjectId, format, includeMetadata)
+        text = await exportSFTDataset(targetProject, format, includeMetadata)
       } else {
-        text = await exportDPODataset(activeProjectId, format, includeMetadata)
+        text = await exportDPODataset(targetProject, format, includeMetadata)
       }
-      setPreviewContent(text)
+      setPreviewContent(text || '(No committed records in this dataset yet. Create and commit records first.)')
     } catch (err: any) {
-      setPreviewContent(`Export preview error: ${err.message}`)
+      setPreviewContent(`Export preview: ${err.message}`)
     } finally {
       setIsLoadingPreview(false)
     }
@@ -86,8 +101,9 @@ export const ExportCenterView: React.FC = () => {
       setImportReport(res)
       setImportFile(null)
       loadPreview()
+      showFeedback('success', `Import completed: ${res.imported_records || 0} records imported successfully.`)
     } catch (err: any) {
-      alert(`Import failed: ${err.message}`)
+      showFeedback('error', `Import failed: ${err.message}`)
     } finally {
       setIsImporting(false)
     }
@@ -228,7 +244,7 @@ export const ExportCenterView: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={loadPreview}
+                  onClick={() => loadPreview()}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                   title="Refresh Preview"
                 >

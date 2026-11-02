@@ -12,7 +12,7 @@ from app.providers.base import BaseProvider
 
 class OpenAICompatibleProvider(BaseProvider):
     def __init__(self, name: str, base_url: str, api_key: Optional[str] = None, timeout: int = 60, settings: Optional[Dict[str, Any]] = None):
-        super().__init__(name, base_url, api_key, timeout, settings)
+        super().__init__(name, base_url.rstrip("/"), api_key, timeout, settings)
         self.headers = {"Content-Type": "application/json"}
         if self.api_key:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
@@ -25,17 +25,17 @@ class OpenAICompatibleProvider(BaseProvider):
                 if resp.status_code == 200:
                     data = resp.json()
                     models = [m.get("id") for m in data.get("data", []) if m.get("id")]
-                    return models if models else ["default"]
+                    return models
         except Exception:
             pass
-        return ["default"]
+        return []
 
     async def health_check(self) -> bool:
         url = f"{self.base_url}/models"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(url, headers=self.headers)
-                return resp.status_code in (200, 401)
+                return resp.status_code == 200
         except Exception:
             return False
 
@@ -76,21 +76,29 @@ class OpenAICompatibleProvider(BaseProvider):
         max_tokens: int = 2048,
     ) -> Dict[str, Any]:
         url = f"{self.base_url}/chat/completions"
-        payload = self._prepare_payload(messages, system_prompt, model, temperature, top_p, max_tokens, stream=False)
+        target_model = model or "default"
+        payload = self._prepare_payload(messages, system_prompt, target_model, temperature, top_p, max_tokens, stream=False)
         
-        async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
-            resp = await client.post(url, headers=self.headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            choice = data["choices"][0]
-            content = choice["message"]["content"]
-            usage = data.get("usage", {})
-            tokens = usage.get("total_tokens", len(content.split()))
-            return {
-                "content": content,
-                "tokens": tokens,
-                "model": data.get("model", model or "default")
-            }
+        try:
+            async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
+                resp = await client.post(url, headers=self.headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                usage = data.get("usage", {})
+                tokens = usage.get("total_tokens", len(content.split()))
+                return {
+                    "content": content,
+                    "tokens": tokens,
+                    "model": data.get("model", target_model)
+                }
+        except httpx.ConnectError:
+            raise RuntimeError(f"Could not connect to provider at {self.base_url}. Please ensure the server is active.")
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"Provider returned error {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            raise RuntimeError(f"Inference error: {str(e)}")
 
     async def generate_stream(
         self,

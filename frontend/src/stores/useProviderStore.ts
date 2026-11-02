@@ -29,9 +29,17 @@ export const useProviderStore = create<ProviderState>()(
         try {
           const list = await getProviders()
           set({ providers: list, isLoading: false })
+          
           const currentProviderId = get().activeProviderId
           const found = list.find(p => p.id === currentProviderId)
-          if (found && found.models_cache && found.models_cache.length > 0) {
+          if (!found && list.length > 0) {
+            // Default to mock or first
+            const defaultP = list.find(p => p.id === 'mock') || list[0]
+            set({
+              activeProviderId: defaultP.id,
+              activeModel: defaultP.default_model || (defaultP.models_cache && defaultP.models_cache[0]) || 'default'
+            })
+          } else if (found && found.models_cache && found.models_cache.length > 0) {
             if (!found.models_cache.includes(get().activeModel)) {
               set({ activeModel: found.models_cache[0] })
             }
@@ -62,7 +70,7 @@ export const useProviderStore = create<ProviderState>()(
       }
     }),
     {
-      name: 'local-ai-dataset-studio-provider'
+      name: 'mechon-provider-storage'
     }
   )
 )

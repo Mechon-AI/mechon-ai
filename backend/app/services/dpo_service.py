@@ -62,6 +62,47 @@ class DPOService:
         return DPOService._format_task(task)
 
     @staticmethod
+    def update_task(
+        db: Session,
+        task_id: str,
+        data: Any
+    ) -> Optional[Dict[str, Any]]:
+        task = db.query(DPOTask).filter(DPOTask.id == task_id).first()
+        if not task:
+            return None
+        if hasattr(data, "prompt") and data.prompt is not None:
+            task.prompt = data.prompt.strip()
+        if hasattr(data, "system_prompt") and data.system_prompt is not None:
+            task.system_prompt = data.system_prompt
+        if hasattr(data, "response_a") and data.response_a is not None:
+            task.response_a = data.response_a
+        if hasattr(data, "response_b") and data.response_b is not None:
+            task.response_b = data.response_b
+        if hasattr(data, "preference") and data.preference is not None:
+            task.preference = data.preference
+            if data.preference in ("a", "b", "tie", "both_bad"):
+                task.status = "completed"
+            elif data.preference == "skip":
+                task.status = "skipped"
+            elif data.preference == "flag":
+                task.status = "flagged"
+        if hasattr(data, "rationale") and data.rationale is not None:
+            task.rationale = data.rationale
+        if hasattr(data, "helpfulness_rating") and data.helpfulness_rating is not None:
+            task.helpfulness_rating = data.helpfulness_rating
+        if hasattr(data, "factuality_rating") and data.factuality_rating is not None:
+            task.factuality_rating = data.factuality_rating
+        if hasattr(data, "metadata") and data.metadata:
+            meta = json.loads(task.metadata_json or "{}")
+            meta.update(data.metadata)
+            task.metadata_json = json.dumps(meta, ensure_ascii=False)
+
+        task.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(task)
+        return DPOService._format_task(task)
+
+    @staticmethod
     def update_task_responses(
         db: Session,
         task_id: str,

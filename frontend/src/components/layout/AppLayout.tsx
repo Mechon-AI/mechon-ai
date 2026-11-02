@@ -26,14 +26,17 @@ import {
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
+import { useThemeStore } from '../../stores/useThemeStore'
 
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate()
   const { projects, activeProjectId, setActiveProjectId, fetchProjects, getActiveProject } = useProjectStore()
   const { providers, activeProviderId, activeModel, isOnline, fetchProviders } = useProviderStore()
-  const [isDark, setIsDark] = useState(true)
+  const { theme, toggleTheme } = useThemeStore()
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+
+  const isDark = theme === 'dark'
 
   useEffect(() => {
     fetchProjects()
@@ -42,12 +45,6 @@ export const AppLayout: React.FC = () => {
 
   const activeProject = getActiveProject()
   const activeProvider = providers.find(p => p.id === activeProviderId)
-
-  const toggleTheme = () => {
-    setIsDark(!isDark)
-    document.documentElement.classList.toggle('dark', !isDark)
-    document.documentElement.classList.toggle('light', isDark)
-  }
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },

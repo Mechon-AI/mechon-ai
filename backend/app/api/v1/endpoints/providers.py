@@ -164,7 +164,15 @@ async def generate_completion(
 ):
     p = db.query(Provider).filter(Provider.id == req.provider_id).first()
     adapter = provider_manager.get_provider(req.provider_id, p)
-    messages = [{"role": "user", "content": req.prompt}]
+    
+    # Use full multi-turn messages array if provided, otherwise single prompt
+    if req.messages and len(req.messages) > 0:
+        messages = req.messages
+    elif req.prompt:
+        messages = [{"role": "user", "content": req.prompt}]
+    else:
+        messages = [{"role": "user", "content": "Hello"}]
+
     try:
         res = await adapter.generate(
             messages=messages,

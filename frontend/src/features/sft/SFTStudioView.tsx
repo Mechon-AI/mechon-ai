@@ -18,7 +18,10 @@ import {
   Tag,
   Search,
   ExternalLink,
-  Layers
+  Layers,
+  Cpu,
+  X,
+  AlertCircle
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
@@ -40,8 +43,8 @@ import {
 import type { SFTSession, SFTMessage } from '../../types'
 
 export const SFTStudioView: React.FC = () => {
-  const { activeProjectId } = useProjectStore()
-  const { providers, activeProviderId, activeModel } = useProviderStore()
+  const { activeProjectId, ensureActiveProject } = useProjectStore()
+  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel } = useProviderStore()
 
   const [sessions, setSessions] = useState<SFTSession[]>([])
   const [activeSession, setActiveSession] = useState<SFTSession | null>(null)
@@ -54,28 +57,43 @@ export const SFTStudioView: React.FC = () => {
 
   // Drawer / Param state
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
+  const [showParamsDrawer, setShowParamsDrawer] = useState(false)
   const [showCommitModal, setShowCommitModal] = useState(false)
-  const [commitTags, setCommitTags] = useState('math, reasoning')
+  const [commitTags, setCommitTags] = useState('dialogue, instruction')
   const [commitTitle, setCommitTitle] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
-  const [commitSuccessMessage, setCommitSuccessMessage] = useState<string | null>(null)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 4000)
+  }
+
   useEffect(() => {
-    if (activeProjectId) {
-      loadSessions()
-    }
+    initView()
   }, [activeProjectId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeSession?.messages, isGenerating])
 
-  const loadSessions = async () => {
-    if (!activeProjectId) return
+  const initView = async () => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (pId) {
+      loadSessions(pId)
+    }
+  }
+
+  const loadSessions = async (projectId?: string) => {
+    const targetProject = projectId || activeProjectId
+    if (!targetProject) return
     try {
-      const list = await getSFTSessions(activeProjectId)
+      const list = await getSFTSessions(targetProject)
       setSessions(list)
       if (list.length > 0) {
         // If current active session not in list or null, pick first
@@ -84,10 +102,10 @@ export const SFTStudioView: React.FC = () => {
         }
       } else {
         // Create initial draft session if none exist
-        handleNewSession()
+        handleNewSession(targetProject)
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      showFeedback('error', `Could not load sessions: ${err.message}`)
     }
   }
 
@@ -95,25 +113,52 @@ export const SFTStudioView: React.FC = () => {
     try {
       const full = await getSFTSession(sessionId)
       setActiveSession(full)
-    } catch {
-      // ignore
+    } catch (err: any) {
+      showFeedback('error', `Failed to load conversation details: ${err.message}`)
     }
   }
 
-  const handleNewSession = async () => {
-    if (!activeProjectId) return
-    const created = await createSFTSession({
-      project_id: activeProjectId,
-      title: 'New Conversation Draft',
-      system_prompt: 'You are a helpful, respectful, and honest assistant.',
-      provider_id: activeProviderId,
-      model: activeModel,
-      temperature: 0.7,
-      top_p: 0.9,
-      max_tokens: 2048
-    })
-    setSessions(prev => [created, ...prev])
-    setActiveSession(created)
+  const handleNewSession = async (projectId?: string) => {
+    const targetProject = projectId || activeProjectId
+    if (!targetProject) return
+    try {
+      const created = await createSFTSession({
+        project_id: targetProject,
+        title: 'New Conversation Draft',
+        system_prompt: 'You are a helpful, respectful, and honest assistant.',
+        provider_id: activeProviderId,
+        model: activeModel,
+        temperature: 0.7,
+        top_p: 0.9,
+        max_tokens: 2048
+      })
+      setSessions(prev => [created, ...prev])
+      setActiveSession(created)
+      showFeedback('success', 'New conversation draft created.')
+    } catch (err: any) {
+      showFeedback('error', `Failed to create conversation: ${err.message}`)
+    }
+  }
+
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirm('Delete this conversation draft?')) {
+      try {
+        await deleteSFTSession(sessionId)
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        if (activeSession?.id === sessionId) {
+          const remaining = sessions.filter(s => s.id !== sessionId)
+          if (remaining.length > 0) {
+            loadSessionDetails(remaining[0].id)
+          } else {
+            setActiveSession(null)
+          }
+        }
+        showFeedback('success', 'Conversation draft deleted.')
+      } catch (err: any) {
+        showFeedback('error', `Failed to delete session: ${err.message}`)
+      }
+    }
   }
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -123,25 +168,27 @@ export const SFTStudioView: React.FC = () => {
     const userText = inputContent.trim()
     setInputContent('')
 
-    // 1. Save User Turn to Backend
-    const userMsg = await addSFTMessage(activeSession.id, {
-      role: 'user',
-      content: userText,
-      model: activeSession.model
-    })
-
-    // Update activeSession state immediately
-    const updatedMessages = [...(activeSession.messages || []), userMsg as SFTMessage]
-    setActiveSession({ ...activeSession, messages: updatedMessages, status: 'in_progress' })
-
-    // 2. Generate Assistant Response
-    setIsGenerating(true)
     try {
+      // 1. Save User Turn to Backend
+      const userMsg = await addSFTMessage(activeSession.id, {
+        role: 'user',
+        content: userText,
+        model: activeSession.model
+      })
+
+      // Update activeSession state immediately
+      const updatedMessages = [...(activeSession.messages || []), userMsg as SFTMessage]
+      setActiveSession({ ...activeSession, messages: updatedMessages, status: 'in_progress' })
+
+      // 2. Generate Assistant Response with full multi-turn history
+      setIsGenerating(true)
       const history = updatedMessages.map(m => ({ role: m.role, content: m.content }))
+      
       const res = await generateCompletion({
         provider_id: activeSession.provider_id || activeProviderId,
         model: activeSession.model || activeModel,
         prompt: userText,
+        messages: history,
         system_prompt: activeSession.system_prompt,
         temperature: activeSession.temperature,
         top_p: activeSession.top_p,
@@ -165,7 +212,7 @@ export const SFTStudioView: React.FC = () => {
       // Refresh session list status
       loadSessions()
     } catch (err: any) {
-      alert(`Generation failed: ${err.message}`)
+      showFeedback('error', `Generation failed: ${err.message}`)
     } finally {
       setIsGenerating(false)
     }
@@ -173,31 +220,38 @@ export const SFTStudioView: React.FC = () => {
 
   const handleEditSave = async (messageId: string) => {
     if (!editContent.trim()) return
-    await updateSFTMessage(messageId, editContent.trim())
-    if (activeSession) {
-      loadSessionDetails(activeSession.id)
+    try {
+      await updateSFTMessage(messageId, editContent.trim())
+      if (activeSession) {
+        await loadSessionDetails(activeSession.id)
+      }
+      setEditingMessageId(null)
+      setEditContent('')
+      showFeedback('success', 'Message updated.')
+    } catch (err: any) {
+      showFeedback('error', `Failed to update message: ${err.message}`)
     }
-    setEditingMessageId(null)
-    setEditContent('')
   }
 
   const handleRegenerateFrom = async (sequenceOrder: number) => {
     if (!activeSession) return
-    // Truncate assistant response and any following turns
-    await truncateSFTDownstream(activeSession.id, sequenceOrder)
-    const refreshed = await getSFTSession(activeSession.id)
-    setActiveSession(refreshed)
+    try {
+      // Truncate assistant response and any following turns
+      await truncateSFTDownstream(activeSession.id, sequenceOrder)
+      const refreshed = await getSFTSession(activeSession.id)
+      setActiveSession(refreshed)
 
-    // Trigger generation for the last user turn
-    const msgs = refreshed.messages || []
-    const lastUser = [...msgs].reverse().find(m => m.role === 'user')
-    if (lastUser) {
-      setIsGenerating(true)
-      try {
+      // Trigger generation for the remaining conversation context
+      const msgs = refreshed.messages || []
+      const lastUser = [...msgs].reverse().find(m => m.role === 'user')
+      if (lastUser) {
+        setIsGenerating(true)
+        const history = msgs.map(m => ({ role: m.role, content: m.content }))
         const res = await generateCompletion({
           provider_id: activeSession.provider_id || activeProviderId,
           model: activeSession.model || activeModel,
           prompt: lastUser.content,
+          messages: history,
           system_prompt: activeSession.system_prompt,
           temperature: activeSession.temperature
         })
@@ -210,23 +264,34 @@ export const SFTStudioView: React.FC = () => {
           ...prev,
           messages: [...prev.messages, asstMsg as SFTMessage]
         } : null)
-      } finally {
-        setIsGenerating(false)
       }
+    } catch (err: any) {
+      showFeedback('error', `Regeneration failed: ${err.message}`)
+    } finally {
+      setIsGenerating(false)
     }
   }
 
   const handleDeleteMessage = async (messageId: string) => {
-    await deleteSFTMessage(messageId)
-    if (activeSession) {
-      loadSessionDetails(activeSession.id)
+    try {
+      await deleteSFTMessage(messageId)
+      if (activeSession) {
+        await loadSessionDetails(activeSession.id)
+      }
+      showFeedback('success', 'Turn deleted.')
+    } catch (err: any) {
+      showFeedback('error', `Delete failed: ${err.message}`)
     }
   }
 
   const handleCommitConfirm = async () => {
     if (!activeSession) return
+    if (!activeSession.messages || activeSession.messages.length === 0) {
+      showFeedback('error', 'Cannot commit an empty conversation. Add at least one turn.')
+      return
+    }
+
     setIsCommitting(true)
-    setCommitSuccessMessage(null)
     try {
       const tagsArray = commitTags
         .split(',')
@@ -237,17 +302,18 @@ export const SFTStudioView: React.FC = () => {
         title_override: commitTitle.trim() || activeSession.title,
         tags: tagsArray,
         metadata: {
-          model: activeSession.model,
+          model: activeSession.model || activeModel,
+          provider_id: activeSession.provider_id || activeProviderId,
           temperature: activeSession.temperature
         }
       })
 
-      setCommitSuccessMessage(`Successfully committed conversation as SFT record #${record.id.slice(0, 8)}!`)
+      showFeedback('success', `Committed conversation as SFT record #${record.id.slice(0, 8)}!`)
       setShowCommitModal(false)
-      loadSessions()
-      loadSessionDetails(activeSession.id)
+      await loadSessions()
+      await loadSessionDetails(activeSession.id)
     } catch (err: any) {
-      alert(`Commit failed: ${err.message}`)
+      showFeedback('error', `Commit failed: ${err.message}`)
     } finally {
       setIsCommitting(false)
     }
@@ -263,6 +329,8 @@ export const SFTStudioView: React.FC = () => {
     s.title.toLowerCase().includes(sessionSearch.toLowerCase())
   )
 
+  const activeProvider = providers.find(p => p.id === (activeSession?.provider_id || activeProviderId))
+
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Sessions Drawer */}
@@ -271,8 +339,8 @@ export const SFTStudioView: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversations</span>
             <button
-              onClick={handleNewSession}
-              className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm"
+              onClick={() => handleNewSession()}
+              className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all"
               title="New SFT Chat"
             >
               <Plus className="h-3.5 w-3.5" /> New Chat
@@ -299,27 +367,36 @@ export const SFTStudioView: React.FC = () => {
               <div
                 key={s.id}
                 onClick={() => loadSessionDetails(s.id)}
-                className={`p-2.5 rounded-lg text-xs cursor-pointer border transition-all space-y-1 ${
+                className={`p-2.5 rounded-lg text-xs cursor-pointer border transition-all space-y-1 group ${
                   isSelected
                     ? 'bg-primary/10 border-primary text-foreground shadow-sm'
                     : 'bg-card/50 hover:bg-secondary/60 border-border/50 text-muted-foreground'
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-medium truncate text-foreground text-xs">{s.title}</span>
-                  {isCommitted ? (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      COMMITTED
-                    </span>
-                  ) : (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-accent text-muted-foreground">
-                      DRAFT
-                    </span>
-                  )}
+                  <span className="font-medium truncate text-foreground text-xs flex-1">{s.title}</span>
+                  <div className="flex items-center gap-1">
+                    {isCommitted ? (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        COMMITTED
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-accent text-muted-foreground">
+                        DRAFT
+                      </span>
+                    )}
+                    <button
+                      onClick={e => handleDeleteSession(s.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-opacity"
+                      title="Delete Draft"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                  <span>{s.model || 'mock-llama-3-8b'}</span>
+                  <span className="truncate max-w-[120px]">{s.model || 'mock-llama-3-8b'}</span>
                   <span>{s.messages ? s.messages.length : 0} turns</span>
                 </div>
               </div>
@@ -329,12 +406,12 @@ export const SFTStudioView: React.FC = () => {
       </aside>
 
       {/* Main Conversation Workspace */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-background/30">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-background">
         {activeSession ? (
           <>
             {/* Conversation Header Bar */}
             <div className="h-14 border-b border-border px-6 flex items-center justify-between bg-card/40 backdrop-blur-sm shrink-0">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <input
                   type="text"
                   value={activeSession.title}
@@ -343,51 +420,107 @@ export const SFTStudioView: React.FC = () => {
                     setActiveSession(updated)
                     updateSFTSession(activeSession.id, { title: e.target.value })
                   }}
-                  className="font-bold text-sm bg-transparent hover:bg-secondary/50 px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all"
+                  className="font-bold text-sm bg-transparent hover:bg-secondary/50 px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all truncate max-w-xs"
                 />
 
                 {activeSession.status === 'committed' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3" /> Committed to SFT Dataset
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                    <CheckCircle className="h-3 w-3" /> COMMITTED TO SFT
                   </span>
                 )}
               </div>
 
+              {/* Provider & Parameter Controls */}
               <div className="flex items-center gap-2">
+                {/* Provider & Model Selectors */}
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/60 border border-border text-xs">
+                  <Cpu className="h-3.5 w-3.5 text-primary ml-1" />
+                  <select
+                    value={activeSession.provider_id || activeProviderId}
+                    onChange={e => {
+                      const pId = e.target.value
+                      setActiveProviderId(pId)
+                      const targetP = providers.find(p => p.id === pId)
+                      const newModel = targetP?.default_model || (targetP?.models_cache && targetP.models_cache[0]) || 'default'
+                      setActiveSession(prev => prev ? { ...prev, provider_id: pId, model: newModel } : null)
+                      updateSFTSession(activeSession.id, { provider_id: pId, model: newModel })
+                    }}
+                    className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer"
+                  >
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+
+                  <span className="text-muted-foreground/60">•</span>
+
+                  <select
+                    value={activeSession.model || activeModel}
+                    onChange={e => {
+                      const m = e.target.value
+                      setActiveModel(m)
+                      setActiveSession(prev => prev ? { ...prev, model: m } : null)
+                      updateSFTSession(activeSession.id, { model: m })
+                    }}
+                    className="bg-transparent text-foreground font-mono text-[11px] border-none focus:outline-none cursor-pointer max-w-[140px] truncate"
+                  >
+                    {activeProvider?.models_cache && activeProvider.models_cache.length > 0 ? (
+                      activeProvider.models_cache.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))
+                    ) : (
+                      <option value={activeSession.model || activeModel}>{activeSession.model || activeModel}</option>
+                    )}
+                  </select>
+                </div>
+
                 <button
                   onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     showSystemPrompt
-                      ? 'bg-primary/20 text-primary border-primary/40'
-                      : 'bg-secondary/70 hover:bg-secondary border-border text-muted-foreground'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary hover:bg-accent border-border text-muted-foreground hover:text-foreground'
                   }`}
+                  title="Edit System Instructions"
                 >
-                  <Sliders className="h-3.5 w-3.5" /> System Prompt
+                  System Prompt
                 </button>
 
-                {/* Commit Action */}
                 <button
                   onClick={() => {
                     setCommitTitle(activeSession.title)
                     setShowCommitModal(true)
                   }}
-                  disabled={!activeSession.messages || activeSession.messages.length === 0}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
-                  title="Commit entire conversation as one SFT training example"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors"
+                  title="Commit conversation as atomic SFT dataset record"
                 >
-                  <BookmarkPlus className="h-4 w-4" /> Commit to SFT Dataset
+                  <BookmarkPlus className="h-3.5 w-3.5" /> Commit to Dataset
                 </button>
               </div>
             </div>
 
-            {/* Collapsible System Prompt Banner */}
+            {/* Notification Banner */}
+            {notification && (
+              <div
+                className={`px-6 py-2 text-xs flex items-center justify-between border-b ${
+                  notification.type === 'success'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-destructive/10 text-destructive border-destructive/20'
+                }`}
+              >
+                <span>{notification.message}</span>
+                <button onClick={() => setNotification(null)} className="p-0.5 hover:opacity-75">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* System Prompt Collapsible Banner */}
             {showSystemPrompt && (
-              <div className="p-4 border-b border-border bg-secondary/30 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">
-                    System Instructions
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">Applies to model context</span>
+              <div className="p-4 border-b border-border bg-card/60 backdrop-blur-sm space-y-2 text-xs">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="font-semibold uppercase tracking-wider text-[10px]">System Instructions</span>
+                  <span className="text-[10px]">Applied at generation start</span>
                 </div>
                 <textarea
                   rows={2}
@@ -397,120 +530,103 @@ export const SFTStudioView: React.FC = () => {
                     setActiveSession(updated)
                     updateSFTSession(activeSession.id, { system_prompt: e.target.value })
                   }}
-                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="System prompt instructions..."
+                  className="w-full p-2.5 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Enter system prompt for model behavior..."
                 />
               </div>
             )}
 
-            {/* Notification alert on commit */}
-            {commitSuccessMessage && (
-              <div className="mx-6 mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
-                <span>{commitSuccessMessage}</span>
-                <button
-                  onClick={() => setCommitSuccessMessage(null)}
-                  className="text-muted-foreground hover:text-foreground text-xs"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-
-            {/* Messages Chat List */}
+            {/* Messages Chat Flow */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {activeSession.messages && activeSession.messages.length > 0 ? (
-                activeSession.messages.map((m, idx) => {
+                activeSession.messages.map((m, index) => {
                   const isUser = m.role === 'user'
                   const isEditing = editingMessageId === m.id
 
                   return (
                     <div
-                      key={m.id}
-                      className={`flex flex-col space-y-1.5 ${
+                      key={m.id || index}
+                      className={`flex flex-col gap-1.5 group max-w-4xl mx-auto ${
                         isUser ? 'items-end' : 'items-start'
                       }`}
                     >
-                      {/* Role & Model Tag */}
-                      <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground font-mono">
-                        <span className="font-semibold text-foreground uppercase">{m.role}</span>
-                        {m.model && !isUser && <span>• {m.model}</span>}
-                        <span>• Turn #{idx + 1}</span>
+                      <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                        <span className="font-bold uppercase tracking-wider font-mono">
+                          {isUser ? 'USER' : `ASSISTANT (${m.model || activeSession.model || 'model'})`}
+                        </span>
+                        <span>•</span>
+                        <span>Turn {index + 1}</span>
                       </div>
 
-                      {/* Message Bubble */}
                       <div
-                        className={`group relative max-w-3xl rounded-xl px-4 py-3 text-xs leading-relaxed border shadow-sm ${
+                        className={`relative rounded-2xl p-4 text-xs leading-relaxed max-w-[85%] border shadow-sm transition-all ${
                           isUser
-                            ? 'bg-primary text-primary-foreground border-primary/60'
-                            : 'bg-card border-border text-foreground'
+                            ? 'bg-primary text-primary-foreground border-primary/40'
+                            : 'bg-card text-foreground border-border'
                         }`}
                       >
                         {isEditing ? (
-                          <div className="space-y-2">
+                          <div className="space-y-2 min-w-[320px]">
                             <textarea
                               rows={4}
                               value={editContent}
                               onChange={e => setEditContent(e.target.value)}
-                              className="w-full p-2 rounded bg-background text-foreground border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                              className="w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                             />
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => setEditingMessageId(null)}
-                                className="px-2.5 py-1 rounded bg-secondary text-secondary-foreground text-[11px]"
+                                className="px-2.5 py-1 rounded text-[11px] hover:bg-secondary border border-border"
                               >
                                 Cancel
                               </button>
                               <button
                                 onClick={() => handleEditSave(m.id)}
-                                className="px-2.5 py-1 rounded bg-emerald-600 text-white text-[11px] font-medium"
+                                className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm"
                               >
-                                Save Changes
+                                Save Turn
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="prose prose-invert prose-xs max-w-none">
+                          <div className="prose prose-invert prose-xs max-w-none break-words">
                             <ReactMarkdown>{m.content}</ReactMarkdown>
                           </div>
                         )}
 
-                        {/* Turn Actions on Hover */}
+                        {/* Floating Turn Action Toolbar */}
                         {!isEditing && (
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-popover/90 backdrop-blur-sm border border-border rounded-md p-0.5 shadow-md">
+                          <div className="absolute right-2 -bottom-3.5 hidden group-hover:flex items-center gap-1 bg-card border border-border rounded-lg shadow-md px-1.5 py-0.5 text-muted-foreground text-[10px]">
                             <button
                               onClick={() => copyToClipboard(m.content, m.id)}
-                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                              title="Copy text"
+                              className="p-1 hover:text-foreground hover:bg-secondary rounded"
+                              title="Copy Turn Content"
                             >
-                              {copiedId === m.id ? (
-                                <Check className="h-3 w-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
-                              )}
+                              {copiedId === m.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                             </button>
                             <button
                               onClick={() => {
                                 setEditingMessageId(m.id)
                                 setEditContent(m.content)
                               }}
-                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                              title="Edit message turn"
+                              className="p-1 hover:text-foreground hover:bg-secondary rounded"
+                              title="Edit Turn"
                             >
                               <Edit2 className="h-3 w-3" />
                             </button>
                             {!isUser && (
                               <button
                                 onClick={() => handleRegenerateFrom(m.sequence_order)}
-                                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                                title="Regenerate assistant response"
+                                className="p-1 hover:text-primary hover:bg-secondary rounded"
+                                title="Regenerate from this turn"
                               >
                                 <RefreshCw className="h-3 w-3" />
                               </button>
                             )}
                             <button
                               onClick={() => handleDeleteMessage(m.id)}
-                              className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-                              title="Delete turn"
+                              className="p-1 hover:text-destructive hover:bg-destructive/10 rounded"
+                              title="Delete Turn"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
@@ -521,24 +637,21 @@ export const SFTStudioView: React.FC = () => {
                   )
                 })
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground text-xs space-y-3">
-                  <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center text-primary border border-border">
-                    <MessageSquareCode className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-sm text-foreground">Interactive SFT Studio</h3>
-                    <p className="max-w-sm mt-1">
-                      Type a user prompt below to start building this conversation turn. Continue multi-turn dialogue,
-                      edit any turn, and commit the complete conversation as one SFT training record.
+                <div className="h-full flex items-center justify-center text-center text-xs text-muted-foreground py-16">
+                  <div className="space-y-2 max-w-md">
+                    <MessageSquareCode className="h-10 w-10 text-primary/40 mx-auto" />
+                    <h3 className="font-bold text-foreground text-sm">Empty Conversation Draft</h3>
+                    <p className="leading-relaxed">
+                      Type your prompt below to start building this multi-turn demonstration. Continue conversing, edit turns, and commit the full dialogue into the project's SFT dataset.
                     </p>
                   </div>
                 </div>
               )}
 
               {isGenerating && (
-                <div className="flex items-center gap-2 text-xs text-primary animate-pulse p-2">
+                <div className="flex items-center gap-2 text-xs text-primary animate-pulse p-4 max-w-4xl mx-auto">
                   <Sparkles className="h-4 w-4 animate-spin" />
-                  <span>Assistant is generating response...</span>
+                  <span>Model is generating completion...</span>
                 </div>
               )}
 
@@ -565,17 +678,26 @@ export const SFTStudioView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isGenerating || !inputContent.trim()}
-                  className="h-10 px-4 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-xs flex items-center gap-2 shadow-sm disabled:opacity-50 transition-all shrink-0"
+                  className="h-10 px-5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-50 transition-all shrink-0"
                 >
-                  {isGenerating ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+                  {isGenerating ? <Square className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   <span>Send</span>
                 </button>
               </form>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-center text-xs text-muted-foreground">
-            Select or create a conversation draft to begin.
+          <div className="flex-1 flex items-center justify-center text-center text-xs text-muted-foreground p-8">
+            <div className="space-y-3">
+              <MessageSquareCode className="h-10 w-10 text-muted-foreground/40 mx-auto" />
+              <p>No active conversation. Select a session or click New Chat to start.</p>
+              <button
+                onClick={() => handleNewSession()}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold"
+              >
+                Create New Conversation
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -583,17 +705,22 @@ export const SFTStudioView: React.FC = () => {
       {/* Commit Session Modal */}
       {showCommitModal && activeSession && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl p-6 space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-foreground">Commit Session to SFT Dataset</h3>
-              <p className="text-xs text-muted-foreground">
-                This will save the entire multi-turn conversation (all {activeSession.messages.length} turns) as ONE atomic SFT dataset record.
-              </p>
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Commit Session to SFT Dataset</h3>
+                <p className="text-xs text-muted-foreground">
+                  The entire multi-turn conversation ({activeSession.messages.length} turns) will commit as EXACTLY ONE atomic SFT dataset record.
+                </p>
+              </div>
+              <button onClick={() => setShowCommitModal(false)} className="p-1 rounded-lg hover:bg-secondary">
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Record Title</label>
+                <label className="text-xs font-semibold text-foreground">Record Title</label>
                 <input
                   type="text"
                   value={commitTitle}
@@ -603,20 +730,20 @@ export const SFTStudioView: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Tags (comma-separated)</label>
+                <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>
                 <input
                   type="text"
                   value={commitTags}
                   onChange={e => setCommitTags(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="e.g. math, gradient-descent, reasoning"
+                  placeholder="e.g. reasoning, mathematics, code"
                 />
               </div>
 
               <div className="p-3 rounded-lg bg-secondary/40 border border-border/80 text-[11px] space-y-1 font-mono text-muted-foreground">
-                <div>Model: {activeSession.model || 'mock-llama-3-8b'}</div>
-                <div>Turns: {activeSession.messages.length} messages</div>
-                <div>Format: Canonical OpenAI/ChatML messages schema</div>
+                <div>Model: {activeSession.model || activeModel}</div>
+                <div>Turns: {activeSession.messages.length} messages (Canonical ChatML Schema)</div>
+                <div>Commit Destination: Project SFT Corpus</div>
               </div>
             </div>
 
@@ -624,7 +751,7 @@ export const SFTStudioView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowCommitModal(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-secondary border border-border"
+                className="px-4 py-2 rounded-lg text-xs font-medium hover:bg-secondary border border-border"
               >
                 Cancel
               </button>
@@ -632,7 +759,7 @@ export const SFTStudioView: React.FC = () => {
                 type="button"
                 onClick={handleCommitConfirm}
                 disabled={isCommitting}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5"
+                className="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors"
               >
                 <BookmarkPlus className="h-4 w-4" />
                 {isCommitting ? 'Committing...' : 'Confirm & Commit Record'}

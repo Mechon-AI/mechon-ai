@@ -17,8 +17,8 @@ import { generateCompletion, createSFTSession, addSFTMessage, createDPOTask } fr
 
 export const PlaygroundView: React.FC = () => {
   const navigate = useNavigate()
-  const { providers, activeProviderId, activeModel } = useProviderStore()
-  const { activeProjectId } = useProjectStore()
+  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel } = useProviderStore()
+  const { activeProjectId, ensureActiveProject } = useProjectStore()
 
   const [prompt, setPrompt] = useState('Explain gradient descent and provide a numerical example with eta = 0.1.')
   const [systemPrompt, setSystemPrompt] = useState('You are an expert ML dataset engineer.')
@@ -51,9 +51,10 @@ export const PlaygroundView: React.FC = () => {
   }
 
   const handleTransferToSFT = async () => {
-    if (!activeProjectId || !output) return
+    let pId = activeProjectId || (await ensureActiveProject())
+    if (!pId || !output) return
     const session = await createSFTSession({
-      project_id: activeProjectId,
+      project_id: pId,
       title: `Playground Draft: ${prompt.slice(0, 30)}...`,
       system_prompt: systemPrompt,
       model: activeModel
@@ -64,9 +65,10 @@ export const PlaygroundView: React.FC = () => {
   }
 
   const handleTransferToDPO = async () => {
-    if (!activeProjectId || !output) return
+    let pId = activeProjectId || (await ensureActiveProject())
+    if (!pId || !output) return
     await createDPOTask({
-      project_id: activeProjectId,
+      project_id: pId,
       prompt: prompt,
       system_prompt: systemPrompt,
       response_a: output,

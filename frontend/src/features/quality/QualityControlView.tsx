@@ -14,7 +14,7 @@ import { validateDataset } from '../../services/api'
 import type { ValidationReport } from '../../types'
 
 export const QualityControlView: React.FC = () => {
-  const { activeProjectId } = useProjectStore()
+  const { activeProjectId, ensureActiveProject } = useProjectStore()
 
   const [datasetType, setDatasetType] = useState<'sft' | 'dpo'>('sft')
   const [report, setReport] = useState<ValidationReport | null>(null)
@@ -22,16 +22,25 @@ export const QualityControlView: React.FC = () => {
   const [filterSeverity, setFilterSeverity] = useState<'all' | 'error' | 'warning'>('all')
 
   useEffect(() => {
-    if (activeProjectId) {
-      runValidation()
-    }
+    initView()
   }, [activeProjectId, datasetType])
 
-  const runValidation = async () => {
-    if (!activeProjectId) return
+  const initView = async () => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (pId) {
+      runValidation(pId)
+    }
+  }
+
+  const runValidation = async (projectId?: string) => {
+    const targetProject = projectId || activeProjectId
+    if (!targetProject) return
     setIsLoading(true)
     try {
-      const res = await validateDataset(activeProjectId, datasetType)
+      const res = await validateDataset(targetProject, datasetType)
       setReport(res)
     } finally {
       setIsLoading(false)
@@ -79,7 +88,7 @@ export const QualityControlView: React.FC = () => {
           </div>
 
           <button
-            onClick={runValidation}
+            onClick={() => runValidation()}
             disabled={isLoading}
             className="p-2 rounded-lg bg-secondary hover:bg-accent border border-border text-muted-foreground hover:text-foreground"
             title="Re-run validation"

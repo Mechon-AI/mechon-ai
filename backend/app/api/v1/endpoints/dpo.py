@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.dpo_service import DPOService
 from app.schemas.schemas import (
-    DPOTaskCreate, DPOAnnotationUpdate, DPOTaskResponse
+    DPOTaskCreate, DPOTaskUpdate, DPOAnnotationUpdate, DPOTaskResponse
 )
 
 router = APIRouter()
@@ -31,6 +31,14 @@ def create_task(data: DPOTaskCreate, db: Session = Depends(get_db)):
 @router.get("/tasks/{task_id}", response_model=DPOTaskResponse)
 def get_task(task_id: str, db: Session = Depends(get_db)):
     t = DPOService.get_task(db, task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="DPO task not found")
+    return t
+
+
+@router.put("/tasks/{task_id}", response_model=DPOTaskResponse)
+def update_task(task_id: str, data: DPOTaskUpdate, db: Session = Depends(get_db)):
+    t = DPOService.update_task(db, task_id, data)
     if not t:
         raise HTTPException(status_code=404, detail="DPO task not found")
     return t

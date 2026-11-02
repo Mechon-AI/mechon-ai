@@ -146,6 +146,18 @@ class DPOAnnotationUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class DPOTaskUpdate(BaseModel):
+    prompt: Optional[str] = None
+    system_prompt: Optional[str] = None
+    response_a: Optional[str] = None
+    response_b: Optional[str] = None
+    preference: Optional[str] = None
+    rationale: Optional[str] = None
+    helpfulness_rating: Optional[int] = None
+    factuality_rating: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class DPOTaskResponse(BaseModel):
     id: str
     project_id: str
@@ -219,7 +231,8 @@ class ProviderResponse(BaseModel):
 class ModelTestRequest(BaseModel):
     provider_id: str
     model: Optional[str] = None
-    prompt: str
+    prompt: Optional[str] = None
+    messages: Optional[List[Dict[str, Any]]] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.9

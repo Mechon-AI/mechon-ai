@@ -21,7 +21,7 @@ import {
 import type { DatasetVersion } from '../../types'
 
 export const VersionHistoryView: React.FC = () => {
-  const { activeProjectId } = useProjectStore()
+  const { activeProjectId, ensureActiveProject } = useProjectStore()
 
   const [versions, setVersions] = useState<DatasetVersion[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -33,28 +33,43 @@ export const VersionHistoryView: React.FC = () => {
   const [description, setDescription] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [copiedSha, setCopiedSha] = useState<string | null>(null)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Compare selections
   const [versionA, setVersionA] = useState('')
   const [versionB, setVersionB] = useState('')
 
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 4000)
+  }
+
   useEffect(() => {
-    if (activeProjectId) {
-      loadVersions()
-    }
+    initView()
   }, [activeProjectId])
 
-  const loadVersions = async () => {
-    if (!activeProjectId) return
+  const initView = async () => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (pId) {
+      loadVersions(pId)
+    }
+  }
+
+  const loadVersions = async (projectId?: string) => {
+    const targetProject = projectId || activeProjectId
+    if (!targetProject) return
     try {
-      const list = await getVersions(activeProjectId)
+      const list = await getVersions(targetProject)
       setVersions(list)
       if (list.length >= 2) {
         setVersionA(list[0].id)
         setVersionB(list[1].id)
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      showFeedback('error', `Failed to load versions: ${err.message}`)
     }
   }
 
