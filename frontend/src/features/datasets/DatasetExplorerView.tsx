@@ -23,9 +23,11 @@ import {
   FileText,
   Languages,
   CheckSquare,
-  Square
+  Square,
+  RefreshCw
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { ErrorBoundary } from '../../components/common/ErrorBoundary'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useSelectionStore } from '../../stores/useSelectionStore'
 import {
@@ -68,6 +70,7 @@ export const DatasetExplorerView: React.FC = () => {
   const [selectedDPO, setSelectedDPO] = useState<DPOTask | null>(null)
   const [viewMode, setViewMode] = useState<'rendered' | 'bilingual' | 'json'>('rendered')
   const [copied, setCopied] = useState(false)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Edit Modals
@@ -102,33 +105,52 @@ export const DatasetExplorerView: React.FC = () => {
 
   const loadData = async (projectId?: string) => {
     const targetProject = projectId || activeProjectId
-    if (!targetProject) return
+    if (!targetProject) {
+      setIsLoading(false)
+      return
+    }
+    setIsLoading(true)
     try {
       if (activeTab === 'sft') {
         const langMode = languageFilter !== 'all' ? languageFilter : undefined
         const res = await getSFTRecords(targetProject, search || undefined, undefined, langMode)
-        let filtered = res.records
-        if (selectedPair !== 'all') {
-          const [p, s] = selectedPair.split('-')
-          filtered = filtered.filter(r => {
-            const rP = (r.primary_language || '').toLowerCase()
-            const rS = (r.secondary_language || '').toLowerCase()
-            return rP === p.toLowerCase() && rS === s.toLowerCase()
-          })
+        let filtered = Array.isArray(res?.records) ? res.records : []
+        if (selectedPair && selectedPair !== 'all') {
+          const parts = selectedPair.split(/->|-/)
+          const p = parts[0]?.trim()?.toLowerCase()
+          const s = parts[1]?.trim()?.toLowerCase()
+          if (p && s) {
+            filtered = filtered.filter(r => {
+              const rP = (r.primary_language || '').toLowerCase()
+              const rS = (r.secondary_language || '').toLowerCase()
+              return rP === p && rS === s
+            })
+          }
         }
         setSftRecords(filtered)
-        if (filtered.length > 0 && !selectedSFT) {
-          setSelectedSFT(filtered[0])
+        if (filtered.length > 0) {
+          if (!selectedSFT || !filtered.some(r => r.id === selectedSFT.id)) {
+            setSelectedSFT(filtered[0])
+          }
+        } else {
+          setSelectedSFT(null)
         }
       } else {
         const res = await getDPOTasks(targetProject, undefined, search || undefined)
-        setDpoTasks(res.tasks)
-        if (res.tasks.length > 0 && !selectedDPO) {
-          setSelectedDPO(res.tasks[0])
+        const tasks = Array.isArray(res?.tasks) ? res.tasks : []
+        setDpoTasks(tasks)
+        if (tasks.length > 0) {
+          if (!selectedDPO || !tasks.some(t => t.id === selectedDPO.id)) {
+            setSelectedDPO(tasks[0])
+          }
+        } else {
+          setSelectedDPO(null)
         }
       }
     } catch (err: any) {
-      showFeedback('error', `Failed to load records: ${err.message}`)
+      showFeedback('error', `Failed to load records: ${err.message || 'Unknown database error'}`)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -356,14 +378,22 @@ export const DatasetExplorerView: React.FC = () => {
 
         {/* Records List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {activeTab === 'sft' ? (
+          {isLoading ? (
+            <div className="p-8 text-center text-xs text-muted-foreground space-y-3">
+              <RefreshCw className="h-6 w-6 text-primary animate-spin mx-auto" />
+              <p>Loading Mechon Corpus records...</p>
+            </div>
+          ) : activeTab === 'sft' ? (
             sftRecords.length > 0 ? (
               sftRecords.map(r => {
                 const isCurrent = selectedSFT?.id === r.id
                 const isSelected = isSftSelected(r.id)
-                const firstUser = r.messages?.find(m => m.role === 'user')
-                const title = r.metadata?.title || firstUser?.content || 'Conversation Record'
-                const isBilingual = r.language_mode === 'bilingual' || r.messages?.some(m => m.translations && Object.keys(m.translations).length > 0)
+                const safeMessages = Array.isArray(r?.messages) ? r.messages : []
+                const firstUser = safeMessages.find((m: any) => m?.role === 'user')
+                const userContent = typeof firstUser?.content === 'string' ? firstUser.content : ''
+                const title = r?.metadata?.title || userContent || 'Conversation Record'
+                const isBilingual = r?.language_mode === 'bilingual' || safeMessages.some((m: any) => m?.translations && Object.keys(m.translations).length > 0)
+                const tags = Array.isArray(r?.metadata?.tags) ? r.metadata.tags : []
 
                 return (
                   <div
@@ -396,11 +426,11 @@ export const DatasetExplorerView: React.FC = () => {
                         </div>
 
                         <p className="text-[11px] text-muted-foreground line-clamp-2">
-                          {firstUser?.content || 'No prompt preview'}
+                          {userContent || 'No prompt preview'}
                         </p>
 
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
-                          <span>{r.turn_count} turns</span>
+                          <span>{r.turn_count || safeMessages.length} turns</span>
                           <div className="flex items-center gap-1">
                             {isBilingual && (
                               <LanguageIdentityBadge
@@ -410,9 +440,9 @@ export const DatasetExplorerView: React.FC = () => {
                                 compact
                               />
                             )}
-                            {r.metadata?.tags && r.metadata.tags.length > 0 && (
+                            {tags.length > 0 && (
                               <span className="text-primary truncate max-w-[70px]">
-                                #{r.metadata.tags[0]}
+                                #{tags[0]}
                               </span>
                             )}
                           </div>
@@ -666,9 +696,10 @@ export const DatasetExplorerView: React.FC = () => {
 
                   {/* Messages Flow */}
                   <div className="space-y-4 pt-2">
-                    {selectedSFT.messages?.map((m: any, idx: number) => {
-                      const isUser = m.role === 'user'
-                      const isSystem = m.role === 'system'
+                    {(Array.isArray(selectedSFT.messages) ? selectedSFT.messages : []).map((m: any, idx: number) => {
+                      const isUser = m?.role === 'user'
+                      const isSystem = m?.role === 'system'
+                      const messageContent = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '')
                       return (
                         <div
                           key={idx}
@@ -681,11 +712,11 @@ export const DatasetExplorerView: React.FC = () => {
                           }`}
                         >
                           <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase font-bold border-b border-border/60 pb-1">
-                            <span>{m.role}</span>
+                            <span>{m?.role || 'message'}</span>
                             <span>Turn {idx + 1}</span>
                           </div>
                           <div className="prose prose-invert prose-xs max-w-none break-words">
-                            <ReactMarkdown>{m.content}</ReactMarkdown>
+                            <ReactMarkdown>{messageContent}</ReactMarkdown>
                           </div>
                         </div>
                       )
@@ -731,17 +762,23 @@ export const DatasetExplorerView: React.FC = () => {
 
                         {/* Aligned Turns */}
                         <div className="space-y-4">
-                          {selectedSFT.messages?.map((m: any, idx: number) => {
+                          {(Array.isArray(selectedSFT.messages) ? selectedSFT.messages : []).map((m: any, idx: number) => {
                             const secLang = selectedSFT.secondary_language || 'en'
-                            const trans = m.translations?.[secLang] || (m.translations ? Object.values(m.translations)[0] : null)
-                            const status = m.translation_status?.[secLang] || (m.translation_status ? Object.values(m.translation_status)[0] : 'approved')
+                            const transObj = m?.translations && typeof m.translations === 'object' ? m.translations : {}
+                            const rawTrans = transObj[secLang] ?? (Object.values(transObj)[0] ?? null)
+                            const transText = typeof rawTrans === 'string' ? rawTrans : rawTrans ? JSON.stringify(rawTrans) : null
+
+                            const statusObj = m?.translation_status && typeof m.translation_status === 'object' ? m.translation_status : {}
+                            const rawStatus = statusObj[secLang] ?? (Object.values(statusObj)[0] ?? 'approved')
+                            const status = typeof rawStatus === 'string' ? rawStatus : 'approved'
+                            const primaryContent = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '')
 
                             return (
                               <div key={idx} className="grid grid-cols-2 gap-4">
                                 {/* Left: Primary Turn */}
                                 <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs">
                                   <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                                    <span className="font-bold text-foreground">{m.role}</span>
+                                    <span className="font-bold text-foreground">{m?.role || 'user'}</span>
                                     <span>Turn {idx + 1}</span>
                                   </div>
                                   <div
@@ -750,18 +787,18 @@ export const DatasetExplorerView: React.FC = () => {
                                       pInfo.rtl ? 'text-right' : 'text-left'
                                     }`}
                                   >
-                                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                                    <ReactMarkdown>{primaryContent}</ReactMarkdown>
                                   </div>
                                 </div>
 
                                 {/* Right: Translated Turn */}
                                 <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-2 text-xs">
                                   <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                                    <span className="font-bold text-cyan-400">{m.role} ({sInfo.code.toUpperCase()})</span>
+                                    <span className="font-bold text-cyan-400">{m?.role || 'assistant'} ({sInfo.code.toUpperCase()})</span>
                                     <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                                       status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-primary/20 text-primary'
                                     }`}>
-                                      {status as string}
+                                      {status}
                                     </span>
                                   </div>
                                   <div
@@ -770,8 +807,8 @@ export const DatasetExplorerView: React.FC = () => {
                                       sInfo.rtl ? 'text-right' : 'text-left'
                                     }`}
                                   >
-                                    {trans ? (
-                                      <ReactMarkdown>{trans as string}</ReactMarkdown>
+                                    {transText ? (
+                                      <ReactMarkdown>{transText}</ReactMarkdown>
                                     ) : (
                                       <span className="text-muted-foreground italic">No translation available for this turn</span>
                                     )}

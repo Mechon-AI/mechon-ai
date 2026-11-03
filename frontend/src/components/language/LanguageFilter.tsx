@@ -33,7 +33,12 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
       getCorpusLanguages(projectId)
         .then(res => {
           if (mounted && res) {
-            setStats(res)
+            setStats({
+              language_pairs: Array.isArray(res.language_pairs) ? res.language_pairs : [],
+              primary_languages: Array.isArray(res.primary_languages) ? res.primary_languages : [],
+              secondary_languages: Array.isArray(res.secondary_languages) ? res.secondary_languages : [],
+              modes: Array.isArray(res.modes) ? res.modes : []
+            })
           }
         })
         .catch(err => {
@@ -44,6 +49,8 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
       mounted = false
     }
   }, [projectId])
+
+  const pairs = Array.isArray(stats?.language_pairs) ? stats.language_pairs : []
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
@@ -69,19 +76,25 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
       </div>
 
       {/* Language Pair / Specific Filter dropdown if pairs exist */}
-      {stats.language_pairs.length > 0 && (
+      {pairs.length > 0 && (
         <div className="relative inline-flex items-center">
           <select
             value={selectedPair}
             onChange={e => onPairChange(e.target.value)}
-            className="pl-2 pr-7 py-1 text-xs rounded-lg bg-secondary/80 border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer appearance-none"
+            className="pl-2 pr-7 py-1 text-xs rounded-lg bg-secondary/80 border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer appearance-none max-w-[180px] truncate"
           >
             <option value="all">All Language Pairs</option>
-            {stats.language_pairs.map(pair => (
-              <option key={pair} value={pair}>
-                {pair.toUpperCase()}
-              </option>
-            ))}
+            {pairs.map((item, idx) => {
+              const pairValue = typeof item === 'string' ? item : item?.pair || `pair-${idx}`
+              const pairLabel = typeof item === 'string'
+                ? item.toUpperCase()
+                : item?.label || (item?.pair ? item.pair.toUpperCase() : `Pair #${idx + 1}`)
+              return (
+                <option key={pairValue} value={pairValue}>
+                  {pairLabel}
+                </option>
+              )
+            })}
           </select>
           <ChevronDown className="absolute right-2 h-3 w-3 text-muted-foreground pointer-events-none" />
         </div>

@@ -385,4 +385,13 @@ async fn test_multilingual_pipeline_all_pairs() {
     assert_eq!(legacy_rec.language_mode, "bilingual");
     assert_eq!(legacy_rec.language_metadata["primary"]["code"], "id");
     assert_eq!(legacy_rec.language_metadata["secondary"]["code"], "en");
+
+    // 16. Verify corpus languages aggregation structure
+    let corpus_stats = DatasetService::get_corpus_languages(&pool, &project.id).await.unwrap();
+    assert!(corpus_stats["language_pairs"].is_array());
+    let pair_array = corpus_stats["language_pairs"].as_array().unwrap();
+    assert!(!pair_array.is_empty());
+    assert!(pair_array.iter().any(|p| p["pair"] == "ja->ar"));
+    assert!(pair_array.iter().any(|p| p["pair"] == "id->en"));
+    assert!(pair_array.iter().all(|p| p["label"].is_string()));
 }

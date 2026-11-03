@@ -6,10 +6,17 @@ export interface LanguageInfo {
   is_common: boolean
 }
 
+export interface CorpusLanguagePair {
+  pair: string
+  primary?: LanguageInfo
+  secondary?: LanguageInfo
+  label?: string
+}
+
 export interface CorpusLanguageStats {
-  language_pairs: string[]
-  primary_languages: string[]
-  secondary_languages: string[]
+  language_pairs: (string | CorpusLanguagePair)[]
+  primary_languages: (string | LanguageInfo)[]
+  secondary_languages: (string | LanguageInfo)[]
   modes: string[]
 }
 
@@ -59,17 +66,24 @@ export const FALLBACK_LANGUAGES: LanguageInfo[] = [
 
 const RTL_CODES = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi', 'ug'])
 
-export function isRTL(code?: string): boolean {
-  if (!code) return false
+export function isRTL(code?: any): boolean {
+  if (!code || typeof code !== 'string') return false
   const primary = code.split('-')[0].toLowerCase()
   return RTL_CODES.has(primary)
 }
 
-export function lookupLanguage(code?: string, customCatalog?: LanguageInfo[]): LanguageInfo {
+export function lookupLanguage(code?: any, customCatalog?: LanguageInfo[]): LanguageInfo {
   if (!code) {
     return { code: 'und', name: 'Undetermined', native_name: 'Undetermined', rtl: false, is_common: false }
   }
-  const clean = code.trim()
+  let clean = ''
+  if (typeof code === 'string') {
+    clean = code.trim()
+  } else if (typeof code === 'object' && code.code && typeof code.code === 'string') {
+    clean = code.code.trim()
+  } else {
+    clean = String(code).trim()
+  }
   const lower = clean.toLowerCase()
   const list = customCatalog && customCatalog.length > 0 ? customCatalog : FALLBACK_LANGUAGES
 

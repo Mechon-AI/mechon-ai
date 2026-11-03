@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { ErrorBoundary } from '../common/ErrorBoundary'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -271,7 +272,9 @@ export const AppLayout: React.FC = () => {
 
         {/* View Content */}
         <main className="flex-1 overflow-auto bg-background/50">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

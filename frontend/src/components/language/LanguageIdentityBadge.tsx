@@ -18,7 +18,7 @@ export const LanguageIdentityBadge: React.FC<LanguageIdentityBadgeProps> = ({
   className = ''
 }) => {
   const pInfo = lookupLanguage(primaryLanguage)
-  const isBi = (mode === 'bilingual' || Boolean(secondaryLanguage)) && secondaryLanguage !== undefined && secondaryLanguage !== ''
+  const isBi = (mode === 'bilingual' || Boolean(secondaryLanguage)) && Boolean(secondaryLanguage) && secondaryLanguage !== '' && secondaryLanguage !== 'null'
   const sInfo = isBi ? lookupLanguage(secondaryLanguage) : null
   const hasRtl = pInfo.rtl || (sInfo ? sInfo.rtl : false)
 

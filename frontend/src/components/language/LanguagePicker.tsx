@@ -151,7 +151,7 @@ export const LanguagePicker: React.FC<LanguagePickerProps> = ({
           <div className="max-h-60 overflow-y-auto p-1 divide-y divide-border/20">
             {filteredLanguages.length > 0 ? (
               filteredLanguages.map(lang => {
-                const isSelected = lang.code.toLowerCase() === value.toLowerCase()
+                const isSelected = typeof value === 'string' && lang.code.toLowerCase() === value.toLowerCase()
                 return (
                   <button
                     key={lang.code}
