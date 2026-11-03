@@ -263,22 +263,34 @@ export const generateCompletion = (data: {
 }): Promise<{ role: string; content: string; model: string; finish_reason?: string }> =>
   invoke('generate_completion', { data })
 
-export const generateDPOPair = (params: {
-  provider_id: string
+export interface GenerateDPOPairParams {
+  provider_id?: string
+  provider_id_a?: string
+  provider_id_b?: string
   prompt: string
   system_prompt?: string
   model_a?: string
   model_b?: string
   temp_a?: number
   temp_b?: number
-}): Promise<{
+}
+
+export interface GenerateDPOPairResult {
+  success_a: boolean
+  success_b: boolean
   response_a: string
   response_b: string
   model_a: string
   model_b: string
+  provider_id_a?: string
+  provider_id_b?: string
   latency_a_ms?: number
   latency_b_ms?: number
-}> =>
+  error_a?: string | null
+  error_b?: string | null
+}
+
+export const generateDPOPair = (params: GenerateDPOPairParams): Promise<GenerateDPOPairResult> =>
   invoke('generate_dpo_pair', { params })
 
 /** Real-time token streaming for multi-turn SFT generation. */

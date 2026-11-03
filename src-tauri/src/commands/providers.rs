@@ -157,12 +157,24 @@ pub async fn generate_completion(
     vault: State<'_, Arc<dyn CredentialStore>>,
     data: GenerateCompletionInput,
 ) -> Result<serde_json::Value, AppError> {
-    let provider = ProviderService::get(&pool, &data.provider_id, vault.inner().as_ref()).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id, vault.inner().as_ref()).await?;
+    let p_id = data.provider_id.trim();
+    if p_id.is_empty() {
+        return Err(AppError::Validation("No provider selected. Please select a provider endpoint.".to_string()));
+    }
+
+    let provider = ProviderService::get(&pool, p_id, vault.inner().as_ref()).await?;
+    let api_key = ProviderService::get_raw_key(&pool, p_id, vault.inner().as_ref()).await?;
 
     let model = data.model
-        .or(provider.default_model)
-        .unwrap_or_else(|| "default-model".to_string());
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| provider.default_model.filter(|m| !m.trim().is_empty()))
+        .or_else(|| provider.models_cache.first().filter(|m| !m.trim().is_empty()).cloned())
+        .ok_or_else(|| {
+            AppError::Validation(format!(
+                "No valid model selected for provider '{}'. Please select a model in provider settings or studio controls.",
+                provider.name
+            ))
+        })?;
 
     let mut chat_messages = Vec::new();
     if let Some(sys) = data.system_prompt {
@@ -200,7 +212,7 @@ pub async fn generate_completion(
     };
 
     let resp = instance.chat(chat_req).await
-        .map_err(|e| AppError::Provider(e.message))?;
+        .map_err(AppError::ProviderStructured)?;
 
     Ok(json!({
         "role": resp.role,
@@ -212,7 +224,9 @@ pub async fn generate_completion(
 
 #[derive(serde::Deserialize)]
 pub struct GenerateDPOPairInput {
-    pub provider_id: String,
+    pub provider_id: Option<String>,
+    pub provider_id_a: Option<String>,
+    pub provider_id_b: Option<String>,
     pub prompt: String,
     pub system_prompt: Option<String>,
     pub model_a: Option<String>,
@@ -227,16 +241,56 @@ pub async fn generate_dpo_pair(
     vault: State<'_, Arc<dyn CredentialStore>>,
     params: GenerateDPOPairInput,
 ) -> Result<serde_json::Value, AppError> {
-    let provider = ProviderService::get(&pool, &params.provider_id, vault.inner().as_ref()).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &params.provider_id, vault.inner().as_ref()).await?;
+    if params.prompt.trim().is_empty() {
+        return Err(AppError::Validation("Evaluation prompt cannot be empty".to_string()));
+    }
+
+    let pid_a = params.provider_id_a
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| params.provider_id.clone().filter(|p| !p.trim().is_empty()))
+        .ok_or_else(|| AppError::Validation("No provider selected for Candidate A".to_string()))?;
+
+    let pid_b = params.provider_id_b
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| params.provider_id.clone().filter(|p| !p.trim().is_empty()))
+        .ok_or_else(|| AppError::Validation("No provider selected for Candidate B".to_string()))?;
+
+    let provider_a = ProviderService::get(&pool, &pid_a, vault.inner().as_ref()).await?;
+    let api_key_a = ProviderService::get_raw_key(&pool, &pid_a, vault.inner().as_ref()).await?;
+
+    let provider_b = if pid_b == pid_a {
+        provider_a.clone()
+    } else {
+        ProviderService::get(&pool, &pid_b, vault.inner().as_ref()).await?
+    };
+    let api_key_b = if pid_b == pid_a {
+        api_key_a.clone()
+    } else {
+        ProviderService::get_raw_key(&pool, &pid_b, vault.inner().as_ref()).await?
+    };
 
     let model_a = params.model_a
-        .or_else(|| provider.default_model.clone())
-        .unwrap_or_else(|| "default-model".to_string());
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| provider_a.default_model.filter(|m| !m.trim().is_empty()))
+        .or_else(|| provider_a.models_cache.first().filter(|m| !m.trim().is_empty()).cloned())
+        .ok_or_else(|| {
+            AppError::Validation(format!(
+                "No valid model selected for Candidate A on provider '{}'.",
+                provider_a.name
+            ))
+        })?;
 
     let model_b = params.model_b
-        .or_else(|| provider.default_model.clone())
-        .unwrap_or_else(|| model_a.clone());
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| provider_b.default_model.filter(|m| !m.trim().is_empty()))
+        .or_else(|| provider_b.models_cache.first().filter(|m| !m.trim().is_empty()).cloned())
+        .or_else(|| if pid_a == pid_b { Some(model_a.clone()) } else { None })
+        .ok_or_else(|| {
+            AppError::Validation(format!(
+                "No valid model selected for Candidate B on provider '{}'.",
+                provider_b.name
+            ))
+        })?;
 
     let mut messages_a = Vec::new();
     let mut messages_b = Vec::new();
@@ -250,11 +304,18 @@ pub async fn generate_dpo_pair(
     messages_a.push(ChatMessage { role: "user".to_string(), content: params.prompt.clone() });
     messages_b.push(ChatMessage { role: "user".to_string(), content: params.prompt.clone() });
 
-    let instance = ProviderFactory::create(
-        &provider.provider_type,
-        &provider.base_url,
-        api_key,
-        provider.timeout_seconds,
+    let instance_a = ProviderFactory::create(
+        &provider_a.provider_type,
+        &provider_a.base_url,
+        api_key_a,
+        provider_a.timeout_seconds,
+    );
+
+    let instance_b = ProviderFactory::create(
+        &provider_b.provider_type,
+        &provider_b.base_url,
+        api_key_b,
+        provider_b.timeout_seconds,
     );
 
     let req_a = ChatRequest {
@@ -269,29 +330,50 @@ pub async fn generate_dpo_pair(
     let req_b = ChatRequest {
         model: model_b.clone(),
         messages: messages_b,
-        temperature: params.temp_b.or(Some(0.9)),
+        temperature: params.temp_b.or(Some(0.95)),
         top_p: Some(0.95),
         max_tokens: Some(2048),
         stream: false,
     };
 
     let start_a = std::time::Instant::now();
-    let resp_a = instance.chat(req_a).await
-        .map_err(|e| AppError::Provider(format!("Model A generation failed: {}", e.message)))?;
-    let latency_a = start_a.elapsed().as_millis() as i64;
-
     let start_b = std::time::Instant::now();
-    let resp_b = instance.chat(req_b).await
-        .map_err(|e| AppError::Provider(format!("Model B generation failed: {}", e.message)))?;
+
+    // Execute both in parallel
+    let (res_a, res_b) = tokio::join!(
+        instance_a.chat(req_a),
+        instance_b.chat(req_b)
+    );
+    let latency_a = start_a.elapsed().as_millis() as i64;
     let latency_b = start_b.elapsed().as_millis() as i64;
 
+    let err_a = res_a.as_ref().err().map(|e| e.message.clone());
+    let err_b = res_b.as_ref().err().map(|e| e.message.clone());
+
+    if res_a.is_err() && res_b.is_err() {
+        return Err(AppError::Provider(format!(
+            "Both candidate generations failed.\n• Candidate A: {}\n• Candidate B: {}",
+            err_a.unwrap_or_default(),
+            err_b.unwrap_or_default()
+        )));
+    }
+
+    let resp_a_content = res_a.map(|r| r.content).unwrap_or_default();
+    let resp_b_content = res_b.map(|r| r.content).unwrap_or_default();
+
     Ok(json!({
-        "response_a": resp_a.content,
-        "response_b": resp_b.content,
+        "success_a": err_a.is_none(),
+        "success_b": err_b.is_none(),
+        "response_a": resp_a_content,
+        "response_b": resp_b_content,
         "model_a": model_a,
         "model_b": model_b,
+        "provider_id_a": pid_a,
+        "provider_id_b": pid_b,
         "latency_a_ms": latency_a,
-        "latency_b_ms": latency_b
+        "latency_b_ms": latency_b,
+        "error_a": err_a,
+        "error_b": err_b
     }))
 }
 
@@ -314,12 +396,24 @@ pub async fn stream_completion(
     vault: State<'_, Arc<dyn CredentialStore>>,
     data: StreamCompletionInput,
 ) -> Result<String, AppError> {
-    let provider = ProviderService::get(&pool, &data.provider_id, vault.inner().as_ref()).await?;
-    let api_key = ProviderService::get_raw_key(&pool, &data.provider_id, vault.inner().as_ref()).await?;
+    let p_id = data.provider_id.trim();
+    if p_id.is_empty() {
+        return Err(AppError::Validation("No provider selected for streaming".to_string()));
+    }
+
+    let provider = ProviderService::get(&pool, p_id, vault.inner().as_ref()).await?;
+    let api_key = ProviderService::get_raw_key(&pool, p_id, vault.inner().as_ref()).await?;
 
     let model = data.model
-        .or(provider.default_model)
-        .unwrap_or_else(|| "default-model".to_string());
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| provider.default_model.filter(|m| !m.trim().is_empty()))
+        .or_else(|| provider.models_cache.first().filter(|m| !m.trim().is_empty()).cloned())
+        .ok_or_else(|| {
+            AppError::Validation(format!(
+                "No valid model selected for provider '{}'.",
+                provider.name
+            ))
+        })?;
 
     let mut chat_messages = Vec::new();
     if let Some(sys) = data.system_prompt {

@@ -138,12 +138,18 @@ impl ModelProvider for OpenAICompatibleAdapter {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let usage = json.get("usage").map(|u| crate::providers::models::UsageInfo {
+            prompt_tokens: u.get("prompt_tokens").and_then(|v| v.as_i64()),
+            completion_tokens: u.get("completion_tokens").and_then(|v| v.as_i64()),
+            total_tokens: u.get("total_tokens").and_then(|v| v.as_i64()),
+        });
+
         Ok(ChatResponse {
             role: "assistant".to_string(),
             content,
             model: request.model,
             finish_reason,
-            usage: None,
+            usage,
         })
     }
 

@@ -35,10 +35,11 @@ import {
   deleteDPOTask
 } from '../../services/api'
 import type { DPOTask } from '../../types'
+import { formatErrorMessage } from '../../utils/errors'
 
 export const DPOStudioView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
-  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel } = useProviderStore()
+  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel, fetchProviders } = useProviderStore()
 
   const [tasks, setTasks] = useState<DPOTask[]>([])
   const [activeTask, setActiveTask] = useState<DPOTask | null>(null)
@@ -56,14 +57,85 @@ export const DPOStudioView: React.FC = () => {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
 
+  // Candidate A & B Model Selection
+  const [providerIdA, setProviderIdA] = useState<string>('')
+  const [modelA, setModelA] = useState<string>('')
+  const [tempA, setTempA] = useState<number>(0.7)
+  const [errorA, setErrorA] = useState<string | null>(null)
+
+  const [providerIdB, setProviderIdB] = useState<string>('')
+  const [modelB, setModelB] = useState<string>('')
+  const [tempB, setTempB] = useState<number>(0.9)
+  const [errorB, setErrorB] = useState<string | null>(null)
+
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message })
     setTimeout(() => setNotification(null), 4000)
   }
 
+  const applySameModelPreset = () => {
+    if (providerIdA) {
+      setProviderIdB(providerIdA)
+      setModelB(modelA)
+      setTempA(0.2)
+      setTempB(0.9)
+      showFeedback('success', 'Preset applied: Same model, low temp (0.2) vs high temp (0.9)')
+    }
+  }
+
+  const applyCrossModelPreset = () => {
+    setTempA(0.7)
+    setTempB(0.7)
+    if (providers.length > 1) {
+      const otherP = providers.find(p => p.id !== providerIdA) || providers[1]
+      setProviderIdB(otherP.id)
+      const models = getModelsForProvider(otherP.id)
+      if (models.length > 0) setModelB(models[0])
+    } else if (providers.length === 1) {
+      const models = getModelsForProvider(providers[0].id)
+      if (models.length > 1) {
+        const otherM = models.find(m => m !== modelA) || models[1]
+        setModelB(otherM)
+      }
+    }
+    showFeedback('success', 'Preset applied: Cross-model comparison (temp 0.7)')
+  }
+
+  const getModelsForProvider = (pId: string): string[] => {
+    const p = providers.find(item => item.id === pId)
+    if (!p) return []
+    if (p.models_cache && p.models_cache.length > 0) return p.models_cache
+    if (p.default_model) return [p.default_model]
+    return []
+  }
+
   useEffect(() => {
+    fetchProviders()
     initView()
   }, [activeProjectId])
+
+  // Synchronize candidate selections when providers load
+  useEffect(() => {
+    if (providers.length === 0) return
+
+    if (!providerIdA || !providers.some(p => p.id === providerIdA)) {
+      const defP = providers.find(p => p.id === activeProviderId) || providers[0]
+      if (defP) {
+        setProviderIdA(defP.id)
+        const defM = activeModel || defP.default_model || (defP.models_cache && defP.models_cache[0]) || ''
+        setModelA(defM)
+      }
+    }
+
+    if (!providerIdB || !providers.some(p => p.id === providerIdB)) {
+      const defP = providers.find(p => p.id === activeProviderId) || providers[0]
+      if (defP) {
+        setProviderIdB(defP.id)
+        const defM = activeModel || defP.default_model || (defP.models_cache && defP.models_cache[0]) || ''
+        setModelB(defM)
+      }
+    }
+  }, [providers, activeProviderId, activeModel])
 
   const initView = async () => {
     let pId = activeProjectId
@@ -110,7 +182,7 @@ export const DPOStudioView: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTask, isGenerating, responseA, responseB, rationale, helpfulness, factuality])
+  }, [activeTask, isGenerating, responseA, responseB, rationale, helpfulness, factuality, providerIdA, modelA, providerIdB, modelB])
 
   const loadTasks = async (projectId?: string) => {
     const targetProject = projectId || activeProjectId
@@ -124,7 +196,7 @@ export const DPOStudioView: React.FC = () => {
         handleNewTask(targetProject)
       }
     } catch (err: any) {
-      showFeedback('error', `Failed to load DPO tasks: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Failed to load DPO tasks'))
     }
   }
 
@@ -139,6 +211,39 @@ export const DPOStudioView: React.FC = () => {
     setFactuality(t.factuality_rating || 5)
     setEditModeA(!t.response_a)
     setEditModeB(!t.response_b)
+    setErrorA(null)
+    setErrorB(null)
+
+    // Restore candidate metadata if present
+    const meta = typeof t.metadata === 'object' && t.metadata !== null ? (t.metadata as Record<string, any>) : {}
+    if (meta.provider_a && providers.some(p => p.id === meta.provider_a)) {
+      setProviderIdA(meta.provider_a)
+    }
+    if (meta.model_a) {
+      setModelA(meta.model_a)
+    }
+    if (meta.provider_b && providers.some(p => p.id === meta.provider_b)) {
+      setProviderIdB(meta.provider_b)
+    }
+    if (meta.model_b) {
+      setModelB(meta.model_b)
+    }
+  }
+
+  const handleProviderAChange = (pId: string) => {
+    setProviderIdA(pId)
+    const p = providers.find(item => item.id === pId)
+    const newModel = p?.default_model || (p?.models_cache && p.models_cache[0]) || ''
+    setModelA(newModel)
+    setErrorA(null)
+  }
+
+  const handleProviderBChange = (pId: string) => {
+    setProviderIdB(pId)
+    const p = providers.find(item => item.id === pId)
+    const newModel = p?.default_model || (p?.models_cache && p.models_cache[0]) || ''
+    setModelB(newModel)
+    setErrorB(null)
   }
 
   const handleNewTask = async (projectId?: string) => {
@@ -183,7 +288,19 @@ export const DPOStudioView: React.FC = () => {
 
   const handleGenerateBoth = async () => {
     if (!activeTask || !prompt.trim() || isGenerating) return
+
+    if (!providerIdA || !modelA) {
+      showFeedback('error', 'Please select a provider and model for Candidate A.')
+      return
+    }
+    if (!providerIdB || !modelB) {
+      showFeedback('error', 'Please select a provider and model for Candidate B.')
+      return
+    }
+
     setIsGenerating(true)
+    setErrorA(null)
+    setErrorB(null)
     try {
       // First save prompt/system prompt
       await updateDPOTask(activeTask.id, {
@@ -192,24 +309,43 @@ export const DPOStudioView: React.FC = () => {
       })
 
       const res = await generateDPOPair({
-        provider_id: activeProviderId,
+        provider_id_a: providerIdA,
+        provider_id_b: providerIdB,
+        model_a: modelA,
+        model_b: modelB,
         prompt: prompt.trim(),
         system_prompt: systemPrompt.trim(),
-        temp_a: 0.7,
-        temp_b: 0.95
+        temp_a: tempA,
+        temp_b: tempB
       })
 
-      setResponseA(res.response_a)
-      setResponseB(res.response_b)
-      setEditModeA(false)
-      setEditModeB(false)
+      if (res.success_a && res.response_a) {
+        setResponseA(res.response_a)
+        setEditModeA(false)
+        setErrorA(null)
+      } else if (res.error_a) {
+        setErrorA(formatErrorMessage(res.error_a, 'Candidate A generation failed'))
+      }
+
+      if (res.success_b && res.response_b) {
+        setResponseB(res.response_b)
+        setEditModeB(false)
+        setErrorB(null)
+      } else if (res.error_b) {
+        setErrorB(formatErrorMessage(res.error_b, 'Candidate B generation failed'))
+      }
 
       const updated = await updateDPOTask(activeTask.id, {
-        response_a: res.response_a,
-        response_b: res.response_b,
+        response_a: res.success_a ? res.response_a : responseA,
+        response_b: res.success_b ? res.response_b : responseB,
         metadata: {
-          model_a: res.model_a,
-          model_b: res.model_b,
+          ...(typeof activeTask.metadata === 'object' && activeTask.metadata !== null ? activeTask.metadata : {}),
+          model_a: res.model_a || modelA,
+          model_b: res.model_b || modelB,
+          provider_a: res.provider_id_a || providerIdA,
+          provider_b: res.provider_id_b || providerIdB,
+          temp_a: tempA,
+          temp_b: tempB,
           latency_a: res.latency_a_ms,
           latency_b: res.latency_b_ms
         }
@@ -217,9 +353,16 @@ export const DPOStudioView: React.FC = () => {
 
       setActiveTask(updated)
       setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
-      showFeedback('success', 'Both candidate responses generated successfully.')
+
+      if (res.success_a && res.success_b) {
+        showFeedback('success', 'Both candidate responses generated successfully.')
+      } else if (res.success_a) {
+        showFeedback('error', `Candidate A succeeded, but Candidate B failed: ${res.error_b}`)
+      } else if (res.success_b) {
+        showFeedback('error', `Candidate B succeeded, but Candidate A failed: ${res.error_a}`)
+      }
     } catch (err: any) {
-      showFeedback('error', `Dual generation failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Dual generation failed'))
     } finally {
       setIsGenerating(false)
     }
@@ -227,12 +370,25 @@ export const DPOStudioView: React.FC = () => {
 
   const handleGenerateSingle = async (target: 'a' | 'b') => {
     if (!activeTask || !prompt.trim() || isGenerating) return
+
+    const provId = target === 'a' ? providerIdA : providerIdB
+    const targetModel = target === 'a' ? modelA : modelB
+    const candidateName = target === 'a' ? 'Candidate A' : 'Candidate B'
+
+    if (!provId || !targetModel) {
+      showFeedback('error', `Please select a provider and model for ${candidateName}.`)
+      return
+    }
+
     setIsGenerating(true)
+    if (target === 'a') setErrorA(null)
+    else setErrorB(null)
+
     try {
-      const temp = target === 'a' ? 0.7 : 0.95
+      const temp = target === 'a' ? tempA : tempB
       const res = await generateCompletion({
-        provider_id: activeProviderId,
-        model: activeModel,
+        provider_id: provId,
+        model: targetModel,
         prompt: prompt.trim(),
         system_prompt: systemPrompt.trim(),
         temperature: temp
@@ -241,19 +397,40 @@ export const DPOStudioView: React.FC = () => {
       if (target === 'a') {
         setResponseA(res.content)
         setEditModeA(false)
-        const updated = await updateDPOTask(activeTask.id, { response_a: res.content })
+        setErrorA(null)
+        const updated = await updateDPOTask(activeTask.id, {
+          response_a: res.content,
+          metadata: {
+            ...(typeof activeTask.metadata === 'object' && activeTask.metadata !== null ? activeTask.metadata : {}),
+            model_a: res.model || targetModel,
+            provider_a: provId,
+            temp_a: tempA
+          }
+        })
         setActiveTask(updated)
         setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
       } else {
         setResponseB(res.content)
         setEditModeB(false)
-        const updated = await updateDPOTask(activeTask.id, { response_b: res.content })
+        setErrorB(null)
+        const updated = await updateDPOTask(activeTask.id, {
+          response_b: res.content,
+          metadata: {
+            ...(typeof activeTask.metadata === 'object' && activeTask.metadata !== null ? activeTask.metadata : {}),
+            model_b: res.model || targetModel,
+            provider_b: provId,
+            temp_b: tempB
+          }
+        })
         setActiveTask(updated)
         setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
       }
-      showFeedback('success', `Candidate ${target.toUpperCase()} generated.`)
+      showFeedback('success', `${candidateName} generated successfully.`)
     } catch (err: any) {
-      showFeedback('error', `Single turn generation failed: ${err.message}`)
+      const formatted = formatErrorMessage(err, `${candidateName} generation failed`)
+      if (target === 'a') setErrorA(formatted)
+      else setErrorB(formatted)
+      showFeedback('error', formatted)
     } finally {
       setIsGenerating(false)
     }
@@ -275,7 +452,7 @@ export const DPOStudioView: React.FC = () => {
       setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
       showFeedback('success', 'Changes saved.')
     } catch (err: any) {
-      showFeedback('error', `Save failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Save failed'))
     }
   }
 
@@ -301,9 +478,12 @@ export const DPOStudioView: React.FC = () => {
         helpfulness_rating: helpfulness,
         factuality_rating: factuality,
         metadata: {
+          ...(typeof activeTask.metadata === 'object' && activeTask.metadata !== null ? activeTask.metadata : {}),
           annotated_at: new Date().toISOString(),
-          provider_id: activeProviderId,
-          model: activeModel
+          provider_a: providerIdA,
+          model_a: modelA,
+          provider_b: providerIdB,
+          model_b: modelB
         }
       })
 
@@ -317,7 +497,7 @@ export const DPOStudioView: React.FC = () => {
         selectTask(pendingTasks[0])
       }
     } catch (err: any) {
-      showFeedback('error', `Annotation failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Annotation failed'))
     }
   }
 
@@ -329,7 +509,7 @@ export const DPOStudioView: React.FC = () => {
       selectTask(undone)
       showFeedback('success', 'Last annotation reverted to pending.')
     } catch (err: any) {
-      showFeedback('error', `Undo failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Undo failed'))
     }
   }
 
@@ -512,6 +692,27 @@ export const DPOStudioView: React.FC = () => {
                 />
               </div>
 
+              {/* Presets Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={applySameModelPreset}
+                    className="px-2.5 py-1 rounded text-xs bg-secondary hover:bg-accent border border-border text-foreground transition-all"
+                  >
+                    Same Model (Diff Temp)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyCrossModelPreset}
+                    className="px-2.5 py-1 rounded text-xs bg-secondary hover:bg-accent border border-border text-foreground transition-all"
+                  >
+                    Cross-Model Comparison
+                  </button>
+                </div>
+              </div>
+
               {/* Side-by-side Response Comparison */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Panel A */}
@@ -523,33 +724,119 @@ export const DPOStudioView: React.FC = () => {
                   }`}
                 >
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-border/80 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs uppercase tracking-wider text-primary">
-                          Response A
-                        </span>
-                        {activeTask?.preference === 'a' && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            CHOSEN
+                    <div className="border-b border-border/80 pb-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs uppercase tracking-wider text-primary">
+                            Candidate A
                           </span>
-                        )}
+                          {activeTask?.preference === 'a' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              CHOSEN
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSingle('a')}
+                            disabled={isGenerating || !prompt.trim() || !providerIdA || !modelA}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50"
+                            title="Regenerate Candidate A"
+                          >
+                            <Sparkles className="h-3 w-3" /> Regen A
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditModeA(!editModeA)}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground flex items-center gap-1"
+                          >
+                            {editModeA ? <Eye className="h-3 w-3" /> : <Edit3 className="h-3 w-3" />}
+                            {editModeA ? 'Preview' : 'Edit'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyText(responseA, 'a')}
+                            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                            title="Copy Response A"
+                          >
+                            {copiedPanel === 'a' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setEditModeA(!editModeA)}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground flex items-center gap-1"
-                        >
-                          {editModeA ? <Eye className="h-3 w-3" /> : <Edit3 className="h-3 w-3" />}
-                          {editModeA ? 'Preview' : 'Edit Text'}
-                        </button>
-                        <button
-                          onClick={() => copyText(responseA, 'a')}
-                          className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                          title="Copy Response A"
-                        >
-                          {copiedPanel === 'a' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                        </button>
+
+                      {/* Candidate A Configuration Selectors */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                        <div>
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Provider</label>
+                          <select
+                            value={providerIdA}
+                            onChange={e => {
+                              const newP = e.target.value
+                              setProviderIdA(newP)
+                              const models = getModelsForProvider(newP)
+                              setModelA(models[0] || '')
+                            }}
+                            className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none"
+                          >
+                            {providers.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Model</label>
+                          <select
+                            value={modelA}
+                            onChange={e => setModelA(e.target.value)}
+                            className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none font-mono"
+                          >
+                            {getModelsForProvider(providerIdA).map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="text-[10px] uppercase font-semibold text-muted-foreground">Temp: {tempA}</label>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.05"
+                            value={tempA}
+                            onChange={e => setTempA(parseFloat(e.target.value))}
+                            className="w-full accent-primary h-1.5 bg-secondary rounded cursor-pointer mt-1"
+                          />
+                        </div>
                       </div>
+
+                      {/* Metadata Badge */}
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono pt-1">
+                        <span className="px-1.5 py-0.5 rounded bg-secondary/60 border border-border/50">
+                          {providers.find(p => p.id === providerIdA)?.name || providerIdA || 'Provider'} / {modelA || 'No model'} (temp: {tempA})
+                        </span>
+                      </div>
+
+                      {/* Candidate A Error Banner with Retry */}
+                      {errorA && (
+                        <div className="p-2 rounded bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center justify-between gap-2 mt-1">
+                          <div className="truncate" title={errorA}>
+                            <span className="font-semibold">Error:</span> {errorA}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSingle('a')}
+                            disabled={isGenerating}
+                            className="px-2 py-0.5 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 text-[10px] font-bold shrink-0"
+                          >
+                            Retry Candidate A
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="min-h-[180px] text-xs leading-relaxed">
@@ -567,7 +854,7 @@ export const DPOStudioView: React.FC = () => {
                         </div>
                       ) : (
                         <div className="text-muted-foreground italic p-4 text-center">
-                          Click 'Edit Text' to write manually or click 'Generate Both'.
+                          Click 'Edit' to write manually or click 'Generate Both'.
                         </div>
                       )}
                     </div>
@@ -576,6 +863,7 @@ export const DPOStudioView: React.FC = () => {
                   <div className="pt-3 mt-3 border-t border-border/80 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
                     <span>{responseA.split(/\s+/).filter(Boolean).length} words</span>
                     <button
+                      type="button"
                       onClick={() => handlePreference('a')}
                       disabled={!responseA.trim()}
                       className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 shadow-sm disabled:opacity-40 transition-all"
@@ -594,33 +882,119 @@ export const DPOStudioView: React.FC = () => {
                   }`}
                 >
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-border/80 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs uppercase tracking-wider text-indigo-400">
-                          Response B
-                        </span>
-                        {activeTask?.preference === 'b' && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            CHOSEN
+                    <div className="border-b border-border/80 pb-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs uppercase tracking-wider text-indigo-400">
+                            Candidate B
                           </span>
-                        )}
+                          {activeTask?.preference === 'b' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              CHOSEN
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSingle('b')}
+                            disabled={isGenerating || !prompt.trim() || !providerIdB || !modelB}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50"
+                            title="Regenerate Candidate B"
+                          >
+                            <Sparkles className="h-3 w-3" /> Regen B
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditModeB(!editModeB)}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground flex items-center gap-1"
+                          >
+                            {editModeB ? <Eye className="h-3 w-3" /> : <Edit3 className="h-3 w-3" />}
+                            {editModeB ? 'Preview' : 'Edit'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyText(responseB, 'b')}
+                            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                            title="Copy Response B"
+                          >
+                            {copiedPanel === 'b' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setEditModeB(!editModeB)}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground flex items-center gap-1"
-                        >
-                          {editModeB ? <Eye className="h-3 w-3" /> : <Edit3 className="h-3 w-3" />}
-                          {editModeB ? 'Preview' : 'Edit Text'}
-                        </button>
-                        <button
-                          onClick={() => copyText(responseB, 'b')}
-                          className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                          title="Copy Response B"
-                        >
-                          {copiedPanel === 'b' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                        </button>
+
+                      {/* Candidate B Configuration Selectors */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                        <div>
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Provider</label>
+                          <select
+                            value={providerIdB}
+                            onChange={e => {
+                              const newP = e.target.value
+                              setProviderIdB(newP)
+                              const models = getModelsForProvider(newP)
+                              setModelB(models[0] || '')
+                            }}
+                            className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none"
+                          >
+                            {providers.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Model</label>
+                          <select
+                            value={modelB}
+                            onChange={e => setModelB(e.target.value)}
+                            className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none font-mono"
+                          >
+                            {getModelsForProvider(providerIdB).map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="text-[10px] uppercase font-semibold text-muted-foreground">Temp: {tempB}</label>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.05"
+                            value={tempB}
+                            onChange={e => setTempB(parseFloat(e.target.value))}
+                            className="w-full accent-primary h-1.5 bg-secondary rounded cursor-pointer mt-1"
+                          />
+                        </div>
                       </div>
+
+                      {/* Metadata Badge */}
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono pt-1">
+                        <span className="px-1.5 py-0.5 rounded bg-secondary/60 border border-border/50">
+                          {providers.find(p => p.id === providerIdB)?.name || providerIdB || 'Provider'} / {modelB || 'No model'} (temp: {tempB})
+                        </span>
+                      </div>
+
+                      {/* Candidate B Error Banner with Retry */}
+                      {errorB && (
+                        <div className="p-2 rounded bg-destructive/15 border border-destructive/30 text-destructive text-xs flex items-center justify-between gap-2 mt-1">
+                          <div className="truncate" title={errorB}>
+                            <span className="font-semibold">Error:</span> {errorB}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSingle('b')}
+                            disabled={isGenerating}
+                            className="px-2 py-0.5 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 text-[10px] font-bold shrink-0"
+                          >
+                            Retry Candidate B
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="min-h-[180px] text-xs leading-relaxed">
@@ -638,7 +1012,7 @@ export const DPOStudioView: React.FC = () => {
                         </div>
                       ) : (
                         <div className="text-muted-foreground italic p-4 text-center">
-                          Click 'Edit Text' to write manually or click 'Generate Both'.
+                          Click 'Edit' to write manually or click 'Generate Both'.
                         </div>
                       )}
                     </div>
@@ -647,6 +1021,7 @@ export const DPOStudioView: React.FC = () => {
                   <div className="pt-3 mt-3 border-t border-border/80 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
                     <span>{responseB.split(/\s+/).filter(Boolean).length} words</span>
                     <button
+                      type="button"
                       onClick={() => handlePreference('b')}
                       disabled={!responseB.trim()}
                       className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 shadow-sm disabled:opacity-40 transition-all"

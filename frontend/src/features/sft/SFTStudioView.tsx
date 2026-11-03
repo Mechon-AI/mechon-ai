@@ -41,10 +41,11 @@ import {
   generateCompletion
 } from '../../services/api'
 import type { SFTSession, SFTMessage } from '../../types'
+import { formatErrorMessage } from '../../utils/errors'
 
 export const SFTStudioView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
-  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel } = useProviderStore()
+  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel, fetchProviders } = useProviderStore()
 
   const [sessions, setSessions] = useState<SFTSession[]>([])
   const [activeSession, setActiveSession] = useState<SFTSession | null>(null)
@@ -72,6 +73,7 @@ export const SFTStudioView: React.FC = () => {
   }
 
   useEffect(() => {
+    fetchProviders()
     initView()
   }, [activeProjectId])
 
@@ -105,7 +107,7 @@ export const SFTStudioView: React.FC = () => {
         handleNewSession(targetProject)
       }
     } catch (err: any) {
-      showFeedback('error', `Could not load sessions: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Could not load sessions'))
     }
   }
 
@@ -114,7 +116,7 @@ export const SFTStudioView: React.FC = () => {
       const full = await getSFTSession(sessionId)
       setActiveSession(full)
     } catch (err: any) {
-      showFeedback('error', `Failed to load conversation details: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Failed to load conversation details'))
     }
   }
 
@@ -136,7 +138,7 @@ export const SFTStudioView: React.FC = () => {
       setActiveSession(created)
       showFeedback('success', 'New conversation draft created.')
     } catch (err: any) {
-      showFeedback('error', `Failed to create conversation: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Failed to create conversation'))
     }
   }
 
@@ -156,37 +158,48 @@ export const SFTStudioView: React.FC = () => {
         }
         showFeedback('success', 'Conversation draft deleted.')
       } catch (err: any) {
-        showFeedback('error', `Failed to delete session: ${err.message}`)
+        showFeedback('error', formatErrorMessage(err, 'Failed to delete session'))
       }
     }
   }
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, retryUserText?: string) => {
     if (e) e.preventDefault()
-    if (!inputContent.trim() || !activeSession || isGenerating) return
+    if (!activeSession || isGenerating) return
 
-    const userText = inputContent.trim()
-    setInputContent('')
+    const userText = retryUserText || inputContent.trim()
+    if (!userText) return
+    if (!retryUserText) setInputContent('')
 
+    const pId = activeSession.provider_id || activeProviderId
+    const targetModel = activeSession.model || activeModel
+
+    if (!pId) {
+      showFeedback('error', 'Please select an active provider before generating.')
+      return
+    }
+
+    setIsGenerating(true)
     try {
-      // 1. Save User Turn to Backend
-      const userMsg = await addSFTMessage(activeSession.id, {
-        role: 'user',
-        content: userText,
-        model: activeSession.model
-      })
+      let currentMessages = activeSession.messages || []
 
-      // Update activeSession state immediately
-      const updatedMessages = [...(activeSession.messages || []), userMsg as SFTMessage]
-      setActiveSession({ ...activeSession, messages: updatedMessages, status: 'in_progress' })
+      // If this is a new message (not retrying an existing user turn)
+      if (!retryUserText) {
+        const userMsg = await addSFTMessage(activeSession.id, {
+          role: 'user',
+          content: userText,
+          model: targetModel
+        })
+        currentMessages = [...currentMessages, userMsg as SFTMessage]
+        setActiveSession({ ...activeSession, messages: currentMessages, status: 'in_progress' })
+      }
 
       // 2. Generate Assistant Response with full multi-turn history
-      setIsGenerating(true)
-      const history = updatedMessages.map(m => ({ role: m.role, content: m.content }))
-      
+      const history = currentMessages.map(m => ({ role: m.role, content: m.content }))
+
       const res = await generateCompletion({
-        provider_id: activeSession.provider_id || activeProviderId,
-        model: activeSession.model || activeModel,
+        provider_id: pId,
+        model: targetModel,
         prompt: userText,
         messages: history,
         system_prompt: activeSession.system_prompt,
@@ -201,18 +214,18 @@ export const SFTStudioView: React.FC = () => {
       const assistantMsg = await addSFTMessage(activeSession.id, {
         role: 'assistant',
         content: assistantText,
-        model: activeSession.model
+        model: res.model || targetModel
       })
 
       setActiveSession(prev => prev ? {
         ...prev,
         messages: [...prev.messages, assistantMsg as SFTMessage]
       } : null)
-      
+
       // Refresh session list status
       loadSessions()
     } catch (err: any) {
-      showFeedback('error', `Generation failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Generation failed'))
     } finally {
       setIsGenerating(false)
     }
@@ -229,7 +242,7 @@ export const SFTStudioView: React.FC = () => {
       setEditContent('')
       showFeedback('success', 'Message updated.')
     } catch (err: any) {
-      showFeedback('error', `Failed to update message: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Failed to update message'))
     }
   }
 
@@ -266,7 +279,7 @@ export const SFTStudioView: React.FC = () => {
         } : null)
       }
     } catch (err: any) {
-      showFeedback('error', `Regeneration failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Regeneration failed'))
     } finally {
       setIsGenerating(false)
     }
@@ -280,7 +293,7 @@ export const SFTStudioView: React.FC = () => {
       }
       showFeedback('success', 'Turn deleted.')
     } catch (err: any) {
-      showFeedback('error', `Delete failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Delete failed'))
     }
   }
 
@@ -313,7 +326,7 @@ export const SFTStudioView: React.FC = () => {
       await loadSessions()
       await loadSessionDetails(activeSession.id)
     } catch (err: any) {
-      showFeedback('error', `Commit failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Commit failed'))
     } finally {
       setIsCommitting(false)
     }
@@ -660,6 +673,27 @@ export const SFTStudioView: React.FC = () => {
 
             {/* Chat Input Bar */}
             <div className="p-4 border-t border-border bg-card/40 shrink-0">
+              {activeSession.messages &&
+                activeSession.messages.length > 0 &&
+                activeSession.messages[activeSession.messages.length - 1].role === 'user' &&
+                !isGenerating && (
+                  <div className="max-w-4xl mx-auto mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+                    <span className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5" /> Last user turn has no assistant response.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lastUserMsg = activeSession.messages[activeSession.messages.length - 1]
+                        handleSendMessage(undefined, lastUserMsg.content)
+                      }}
+                      className="px-2.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Retry Generation
+                    </button>
+                  </div>
+                )}
+
               <form onSubmit={handleSendMessage} className="relative max-w-4xl mx-auto flex items-end gap-2">
                 <textarea
                   rows={2}
