@@ -130,6 +130,32 @@ The provider subsystem uses the **Provider Registry Pattern** with dedicated mod
 - Validates selections upfront to prevent blank file exports.
 - Computes SHA-256 checksums across all written files for provenance verification.
 
+### 3.5 Fine-Tuning Engineering & Certification Subsystem
+Mechon AI incorporates a dedicated engineering engine following the principle **"Let the Engineers Control the Quality"**:
+
+1. **Model-Aware Chat Template Engine (`ChatTemplateEngine`)**:
+   - In-process Jinja2 template rendering powered by `minijinja`.
+   - Curated template definitions for **Meta Llama 3/3.1/3.2/3.3**, **Alibaba Qwen 2.5**, **Google Gemma 2**, **Mistral Instruct/Nemo**, **Microsoft Phi-3/Phi-4**, and **ChatML**.
+   - Strict role alternation checking, empty turn detection, and raw special token injection scanning (`<|end_of_text|>`, `<|im_end|>`, `<end_of_turn>`).
+2. **Sequence Length Analytics & Truncation Simulation (`SequenceAnalyticsEngine`)**:
+   - Model-aware multilingual BPE token estimation across CJK, Arabic, and Latin scripts.
+   - Exact percentiles ($P_{50}$, $P_{90}$, $P_{95}$, $P_{99}$) and 10-bucket histogram distribution.
+   - Multi-limit comparison matrix (1024, 2048, 4096, 8192, 16384, 32768) comparing retained vs clipped tokens without mutating source records.
+3. **Deduplication & Near-Duplicate Clustering (`DeduplicationEngine`)**:
+   - Three-tier detection: Exact SHA-256 hash, Normalized text hash, and Near-duplicate 3-gram Jaccard similarity.
+   - Persistent engineer decisions (`retain`, `exclude`, `acceptable`) stored in `duplicate_review_decisions`.
+4. **System Prompt & Persona Audit (`PersonaAuditEngine`)**:
+   - Frequency clustering and persona dominance calculations.
+   - Tone and instruction drift detection against configurable policies (`single_consistent_persona`, `multiple_intentional_personas`, `mixed_instruction`).
+5. **Deterministic Train/Eval Splitting (`SplitEngine`)**:
+   - SplitMix64 pseudo-random permutation guaranteed reproducible across machines with seed configuration.
+   - Atomic group isolation: Multi-turn dialogues and near-duplicate groups are assigned together to guarantee **0 data leakage** between train and eval sets.
+6. **Training Readiness Certification Report (`ReadinessEngine`)**:
+   - 8-dimension pre-flight evaluation classifying datasets into `READY`, `READY_WITH_WARNINGS`, or `BLOCKED`.
+   - Exportable to GitHub Flavored Markdown and JSON diagnostics.
+7. **Conversational DPO Preference Serialization (`ConversationalDPOEngine`)**:
+   - Full support for Hugging Face TRL multi-turn conversational schema (`prompt: [...]`, `chosen: [...]`, `rejected: [...]`).
+
 ---
 
 ## 4. Database Schema Specification

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.2] - 2026-11-03
+
+### Added
+- **Fine-Tuning Engineering Workstation Expansion ("Let the Engineers Control the Quality"):**
+  - **Model-Aware Chat Template Engine:** Real-time Jinja2 rendering via `minijinja` with curated support for Meta Llama 3, Alibaba Qwen 2.5, Google Gemma 2, Mistral Instruct, Microsoft Phi-3/Phi-4, and ChatML Generic. Includes role sequence validation, empty turn detection, and special token injection scanning.
+  - **Sequence Length Analytics & Multi-Limit Truncation Impact Matrix:** Model-aware multilingual BPE token estimation across CJK, Arabic, and Latin text, percentiles ($P_{50}$, $P_{90}$, $P_{95}$, $P_{99}$), 10-interval histogram distribution, and non-mutating multi-limit truncation simulations (1024, 2048, 4096, 8192, 16384, 32768 tokens).
+  - **Deduplication & Near-Duplicate Review:** Exact SHA-256, Unicode/whitespace normalization, and 3-gram Jaccard similarity detection with persistent engineer decisions (`retain`, `exclude`, `acceptable`).
+  - **System Prompt & Persona Consistency Audit:** Frequency clustering of system instructions, dominant persona share analysis, and contradictory instruction detection across explicit policies (`single_consistent_persona`, `multiple_intentional_personas`, `mixed_instruction`).
+  - **Train / Eval Splitting with Zero-Leakage Guarantee:** Seeded SplitMix64 deterministic pseudo-random partitioning with atomic group-based isolation, ensuring multi-turn sessions and near-duplicate clusters never leak across train and eval sets.
+  - **Training Readiness Pre-Flight Certification Report (Flagship):** Comprehensive 8-dimension pre-flight evaluation classifying dataset readiness into `READY`, `READY_WITH_WARNINGS`, or `BLOCKED` with downloadable GitHub Flavored Markdown and JSON diagnostics.
+  - **Conversational DPO Preference Schema:** Native support for Hugging Face TRL multi-turn conversational format (`prompt: [...]`, `chosen: [...]`, `rejected: [...]`).
+  - **Fine-Tuning Engineering Navigation:** Grouped sidebar navigation separating Core Studio, Fine-Tuning Engineering, and Dataset Management.
+
+---
+
 ## [1.1.1] - 2026-11-03
 
 ### Added

@@ -64,6 +64,33 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
 
 ### Implemented & Stable Features
 
+- **Fine-Tuning Engineering & Certification Suite ("Let the Engineers Control the Quality")**:
+  - **Core Engineering Philosophy**: AI can draft, translate, and synthesize, but human engineers retain definitive control over dataset acceptance, truncation policy, and training boundaries.
+  - **Model-Aware Chat Template Validation**:
+    - Real-time Jinja2 rendering via native `minijinja` for **Meta Llama 3/3.1/3.2/3.3**, **Alibaba Qwen 2.5**, **Google Gemma 2**, **Mistral Instruct**, **Microsoft Phi-3/Phi-4**, and **ChatML Generic**.
+    - Generation prompt toggling (`add_generation_prompt`) for assistant turn prefix validation.
+    - Role alternation auditing, empty message detection, and raw special token injection scanning (`<|end_of_text|>`, `<|eot_id|>`, `<|im_end|>`, `<end_of_turn>`).
+  - **Sequence Length Analytics & Multi-Limit Truncation Impact Matrix**:
+    - Model-aware multilingual BPE token estimation across CJK, Arabic, and Latin text scripts.
+    - Token percentiles ($P_{50}$, $P_{90}$, $P_{95}$, $P_{99}$), max/min/mean metrics, and 10-interval histogram distribution.
+    - Multi-limit comparison matrix (1024, 2048, 4096, 8192, 16384, 32768 tokens) simulating token clipping without mutating underlying records.
+  - **Deduplication & Near-Duplicate Review Workbench**:
+    - Three-tier deduplication: Exact SHA-256 hashing, Unicode/whitespace normalization, and 3-gram Jaccard index similarity.
+    - Interactive cluster inspector with persistent engineer decisions: `Retain` as primary, `Acceptable` intentional variation, or `Exclude` from training partitions.
+  - **System Prompt & Persona Audit**:
+    - Frequency clustering of system instructions and dominant persona calculations.
+    - Contradictory instruction detection and tone drift warnings against explicit policies (`single_consistent_persona`, `multiple_intentional_personas`, `mixed_instruction`).
+  - **Train / Eval Splitting with Zero-Leakage Guarantee**:
+    - Seeded SplitMix64 deterministic pseudo-random partitioning.
+    - Atomic group isolation: Multi-turn conversations and near-duplicate clusters are assigned together, guaranteeing **0 data leakage** between train, validation, and evaluation partitions.
+  - **Training Readiness Pre-Flight Certification Report (Flagship)**:
+    - Comprehensive 8-dimension pre-flight evaluation classifying dataset readiness into `READY`, `READY_WITH_WARNINGS`, or `BLOCKED`.
+    - Mandatory quality gates with actionable engineering recommendations.
+    - One-click export to GitHub Flavored Markdown (`.md`) and JSON diagnostics (`.json`).
+  - **Conversational DPO Preference Schema (Hugging Face TRL)**:
+    - Native support for multi-turn preference schemas: `prompt: [...]`, `chosen: [...]`, and `rejected: [...]`.
+    - Direct export to JSON and JSONL formats for seamless consumption by `trl.DPOTrainer`.
+
 - **Mechon SFT Studio**:
   - Interactive multi-turn dialogue drafting with dynamic system prompt guidance.
   - Streaming LLM completions for assistant turns with configurable sampling parameters.

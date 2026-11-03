@@ -22,8 +22,11 @@ import {
   exportDPODataset,
   importDatasetFile,
   exportDatasetToFile,
+  exportConversationalDPO,
+  listDatasetSplits,
   type ExportToFileResult
 } from '../../services/api'
+import type { SplitSummary } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
 
 export const ExportCenterView: React.FC = () => {
@@ -38,11 +41,13 @@ export const ExportCenterView: React.FC = () => {
   const [pipeline, setPipeline] = useState<'sft' | 'dpo'>(initialPipeline)
   const [exportSource, setExportSource] = useState<'entire' | 'selected'>(initialSource)
   const [bilingualMode, setBilingualMode] = useState<'canonical_aligned' | 'primary_only' | 'secondary_only'>('canonical_aligned')
+  const [dpoFormat, setDpoFormat] = useState<'standard' | 'conversational'>('conversational')
   const [format, setFormat] = useState('jsonl')
   const [includeMetadata, setIncludeMetadata] = useState(true)
   const [previewContent, setPreviewContent] = useState('')
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [availableSplits, setAvailableSplits] = useState<SplitSummary[]>([])
 
   // Import State
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -60,7 +65,7 @@ export const ExportCenterView: React.FC = () => {
 
   useEffect(() => {
     initView()
-  }, [activeProjectId, pipeline, format, includeMetadata, exportSource, bilingualMode, selectedSftIds, selectedDpoIds])
+  }, [activeProjectId, pipeline, dpoFormat, format, includeMetadata, exportSource, bilingualMode, selectedSftIds, selectedDpoIds])
 
   const initView = async () => {
     let pId = activeProjectId
@@ -68,7 +73,17 @@ export const ExportCenterView: React.FC = () => {
       pId = await ensureActiveProject()
     }
     if (pId) {
+      loadSplits(pId)
       loadPreview(pId)
+    }
+  }
+
+  const loadSplits = async (pId: string) => {
+    try {
+      const splits = await listDatasetSplits(pId)
+      setAvailableSplits(splits)
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -88,6 +103,8 @@ export const ExportCenterView: React.FC = () => {
 
       if (pipeline === 'sft') {
         text = await exportSFTDataset(targetProject, format, includeMetadata, targetIds, bilingualMode)
+      } else if (dpoFormat === 'conversational') {
+        text = await exportConversationalDPO(targetProject, format, true)
       } else {
         text = await exportDPODataset(targetProject, format, includeMetadata, true, targetIds)
       }
@@ -296,8 +313,50 @@ export const ExportCenterView: React.FC = () => {
               </>
             )}
 
+            {pipeline === 'dpo' && (
+              <>
+                <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
+                  3. Preference Schema Format
+                </span>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dpoFormat"
+                      value="conversational"
+                      checked={dpoFormat === 'conversational'}
+                      onChange={() => setDpoFormat('conversational')}
+                      className="accent-primary"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">Conversational DPO (TRL Schema)</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        prompt: [...], chosen: [...], rejected: [...]
+                      </span>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dpoFormat"
+                      value="standard"
+                      checked={dpoFormat === 'standard'}
+                      onChange={() => setDpoFormat('standard')}
+                      className="accent-primary"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">Flat Preference Pairs</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        instruction / prompt, response_chosen, response_rejected
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </>
+            )}
+
             <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
-              {pipeline === 'sft' ? '4.' : '3.'} Target Format
+              {pipeline === 'sft' ? '4.' : '4.'} Target Format
             </span>
 
             <div className="space-y-1.5">

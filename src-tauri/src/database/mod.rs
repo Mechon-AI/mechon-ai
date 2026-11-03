@@ -40,6 +40,11 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
         .execute(&pool)
         .await?;
 
+    let eng_schema_sql = include_str!("../../migrations/20261103000000_engineering_expansion.sql");
+    sqlx::raw_sql(eng_schema_sql)
+        .execute(&pool)
+        .await?;
+
     // Ensure credential_ref column exists on existing databases
     let _ = sqlx::query("ALTER TABLE providers ADD COLUMN credential_ref TEXT")
         .execute(&pool)

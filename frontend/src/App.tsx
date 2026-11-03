@@ -16,6 +16,13 @@ import { ExportCenterView } from './features/export/ExportCenterView'
 import { ProviderManagerView } from './features/providers/ProviderManagerView'
 import { SettingsView } from './features/settings/SettingsView'
 
+import { TemplateValidationView } from './features/engineering/TemplateValidationView'
+import { SequenceAnalyticsView } from './features/engineering/SequenceAnalyticsView'
+import { DeduplicationView } from './features/engineering/DeduplicationView'
+import { PersonaAuditView } from './features/engineering/PersonaAuditView'
+import { SplitManagerView } from './features/engineering/SplitManagerView'
+import { TrainingReadinessView } from './features/readiness/TrainingReadinessView'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -41,6 +48,12 @@ export const App: React.FC = () => {
             <Route path="analytics" element={<AnalyticsView />} />
             <Route path="versions" element={<VersionHistoryView />} />
             <Route path="export" element={<ExportCenterView />} />
+            <Route path="engineering/templates" element={<TemplateValidationView />} />
+            <Route path="engineering/sequence" element={<SequenceAnalyticsView />} />
+            <Route path="engineering/dedup" element={<DeduplicationView />} />
+            <Route path="engineering/persona" element={<PersonaAuditView />} />
+            <Route path="engineering/splits" element={<SplitManagerView />} />
+            <Route path="readiness" element={<TrainingReadinessView />} />
             <Route path="providers" element={<ProviderManagerView />} />
             <Route path="settings" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />

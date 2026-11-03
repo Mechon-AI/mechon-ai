@@ -1,4 +1,5 @@
 export * from './languages'
+export * from './engineering'
 
 export interface Project {
   id: string

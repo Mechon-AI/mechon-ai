@@ -24,7 +24,14 @@ import {
   X,
   ExternalLink,
   Code,
-  RefreshCw
+  RefreshCw,
+  FileCode2,
+  BarChart2,
+  CopyCheck,
+  Users,
+  GitFork,
+  FileCheck2,
+  Sparkles
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
@@ -56,15 +63,27 @@ export const AppLayout: React.FC = () => {
     return []
   }
 
-  const navItems = [
+  const coreNav = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     { label: 'Projects', path: '/projects', icon: FolderKanban },
     { label: 'Mechon SFT', path: '/sft', icon: MessageSquareCode, badge: activeProject?.active_draft_count },
     { label: 'Mechon DPO', path: '/dpo', icon: GitCompare, badge: activeProject?.dpo_task_count },
     { label: 'Mechon Corpus', path: '/datasets', icon: Database },
     { label: 'Model Playground', path: '/playground', icon: Terminal },
+  ]
+
+  const engineeringNav = [
+    { label: 'Training Readiness', path: '/readiness', icon: FileCheck2, highlight: true },
+    { label: 'Chat Templates', path: '/engineering/templates', icon: FileCode2 },
+    { label: 'Sequence Analytics', path: '/engineering/sequence', icon: BarChart2 },
+    { label: 'Deduplication', path: '/engineering/dedup', icon: CopyCheck },
+    { label: 'Persona Audit', path: '/engineering/persona', icon: Users },
+    { label: 'Train / Eval Splits', path: '/engineering/splits', icon: GitFork },
     { label: 'Quality Control', path: '/quality', icon: ShieldCheck },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+  ]
+
+  const dataNav = [
     { label: 'Version History', path: '/versions', icon: History },
     { label: 'Export Center', path: '/export', icon: FileDown },
     { label: 'Provider Manager', path: '/providers', icon: Cpu },
@@ -84,7 +103,7 @@ export const AppLayout: React.FC = () => {
                 MECHON <span className="text-primary font-normal">AI</span>
               </span>
               <span className="text-[9px] text-muted-foreground font-mono tracking-tighter uppercase block">
-                Dataset Workstation
+                Fine-Tuning Workstation
               </span>
             </div>
           </div>
@@ -93,7 +112,7 @@ export const AppLayout: React.FC = () => {
             className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border/60 hover:bg-secondary transition-colors font-mono"
             title="About Mechon AI"
           >
-            v1.0
+            v1.1.2
           </button>
         </div>
 
@@ -149,31 +168,97 @@ export const AppLayout: React.FC = () => {
         </div>
 
         {/* Navigation List */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-          {navItems.map(item => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-                  }`
-                }
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="truncate flex-1">{item.label}</span>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-accent/80 font-mono">
-                    {item.badge}
-                  </span>
-                )}
-              </NavLink>
-            )
-          })}
+        <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-4">
+          {/* Core Studio */}
+          <div className="space-y-0.5">
+            <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono">
+              Core Studio
+            </div>
+            {coreNav.map(item => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                    }`
+                  }
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate flex-1">{item.label}</span>
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-accent/80 font-mono">
+                      {item.badge}
+                    </span>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+
+          {/* Fine-Tuning Engineering */}
+          <div className="space-y-0.5">
+            <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono flex items-center justify-between">
+              <span>Engineering</span>
+              <span className="text-[9px] text-primary lowercase font-semibold">Quality First</span>
+            </div>
+            {engineeringNav.map(item => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : item.highlight
+                        ? 'text-primary hover:text-primary hover:bg-primary/10 font-semibold'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                    }`
+                  }
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate flex-1">{item.label}</span>
+                  {item.highlight && (
+                    <span className="px-1.5 py-0.2 text-[9px] rounded-full bg-emerald-500/20 text-emerald-500 font-bold uppercase">
+                      Audit
+                    </span>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+
+          {/* Dataset Management & System */}
+          <div className="space-y-0.5">
+            <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono">
+              Delivery
+            </div>
+            {dataNav.map(item => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                    }`
+                  }
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate flex-1">{item.label}</span>
+                </NavLink>
+              )
+            })}
+          </div>
         </nav>
 
         {/* Footer / Provider Status */}

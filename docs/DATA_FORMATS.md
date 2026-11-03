@@ -164,7 +164,116 @@ When exporting to tabular CSV format, multiline strings are escaped per RFC 4180
 
 ---
 
-## 4. JSON vs. JSONL
+## 4. Conversational DPO (TRL Schema)
+
+Mechon AI provides full support for Hugging Face TRL multi-turn preference schemas:
+
+```json
+{
+  "prompt": [
+    {
+      "role": "system",
+      "content": "You are a helpful coding assistant specialized in Rust."
+    },
+    {
+      "role": "user",
+      "content": "Write a function to compute factorial recursively."
+    }
+  ],
+  "chosen": [
+    {
+      "role": "assistant",
+      "content": "pub fn factorial(n: u64) -> u64 {\n    match n {\n        0 | 1 => 1,\n        _ => n * factorial(n - 1),\n    }\n}"
+    }
+  ],
+  "rejected": [
+    {
+      "role": "assistant",
+      "content": "fn factorial(n: i32) -> i32 {\n    if n <= 1 { return 1; }\n    return n * factorial(n - 1);\n}"
+    }
+  ],
+  "id": "dpo-task-9012",
+  "rationale": "Pattern matching with u64 avoids signed negative edge cases in Rust.",
+  "metadata": {
+    "model_chosen": "qwen-2.5-coder-32b",
+    "model_rejected": "llama-3.1-8b"
+  }
+}
+```
+
+---
+
+## 5. Dataset Split Partition Schema
+
+Train, validation, and evaluation partitions are generated deterministically and stored in SQLite:
+
+```json
+{
+  "split_id": "split-20261103-01",
+  "name": "llama-3-train-eval-v1",
+  "seed": 42,
+  "train_pct": 0.80,
+  "val_pct": 0.10,
+  "eval_pct": 0.10,
+  "total_count": 1000,
+  "train_count": 800,
+  "val_count": 100,
+  "eval_count": 100,
+  "zero_leakage_verified": true,
+  "assignments": [
+    {
+      "record_id": "rec-001",
+      "record_type": "sft",
+      "split_name": "train",
+      "group_id": "grp-dedup-0012"
+    }
+  ]
+}
+```
+
+---
+
+## 6. Training Readiness Report Schema
+
+The flagship pre-flight certification report evaluates 8 dimensions of fine-tuning readiness:
+
+```json
+{
+  "report_id": "rep-8924b102",
+  "project_id": "proj-default",
+  "title": "Production Fine-Tuning Certification",
+  "status": "READY",
+  "model_family": "llama",
+  "max_seq_len": 4096,
+  "generated_at": "2026-11-03T12:00:00Z",
+  "total_records": 1250,
+  "sft_count": 1000,
+  "dpo_count": 250,
+  "total_estimated_tokens": 1420500,
+  "checks": [
+    {
+      "category": "Dataset Overview",
+      "name": "Dataset Volume & Balance",
+      "passed": true,
+      "is_mandatory": true,
+      "severity": "info",
+      "message": "Dataset contains 1250 total examples."
+    },
+    {
+      "category": "Chat Template Compliance",
+      "name": "Target Model Jinja2 Compatibility",
+      "passed": true,
+      "is_mandatory": true,
+      "severity": "critical",
+      "message": "100.0% of records passed chat template validation."
+    }
+  ]
+}
+```
+
+---
+
+## 7. JSON vs. JSONL
 
 - **JSON Lines (`.jsonl`) — Recommended**:
   - Each record is serialized onto a single line separated by `\n`.

@@ -14,7 +14,14 @@ import type {
   VaultDiagnostics,
   ConnectionTestResult,
   DatasetVersion,
-  ValidationReport
+  ValidationReport,
+  ModelTemplateDef,
+  TemplateCompatibilitySummary,
+  SequenceAnalyticsReport,
+  DeduplicationReport,
+  PersonaAuditReport,
+  SplitSummary,
+  TrainingReadinessReport
 } from '../types'
 
 export function isTauriEnvironment(): boolean {
@@ -501,3 +508,117 @@ export const restoreDatabaseBackup = (): Promise<{ message: string }> =>
 
 export const openDataFolder = (): Promise<void> =>
   invoke('open_data_folder')
+
+// -------------------------------------------------------------
+// Fine-Tuning Engineering Expansion API
+// -------------------------------------------------------------
+
+export const getSupportedTemplateModels = (): Promise<ModelTemplateDef[]> =>
+  invoke<ModelTemplateDef[]>('get_supported_template_models')
+
+export const validateChatTemplates = (
+  projectId: string,
+  modelId: string,
+  addGenerationPrompt = false
+): Promise<TemplateCompatibilitySummary> =>
+  invoke<TemplateCompatibilitySummary>('validate_chat_templates', {
+    projectId,
+    modelId,
+    addGenerationPrompt
+  })
+
+export const runSequenceAnalytics = (
+  projectId: string,
+  modelFamily: string,
+  maxSeqLen = 4096,
+  truncationStrategy = 'tail',
+  includeSpecialTokens = true
+): Promise<SequenceAnalyticsReport> =>
+  invoke<SequenceAnalyticsReport>('run_sequence_analytics', {
+    projectId,
+    modelFamily,
+    maxSeqLen,
+    truncationStrategy,
+    includeSpecialTokens
+  })
+
+export const runDeduplication = (
+  projectId: string,
+  nearThreshold = 0.85
+): Promise<DeduplicationReport> =>
+  invoke<DeduplicationReport>('run_deduplication', {
+    projectId,
+    nearThreshold
+  })
+
+export const saveDuplicateDecision = (
+  projectId: string,
+  groupId: string,
+  recordId: string,
+  decision: 'retain' | 'exclude' | 'acceptable',
+  note?: string
+): Promise<void> =>
+  invoke('save_duplicate_decision', {
+    projectId,
+    groupId,
+    recordId,
+    decision,
+    note
+  })
+
+export const runPersonaAudit = (
+  projectId: string,
+  policy = 'multiple_intentional_personas'
+): Promise<PersonaAuditReport> =>
+  invoke<PersonaAuditReport>('run_persona_audit', {
+    projectId,
+    policy
+  })
+
+export const createDatasetSplit = (
+  projectId: string,
+  name: string,
+  seed = 42,
+  trainPct = 0.80,
+  valPct = 0.10,
+  evalPct = 0.10
+): Promise<SplitSummary> =>
+  invoke<SplitSummary>('create_dataset_split', {
+    projectId,
+    name,
+    seed,
+    trainPct,
+    valPct,
+    evalPct
+  })
+
+export const listDatasetSplits = (projectId: string): Promise<SplitSummary[]> =>
+  invoke<SplitSummary[]>('list_dataset_splits', { projectId })
+
+export const generateTrainingReadinessReport = (
+  projectId: string,
+  title: string,
+  modelFamily = 'llama',
+  maxSeqLen = 4096
+): Promise<TrainingReadinessReport> =>
+  invoke<TrainingReadinessReport>('generate_training_readiness_report', {
+    projectId,
+    title,
+    modelFamily,
+    maxSeqLen
+  })
+
+export const listReadinessReports = (projectId: string): Promise<TrainingReadinessReport[]> =>
+  invoke<TrainingReadinessReport[]>('list_readiness_reports', { projectId })
+
+export const exportConversationalDPO = (
+  projectId: string,
+  formatType = 'jsonl',
+  onlyCompleted = true
+): Promise<string> =>
+  invoke<string>('export_conversational_dpo', {
+    projectId,
+    formatType,
+    onlyCompleted
+  })
+

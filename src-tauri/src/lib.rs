@@ -2,6 +2,7 @@ pub mod commands;
 pub mod credentials;
 pub mod database;
 pub mod errors;
+pub mod engineering;
 pub mod languages;
 pub mod models;
 pub mod providers;
@@ -142,6 +143,19 @@ pub fn run() {
             commands::settings::restore_database_backup,
             commands::settings::open_data_folder,
             commands::settings::get_backend_status,
+
+            // Fine-Tuning Dataset Engineering & Validation
+            commands::engineering::get_supported_template_models,
+            commands::engineering::validate_chat_templates,
+            commands::engineering::run_sequence_analytics,
+            commands::engineering::run_deduplication,
+            commands::engineering::save_duplicate_decision,
+            commands::engineering::run_persona_audit,
+            commands::engineering::create_dataset_split,
+            commands::engineering::list_dataset_splits,
+            commands::engineering::generate_training_readiness_report,
+            commands::engineering::list_readiness_reports,
+            commands::engineering::export_conversational_dpo,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Mechon AI");
