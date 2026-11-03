@@ -33,7 +33,7 @@ source=(
     "mechon-ai.desktop"
 )
 sha256sums=(
-    '83deacd4e1e3fde19b0ddb1000c1f79f8d93c0a783a5bd3e7e315883aec9bd5e'
+    '7932fc53daec716cf825e02bdbd40c784a4f569b33eca25b2f3029ffe31a015d'
     'c958bfc8aa215ff6589ba48f78b5958ae45d19dc6aec3d45c0ebad7b9e2089b5'
 )
 
