@@ -1,204 +1,555 @@
 <div align="center">
 
-<img src="assets/mechon-logo.svg" alt="Mechon AI Logo" width="480" />
+<img src="assets/mechon-logo.svg" alt="Mechon AI Logo" width="520" />
 
 <br/>
 
 **Engineer the Data. Shape the Intelligence.**
 
-*A professional, local-first desktop workstation for engineering high-quality AI training datasets, specializing in Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO).*
+*A local-first desktop AI dataset engineering workstation for creating, curating, validating, and exporting high-quality training datasets for Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO).*
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/Mechon-AI/mechon-ai?color=brightgreen&label=release)](https://github.com/Mechon-AI/mechon-ai/releases)
+[![CI](https://github.com/Mechon-AI/mechon-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Mechon-AI/mechon-ai/actions/workflows/ci.yml)
 [![GitHub Organization](https://img.shields.io/badge/GitHub-Mechon--AI-181717.svg?logo=github)](https://github.com/Mechon-AI)
 [![Target Platform](https://img.shields.io/badge/Platform-Arch_Linux_%7C_Linux-informational.svg)](#installation)
-[![Core](https://img.shields.io/badge/Core-Native_Rust_%2B_Tokio_%2B_SQLx-orange.svg)](#technology-stack)
-[![Desktop Shell](https://img.shields.io/badge/Desktop-Tauri_2-brightgreen.svg)](#technology-stack)
-[![Frontend](https://img.shields.io/badge/Frontend-React_18_%2B_Vite_%2B_TypeScript-blueviolet.svg)](#technology-stack)
+[![Core](https://img.shields.io/badge/Core-Rust_2021_%2B_Tauri_2_%2B_SQLite-orange.svg)](#architecture)
+[![Frontend](https://img.shields.io/badge/Frontend-React_18_%2B_Vite_%2B_TypeScript-blueviolet.svg)](#architecture)
 
 </div>
 
 ---
 
-## 1. Product Vision
+## Table of Contents
 
-**Mechon AI** is a native, offline-first desktop application engineered for AI researchers, ML dataset engineers, and developers who demand complete sovereignty, rigor, and speed over language model alignment data.
-
-Modern foundation models are only as good as the data that shapes them. Mechon AI bridges the gap between raw text generation and rigorous dataset curation by replacing fragile scripts and web dashboards with a purpose-built desktop workstation.
-
-- **100% Native Architecture**: Built with Rust, Tauri 2, and SQLite. **Zero Python required at runtime.**
-- **Local-First & Offline**: Direct in-process SQLite database with Write-Ahead Logging (WAL) and foreign-key integrity. Zero telemetry, zero external cloud dependencies.
-- **Engineered Precision**: Direct Tauri IPC command architecture without HTTP server overhead. SHA-256 cryptographic dataset snapshots and rollback.
-- **Full Workflow Breadth**: From multi-turn human-in-the-loop conversation crafting to pairwise preference evaluation and one-click Hugging Face TRL-compliant export.
+- [1. Why Mechon AI?](#1-why-mechon-ai)
+- [2. Feature Matrix](#2-feature-matrix)
+- [3. Screenshots](#3-screenshots)
+- [4. Architecture](#4-architecture)
+- [5. Installation](#5-installation)
+- [6. Model Provider Configuration](#6-model-provider-configuration)
+- [7. Dataset Workflows](#7-dataset-workflows)
+- [8. Dataset Formats & Schema Specification](#8-dataset-formats--schema-specification)
+- [9. Security, Privacy & Credential Vault](#9-security-privacy--credential-vault)
+- [10. Development & Testing](#10-development--testing)
+- [11. Roadmap](#11-roadmap)
+- [12. License](#12-license)
 
 ---
 
-## 2. Core Modules
+## 1. Why Mechon AI?
 
-| Module | Status | Description |
+Modern foundation models are shaped by the quality, consistency, and alignment of their training data. However, the existing ecosystem of dataset tools has a critical architectural limitation: **it is almost entirely annotation-first**.
+
+### Annotation-First vs. Creation-First
+
+| Dimension | Annotation-First Tools (Traditional) | Creation-First Engineering (**Mechon AI**) |
 | :--- | :--- | :--- |
-| **Mechon SFT** | **Production** | Supervised Fine-Tuning workspace for interactive multi-turn dialogue creation, turn editing, live tree branching, and atomic session commitment into unified record arrays. |
-| **Mechon DPO** | **Production** | Direct Preference Optimization workspace for dual-candidate generation, side-by-side preference rating, tie/flag assignment, and reasoning capture. |
-| **Mechon Corpus** | **Production** | Unified dataset repository featuring full-text search, regex filtering, metadata tagging, record duplication, and instant JSON/rendered inspection. |
-| **Model Playground** | **Production** | Fast local inference testing workbench supporting multiple providers simultaneously with adjustable sampling parameters. |
-| **Quality Control** | **Production** | Diagnostic engine auditing role alternations, prompt overlap, token length imbalances, and empty turn anomalies. |
-| **Version Snapshots** | **Production** | Point-in-time immutable dataset versioning with SHA-256 hashing, diff viewers, and one-click rollback. |
-| **Export Center** | **Production** | Multi-format export engine outputting to Hugging Face TRL JSONL (ShareGPT, Alpaca, Standard chosen/rejected) and CSV. |
-| **Provider Manager** | **Production** | Provider orchestration for Ollama, OpenAI-compatible backends (vLLM, LM Studio, SGLang), and built-in offline Mock LLM. |
-| **Mechon Train** | *Planned* | Integrated local LoRA/QLoRA runner for direct on-device model fine-tuning against curated datasets. |
+| **Data Origin** | Assumes raw data already exists (web dumps, logs). | Synthesizes novel, high-density reasoning data from first principles. |
+| **Workflow Focus** | Labeling, tagging, bounding boxes, text categorization. | Human-in-the-loop multi-turn drafting, branching, and pairwise rating. |
+| **Multi-Turn Structure** | Often flattens dialogue into loose, disconnected rows. | **Atomic conversation commit**: $N$ turns serialized as **one immutable record**. |
+| **Model Integration** | Models are treated as external batch labeling scripts. | Native model adapters run directly within the authoring loop. |
+| **Multilingual Support** | Manual copy-pasting across disparate translation tools. | **Integrated bilingual review**: Turn-by-turn alignment, regeneration, and bulk approval. |
+| **Data Sovereignty** | SaaS platforms requiring data upload to third-party clouds. | **100% Local-First**: Embedded SQLite, offline storage, zero telemetry. |
+
+### The Three Pillars of Mechon AI
+
+1. **Creation**: Interactively craft complex multi-turn dialogues, system instruction boundaries, and synthetic branch variants with live streaming assistance.
+2. **Curation**: Perform rigorous pairwise evaluation in DPO Studio, conduct turn-level bilingual auditing, and document human reasoning directly in record metadata.
+3. **Engineering**: Validate structural invariants (role alternation, token ratio, prompt overlap), take cryptographic SHA-256 dataset snapshots, and selectively export verified subsets directly into Hugging Face TRL-compliant formats.
 
 ---
 
-## 3. Workflows
+## 2. Feature Matrix
 
-### Mechon SFT Workflow (Supervised Fine-Tuning)
-1. **Initiate Session**: Create a drafting session with a system prompt and target model.
-2. **Iterative Dialogue**: Add alternating `user` and `assistant` turns, or prompt a connected local provider to stream candidate responses.
-3. **In-Flight Editing**: Modify any turn at any stage; truncate downstream turns or branch new variations.
-4. **Atomic Commitment**: Commit the draft into an immutable SFT record. Multi-turn dialogue is packaged into **exactly one atomic record** with the complete messages array (`[{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]`).
-5. **Idempotent Retention**: Multiple conversations append to the project's dataset; retrying a commit updates the existing record rather than duplicating it.
+### Implemented & Stable Features
 
-### Mechon DPO Workflow (Direct Preference Optimization)
-1. **Task Creation**: Input a prompt and optional system instructions.
-2. **Dual-Model Generation**: Generate Response A and Response B concurrently via Ollama, vLLM, or manual drafting.
-3. **Pairwise Ranking**: Inspect side-by-side completions with live markdown rendering and token counters.
-4. **Decision & Annotation**: Designate Winner (`A` or `B`), mark `Tie`, or `Flag` for low quality using keyboard shortcuts (`A`, `B`, `T`, `X`, `S`). Document rationale directly in the metadata.
-5. **TRL Export**: Export preference pairs directly to standard format: `{"prompt": "...", "chosen": "...", "rejected": "..."}`.
+- **Mechon SFT Studio**:
+  - Interactive multi-turn dialogue drafting with dynamic system prompt guidance.
+  - Streaming LLM completions for assistant turns with configurable sampling parameters.
+  - Live turn editing, branching, and downstream turn truncation.
+  - **Atomic Record Commitment**: Guarantees an entire multi-turn conversation commits into Mechon Corpus as **exactly one record** with a canonical `messages: [...]` array.
+- **Bilingual Dataset Engineering**:
+  - Dual-mode workspace: **Chat Mode** and **Bilingual Review Mode**.
+  - Default pair: Indonesian primary (`id`) and English secondary (`en`), extensible to any language pair.
+  - Context-aware LLM translation of all conversation turns.
+  - Side-by-side bilingual review cards (source on left, translation on right).
+  - Turn-level approval lifecycle (`pending` → `generated` → `edited` → `approved` / `failed`).
+  - Per-turn editable translations, single-turn context regeneration, and bulk "Approve All Turns".
+  - Atomic single-record commit preserving turn alignments in `translations` and `translation_status`.
+  - Corpus bilingual filtering (`All`, `Bilingual`, `Monolingual`) and badges (`ID ↔ EN`).
+  - 3 Bilingual export modes: `canonical_aligned`, `primary_only`, and `secondary_only`.
+- **Mechon DPO Studio**:
+  - Prompt and system prompt input workbench.
+  - Concurrent dual candidate generation: Response A and Response B generated in parallel via `tokio::join!`.
+  - Independent provider and model selection for candidate A and candidate B (e.g. comparing two distinct models, or the same model with different temperatures).
+  - Side-by-side markdown comparison with live token counters and generation parameter badges.
+  - Pairwise ranking: Winner (`A` or `B`), `Tie`, or `Flag` for low quality.
+  - Keyboard shortcuts (`A`, `B`, `T`, `X`, `S`).
+  - Captures human annotator reasoning and rationale directly in record metadata.
+- **Mechon Corpus Explorer**:
+  - Unified catalog of all committed SFT records and annotated DPO preference tasks.
+  - Full-text search and regex filtering.
+  - Individual record card multi-select checkboxes, "Select Visible", and "Clear Selection".
+  - Floating selection toolbar displaying live selection counts and direct "Export Selected" shortcut.
+  - Aligned side-by-side bilingual drawer inspector and raw JSON inspector.
+  - Record duplication and atomic deletion.
+- **Selective Dataset Export**:
+  - Selection-aware Export Center supporting subset exports from Corpus Explorer.
+  - Scope toggle: **Entire Corpus** vs. **Selected Examples**.
+  - Strict validation rejecting empty selections before file generation.
+  - Export formats: **JSON Lines (`.jsonl`)**, **JSON (`.json`)**, and **CSV (`.csv`)**.
+  - File integrity reporting with SHA-256 checksums and byte size verification.
+- **Model Provider Registry & Native Adapters**:
+  - Centralized Provider Registry pattern (no scattered switch-cases).
+  - Dedicated native Rust adapters:
+    - **Built-in Mock Provider**: 100% offline with zero network requirement for UI testing.
+    - **Ollama**: Local daemon (`http://127.0.0.1:11434`) with dynamic model discovery.
+    - **Groq**: High-throughput inference with dynamic model discovery.
+    - **OpenAI-Compatible Universal Connector**: Compatible with **vLLM**, **LM Studio**, **SGLang**, **LocalAI**, and standard OpenAI `/v1/chat/completions`.
+    - **Anthropic Claude**: Compatible with the Anthropic `/v1/messages` API.
+  - Provider connection health checks reporting HTTP status codes and round-trip latency.
+- **Secure Credential Vault (`HybridCredentialVault`)**:
+  - OS-native credential storage via FreeDesktop Secret Service / KDE Wallet (`KWallet`) over D-Bus.
+  - Transparent AES-256-GCM encrypted local fallback (`~/.local/share/mechon-ai/vault.enc`) when Secret Service is unavailable or locked.
+  - **Zero plaintext API keys stored in SQLite** (`credential_ref` UUID pointer only).
+  - Real-time diagnostic probe reporting D-Bus status, write/read-back/delete probes, and UI health indicator.
+- **Quality Control & Diagnostics**:
+  - Turn role alternation validation (detects consecutive user or assistant messages).
+  - Empty turn detection and token length ratio auditing.
+  - Prompt overlap detection across the corpus.
+- **Dataset Versioning & Snapshots**:
+  - Point-in-time immutable version tags with SHA-256 cryptographic hashing.
+  - Version comparison and one-click rollback.
+- **Storage & Backup**:
+  - SQLite with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and foreign keys enforced.
+  - Online atomic `VACUUM INTO` backup and restore.
+
+### Experimental Features
+
+- **High-Concurrency Streaming SSE Parser**: Streaming token rendering under unstable or congested network environments is functional but actively receiving edge-case resilience updates.
+
+### Planned Features
+
+- **Mechon Train**: On-device fine-tuning runner (LoRA and QLoRA) integrated directly with local GPU/ROCm acceleration.
+- **Synthetic Data Evolution Engine**: Automated prompt mutation (in-depth, in-breadth, reasoning escalation) based on curated seed datasets.
 
 ---
 
-## 4. Supported Model Providers
+## 3. Screenshots
 
-- **Built-in Mock Provider**: Ready out of the box with zero setup for immediate offline testing, prototyping, and UI verification.
-- **Ollama**: Native local connection (`http://127.0.0.1:11434`) with model discovery, temperature, top-p, and max tokens.
-- **OpenAI-Compatible Runtimes**: Universal connector for:
-  - **vLLM**
-  - **LM Studio**
-  - **SGLang**
-  - **LocalAI / text-generation-webui**
-  - Any standard OpenAI `/v1/chat/completions` compliant endpoint.
-
----
-
-## 5. Technology Stack
+> [!NOTE]
+> *Official application UI screenshots are being curated for the v1.0 release documentation. The placeholders below illustrate the visual workflows.*
 
 ```text
-Mechon AI Desktop Workstation
-│
-├── Tauri 2 Desktop Shell
-│   └── Rust Application Core
-│       ├── Command Handlers (Tauri generate_handler!)
-│       ├── Application Services (Project, SFT, DPO, Dataset, Validation, Versioning)
-│       ├── Provider Manager (Async trait ModelProvider: OpenAI, Ollama, Mock)
-│       ├── Model Communication (Reqwest + Tokio SSE streaming)
-│       ├── Validation Engine (Multi-turn dialogue and preference audits)
-│       ├── Import / Export (JSONL, JSON, CSV)
-│       └── SQLite Repository (SQLx + WAL Mode + Automatic Migrations)
-│
-├── React 18 + Vite 6 + TypeScript Frontend
-│   ├── Application Shell (AppLayout with persistent theme toggle)
-│   ├── Project Workspace
-│   ├── Provider Manager
-│   ├── SFT Studio (Multi-turn conversational tree & streaming inference)
-│   ├── DPO Studio (Side-by-side pairwise annotation & hotkeys)
-│   ├── Dataset Explorer (Corpus browser, full-text search & pagination)
-│   ├── Analytics (KPIs & growth timelines)
-│   └── Settings & Maintenance (Database integrity & atomic VACUUM backups)
-│
-└── SQLite Database (~/.local/share/mechon-ai/mechon.db)
-    ├── projects
-    ├── providers
-    ├── sft_sessions & sft_messages
-    ├── sft_records (atomic conversation records)
-    ├── dpo_tasks
-    ├── dataset_versions
-    ├── app_settings
-    └── audit_logs
++-------------------------------------------------------------------------------------------------+
+| docs/screenshots/                                                                               |
+| ├── sft-studio.png          # Multi-turn drafting with streaming completion and branching tree   |
+| ├── bilingual-review.png    # Side-by-side Indonesian/English review cards with status badges   |
+| ├── dpo-studio.png          # Dual-candidate pairwise evaluation with token counters and hotkeys|
+| ├── corpus-explorer.png     # Corpus table with multi-select checkboxes and bilingual drawer     |
+| ├── export-center.png       # Scope selector (Selected vs Entire) and live JSONL preview        |
+| └── provider-vault.png      # Provider management, latency tests, and KWallet diagnostics probe  |
++-------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 6. Installation
+## 4. Architecture
+
+Mechon AI uses a **100% native desktop architecture**. There is **zero Python required at runtime or build time**.
+
+```mermaid
+graph TD
+    subgraph Frontend ["Frontend Shell (React 18 + TypeScript + Vite 6)"]
+        UI_SFT["Mechon SFT Studio<br/>(Chat & Bilingual Review)"]
+        UI_DPO["Mechon DPO Studio<br/>(Pairwise Evaluation)"]
+        UI_Corpus["Mechon Corpus<br/>(Explorer & Multi-Select)"]
+        UI_Export["Export Center<br/>(Selective & Canonical)"]
+        UI_Providers["Provider Manager<br/>(Registry & Diagnostics)"]
+        UI_Store["Zustand Stores & TanStack Query"]
+    end
+
+    subgraph IPC ["Tauri 2 Native IPC Boundary"]
+        Tauri_Bridge["tauri::generate_handler! (Type-Safe Direct IPC)"]
+    end
+
+    subgraph Rust_Core ["Native Rust Backend Core (src-tauri)"]
+        Svc_SFT["SFT Service<br/>(Session Drafting & Atomic Commits)"]
+        Svc_DPO["DPO Service<br/>(Dual Generation & Annotation)"]
+        Svc_Dataset["Dataset Service<br/>(Corpus & Version Snapshots)"]
+        Svc_Trans["Translation Service<br/>(Contextual Turn Alignment)"]
+        Svc_Export["Export Service<br/>(JSONL, JSON, CSV Transforms)"]
+        Svc_Valid["Validation Service<br/>(Anomaly & Alternation Audits)"]
+        
+        subgraph Providers ["Model Provider Subsystem"]
+            Reg["Provider Registry"]
+            Adapter_Mock["Mock Provider (Offline)"]
+            Adapter_Ollama["Ollama Native Adapter"]
+            Adapter_Groq["Groq Fast Inference Adapter"]
+            Adapter_OpenAI["OpenAI-Compatible Universal Adapter"]
+            Adapter_Anthropic["Anthropic Messages Adapter"]
+        end
+
+        subgraph Security ["Security & Credential Vault"]
+            Vault["HybridCredentialVault"]
+            KDE_Secret["FreeDesktop Secret Service / KWallet (D-Bus)"]
+            AES_Enc["Encrypted Local Fallback (AES-256-GCM)"]
+        end
+
+        subgraph Storage ["Database Subsystem"]
+            SQLx_Pool["SQLx Connection Pool (WAL Mode)"]
+            SQLite_DB[("Local SQLite 3 Database<br/>~/.local/share/mechon-ai/mechon.db")]
+        end
+    end
+
+    UI_SFT --> Tauri_Bridge
+    UI_DPO --> Tauri_Bridge
+    UI_Corpus --> Tauri_Bridge
+    UI_Export --> Tauri_Bridge
+    UI_Providers --> Tauri_Bridge
+
+    Tauri_Bridge --> Svc_SFT
+    Tauri_Bridge --> Svc_DPO
+    Tauri_Bridge --> Svc_Dataset
+    Tauri_Bridge --> Svc_Trans
+    Tauri_Bridge --> Svc_Export
+    Tauri_Bridge --> Svc_Valid
+
+    Svc_SFT --> Reg
+    Svc_DPO --> Reg
+    Svc_Trans --> Reg
+
+    Reg --> Adapter_Mock
+    Reg --> Adapter_Ollama
+    Reg --> Adapter_Groq
+    Reg --> Adapter_OpenAI
+    Reg --> Adapter_Anthropic
+
+    Reg --> Vault
+    Vault --> KDE_Secret
+    Vault --> AES_Enc
+
+    Svc_SFT --> SQLx_Pool
+    Svc_DPO --> SQLx_Pool
+    Svc_Dataset --> SQLx_Pool
+    Svc_Trans --> SQLx_Pool
+    Svc_Export --> SQLx_Pool
+    SQLx_Pool --> SQLite_DB
+```
+
+For full architectural specifications, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## 5. Installation
+
+Mechon AI is designed primarily for **Linux** workstations, with dedicated packaging for **Arch Linux**, **Debian/Ubuntu**, and portable binary tarballs.
 
 ### Arch Linux / EndeavourOS / Manjaro / CachyOS (Primary Platform)
 
-Mechon AI provides a native Arch Linux `PKGBUILD`:
+Mechon AI provides a validated, native `PKGBUILD` that compiles from source:
 
 ```bash
 # Clone the repository
 git clone https://github.com/Mechon-AI/mechon-ai.git
 cd mechon-ai/packaging/arch
 
-# Build and install using makepkg
+# Compile and install native package
 makepkg -si
 ```
 
-### Debian / Ubuntu / Pop!_OS / Linux Mint
+*Or install from the latest release asset:*
 ```bash
-cd mechon-ai/packaging/debian
-dpkg-buildpackage -us -uc -b
-sudo dpkg -i ../mechon-ai_1.0.0_amd64.deb
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/PKGBUILD
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/mechon-ai.desktop
+makepkg -si
 ```
 
-### Fedora / openSUSE / RHEL
+### Portable Binary Tarball (All Linux Distributions)
+
+Download the official standalone release from [GitHub Releases](https://github.com/Mechon-AI/mechon-ai/releases):
+
 ```bash
-cd mechon-ai/packaging/rpm
-rpmbuild -ba mechon-ai.spec
+wget https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/mechon-ai-v1.0.0-linux-x86_64.tar.gz
+tar -xzvf mechon-ai-v1.0.0-linux-x86_64.tar.gz
+cd mechon-ai-v1.0.0-linux-x86_64
+./mechon-ai
 ```
 
-### AppImage & Flatpak
-- Standalone portable AppImage: run `scripts/package.sh` to package.
-- Flatpak manifest provided at `packaging/flatpak/ai.mechon.Studio.yml`.
+### Compiling From Source Manually
 
----
+#### System Prerequisites
 
-## 7. Development Setup
+- **Arch Linux**:
+  ```bash
+  sudo pacman -S --needed base-devel rust cargo nodejs npm webkit2gtk-4.1 gtk3 openssl sqlite pkgconf
+  ```
+- **Ubuntu / Debian**:
+  ```bash
+  sudo apt-get install -y build-essential curl pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libsqlite3-dev
+  ```
 
-### Prerequisites
-- **Linux** (Arch Linux or any modern distribution)
-- **Rust** & **Cargo** (1.75+)
-- **Node.js** (v18+) & **npm**
-
-*(Notice: Python is NOT required by Mechon AI at runtime or build time)*
-
-### Quick Start
+#### Build Commands
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/Mechon-AI/mechon-ai.git
 cd mechon-ai
 
-# 2. Run automated setup script
+# 2. Automated setup
 ./scripts/setup.sh
 
-# 3. Launch in development mode
-./scripts/dev.sh
-```
-
-### Running Test Suite
-```bash
-./scripts/test.sh
-```
-
-### Building Native Release Binary
-```bash
+# 3. Compile release executable
 ./scripts/build.sh
 ```
-The compiled desktop executable will be located at `src-tauri/target/release/mechon-ai`.
+The compiled native executable will be generated at `src-tauri/target/release/mechon-ai`.
 
 ---
 
-## 8. Standards & File Locations
+## 6. Model Provider Configuration
 
-Mechon AI strictly follows the **XDG Base Directory Specification**:
+Mechon AI allows connecting multiple AI backends simultaneously without restarting the application.
 
-- **Data Directory**: `~/.local/share/mechon-ai/` (SQLite database `mechon.db`, backups, snapshots)
-- **Configuration**: `~/.config/mechon-ai/` (User preferences, provider settings)
-- **Cache**: `~/.cache/mechon-ai/` (Temporary staging and export artifacts)
+### Supported Providers
+
+| Provider | Type Identifier | Default Base URL | Capabilities |
+| :--- | :--- | :--- | :--- |
+| **Offline Mock LLM** | `mock` | *None (In-process)* | Offline prototyping, UI testing, instant completions. |
+| **Ollama** | `ollama` | `http://127.0.0.1:11434` | Local inference, auto-discovery of pulled models. |
+| **Groq** | `groq` | `https://api.groq.com/openai/v1` | Ultra-fast cloud inference, dynamic model discovery. |
+| **OpenAI-Compatible** | `openai` | Customizable (e.g. `http://localhost:8000/v1`) | Universal adapter for vLLM, LM Studio, SGLang, LocalAI. |
+| **Anthropic Claude** | `anthropic` | `https://api.anthropic.com` | Claude 3.5 Sonnet, Claude 3 Opus via `/v1/messages`. |
+
+### Configuring a Provider
+
+1. Open **Provider Manager** from the left navigation bar.
+2. Click **Add Provider** and select the provider type.
+3. Configure the **Base URL** (or leave default for Ollama / Groq / Anthropic).
+4. Enter your **API Key**:
+   - The key is saved immediately to the **OS Credential Vault** (KDE Wallet / FreeDesktop Secret Service).
+   - Plaintext keys are **never** written to the SQLite database.
+   - The UI displays only a masked hint (e.g. `••••••••9900`).
+5. Click **Test Connection**: Mechon AI verifies network connectivity, API key authorization, and model discovery.
+6. Select your **Default Model** from the dynamically populated dropdown list.
 
 ---
 
-## 9. License
+## 7. Dataset Workflows
 
-Licensed under the **Apache License, Version 2.0**. See [LICENSE](LICENSE) for details.
+### Workflow 1: Supervised Fine-Tuning (SFT)
 
-Copyright © 2026 Mechon AI Team.
+```text
+[Create Session] ──> [Draft Multi-Turn Dialogue] ──> [Edit / Truncate Turns] ──> [Atomic Commit] ──> [Mechon Corpus] ──> [Export JSONL]
+```
+
+1. **Create Drafting Session**: Define session title, system prompt, and target model.
+2. **Author Dialogue**: Add user prompts and stream assistant responses from the active model.
+3. **Refine & Branch**: Edit any previous turn in-place; truncate downstream turns if a new conversation direction is desired.
+4. **Commit Atomically**: Commit the draft into the project dataset. The conversation commits as **exactly one atomic record** with the entire messages array intact.
+
+---
+
+### Workflow 2: Bilingual Dataset Engineering (ID ↔ EN)
+
+```text
+[Draft Primary Dialogue] ──> [Generate LLM Translation] ──> [Bilingual Review Studio] ──> [Turn Approval & Edits] ──> [Commit Aligned Record] ──> [Projected Export]
+```
+
+1. **Draft in Primary Language**: Author the multi-turn conversation in your primary language (e.g. Indonesian).
+2. **Generate Translation**: Click **Generate Translation**. Mechon AI’s contextual translation engine translates each turn sequentially, maintaining conversational grounding and persona.
+3. **Switch to Bilingual Review Studio**: Inspect the side-by-side cards (Indonesian on the left, English on the right).
+4. **Turn-Level Auditing**:
+   - Edit translations directly in the textarea.
+   - Click **Save & Approve** to mark individual turns as `approved`.
+   - Click **Regenerate Turn** to re-prompt the translation model with conversational context.
+   - Click **Approve All Turns** once verified.
+5. **Commit Aligned Record**: Commit the session into Mechon Corpus. The record preserves both languages turn-by-turn with verification statuses.
+6. **Export**: Export as `canonical_aligned`, `primary_only`, or `secondary_only`.
+
+---
+
+### Workflow 3: Direct Preference Optimization (DPO)
+
+```text
+[Input Prompt] ──> [Dual-Model Synthesis] ──> [Side-by-Side Comparison] ──> [Annotate Winner/Tie/Flag] ──> [TRL-Compliant Export]
+```
+
+1. **Create Task**: Input the prompt instruction and optional system prompt.
+2. **Synthesize Candidates**:
+   - Model A generates Candidate A.
+   - Model B generates Candidate B (runs in parallel via `tokio::join!`).
+3. **Evaluate Side-by-Side**: Inspect markdown renderings, token lengths, and generation latencies.
+4. **Annotate**:
+   - Press <kbd>A</kbd> to designate Candidate A as chosen.
+   - Press <kbd>B</kbd> to designate Candidate B as chosen.
+   - Press <kbd>T</kbd> for Tie, or <kbd>X</kbd> to Flag low-quality generations.
+   - Enter annotator rationale to document why the winner was selected.
+5. **Export**: Export preference pairs to standard format (`prompt`, `chosen`, `rejected`).
+
+---
+
+## 8. Dataset Formats & Schema Specification
+
+Mechon AI natively supports **JSON Lines (`.jsonl`)**, **JSON (`.json`)**, and **CSV (`.csv`)**.
+
+### Canonical SFT Record (JSONL)
+
+```json
+{
+  "id": "e4b29c18-9a4f-4d32-b7e1-8f5c3a290d11",
+  "project_id": "c1a8d052-7e3f-4890-a59e-1148e69efb32",
+  "title": "Quantum Computing Fundamentals",
+  "language_mode": "bilingual",
+  "primary_language": "id",
+  "secondary_language": "en",
+  "messages": [
+    {
+      "id": "msg-001",
+      "role": "system",
+      "content": "Anda adalah asisten AI yang ahli dalam fisika kuantum.",
+      "translations": { "en": "You are an AI assistant specialized in quantum physics." },
+      "translation_status": { "en": "approved" }
+    },
+    {
+      "id": "msg-002",
+      "role": "user",
+      "content": "Jelaskan konsep dasar superposisi kuantum dalam satu paragraf.",
+      "translations": { "en": "Explain the fundamental concept of quantum superposition in one paragraph." },
+      "translation_status": { "en": "approved" }
+    },
+    {
+      "id": "msg-003",
+      "role": "assistant",
+      "content": "Superposisi kuantum adalah prinsip mekanika kuantum di mana sebuah partikel dapat berada dalam beberapa keadaan sekaligus sebelum dilakukan pengukuran.",
+      "translations": { "en": "Quantum superposition is a principle of quantum mechanics where a particle can exist in multiple states simultaneously before measurement." },
+      "translation_status": { "en": "approved" }
+    }
+  ],
+  "metadata": { "turn_count": 3, "verified": true },
+  "created_at": "2026-11-03T08:15:00Z"
+}
+```
+
+### Canonical DPO Record (JSONL)
+
+```json
+{
+  "id": "dpo-8821fa0c-512a-4ce7-bb91-03829031ef82",
+  "project_id": "c1a8d052-7e3f-4890-a59e-1148e69efb32",
+  "prompt": "Tuliskan implementasi fungsi binary search rekursif di Rust.",
+  "chosen": "Berikut adalah implementasi binary search rekursif yang idiomatik di Rust:\n\n```rust\npub fn binary_search<T: Ord>(slice: &[T], target: &T) -> Option<usize> { ... }\n```",
+  "rejected": "Ini kodenya:\n\n```rust\nfn search(arr: Vec<i32>, x: i32) -> i32 { ... }\n```",
+  "metadata": {
+    "model_a": "claude-3-5-sonnet-20241022",
+    "model_b": "llama-3.1-8b-instruct",
+    "winner": "A",
+    "rationale": "Response A menyediakan algoritma binary search generic yang aman terhadap integer overflow.",
+    "is_flagged": false
+  },
+  "created_at": "2026-11-03T07:20:00Z"
+}
+```
+
+For complete schema details and CSV mappings, see [docs/DATA_FORMATS.md](docs/DATA_FORMATS.md).
+
+---
+
+## 9. Security, Privacy & Credential Vault
+
+- **Local-First Isolation**:
+  - All dataset records, session drafts, snapshots, and database transactions reside strictly on the local machine.
+  - Zero telemetry, analytics beacons, or remote tracking pings.
+- **Credential Storage**:
+  - API credentials are stored via the **FreeDesktop Secret Service API** (KDE Wallet / GNOME Keyring) through D-Bus.
+  - If Secret Service is locked or unavailable, credentials fallback to a local AES-256-GCM encrypted vault (`~/.local/share/mechon-ai/vault.enc`).
+  - **No plaintext API keys are ever stored in SQLite**. The database stores only a random UUID pointer (`credential_ref`).
+- **Network Transparency**:
+  - Mechon AI initiates network traffic **only** when the user explicitly triggers a remote model completion (e.g. calling Groq or Anthropic APIs).
+  - When using local Ollama or the built-in Mock provider, zero external network traffic occurs.
+
+---
+
+## 10. Development & Testing
+
+### Project Layout
+
+```text
+mechon-ai/
+├── src-tauri/                 # Native Rust backend (Tauri 2 Core)
+│   ├── src/
+│   │   ├── commands/          # Type-safe Tauri IPC command handlers
+│   │   ├── credentials/       # Secret Service & AES-256-GCM Hybrid Credential Vault
+│   │   ├── database/          # SQLx SQLite pool & migrations
+│   │   ├── models/            # Domain entities and DTOs
+│   │   ├── providers/         # Model Provider Registry & Adapters
+│   │   ├── services/          # Core business services (SFT, DPO, Export, Translation)
+│   │   ├── validation/        # Dataset Quality Control validators
+│   │   ├── lib.rs             # Tauri application builder & command registration
+│   │   └── main.rs            # Desktop entrypoint
+│   ├── migrations/            # SQLx schema migrations
+│   └── tests/                 # Rust unit and integration test suites
+│
+├── frontend/                  # React 18 + Vite 6 + TypeScript desktop shell
+│   └── src/
+│       ├── components/        # Reusable UI components & layouts
+│       ├── features/          # Feature workspaces (SFT, DPO, Corpus, Export, Providers)
+│       ├── services/          # Tauri IPC client bindings
+│       ├── stores/            # Zustand state management (Selection, Layout)
+│       └── types/             # TypeScript domain definitions
+│
+├── packaging/                 # Distribution manifests (Arch Linux PKGBUILD, Debian, RPM)
+├── scripts/                   # Automated build, test, setup, and dev scripts
+└── docs/                      # Architectural specifications & guides
+```
+
+### Essential Commands
+
+```bash
+# Automated setup (checks toolchains, installs frontend packages)
+./scripts/setup.sh
+
+# Launch development environment (Vite hot-reload + Tauri desktop)
+./scripts/dev.sh
+
+# Run complete automated test suite (Rust unit/integration tests + frontend build)
+./scripts/test.sh
+
+# Build production release binary
+./scripts/build.sh
+```
+
+---
+
+## 11. Roadmap
+
+- [x] Architecture rebuild to native Rust + Tauri 2 + SQLite (zero Python runtime).
+- [x] Provider Registry Pattern with native adapters (Ollama, Groq, OpenAI, Anthropic, Mock).
+- [x] FreeDesktop Secret Service / KDE Wallet integration with encrypted fallback.
+- [x] SFT Multi-Turn Studio with atomic conversation commitment.
+- [x] DPO Pairwise Evaluation Studio with dual-model parallel synthesis.
+- [x] Selective Dataset Export with empty-selection validation.
+- [x] Complete Bilingual Dataset Engineering workflow (ID ↔ EN, turn review, 3 export modes).
+- [x] Official Arch Linux packaging (`PKGBUILD`) in compilation mode.
+- [x] Automated GitHub Actions CI/CD release workflow.
+- [ ] **Mechon Train**: On-device LoRA / QLoRA fine-tuning engine using local GPUs. *(Planned)*
+- [ ] **Synthetic Data Evolution Engine**: Multi-turn reasoning escalation algorithms. *(Planned)*
+- [ ] **GGUF / Llama.cpp Direct In-Process Runtime**: Zero-dependency local inference without external daemons. *(Planned)*
+
+---
+
+## 12. License
+
+Mechon AI is open source software licensed under the **Apache License, Version 2.0**.
+
+See the full license text in the [LICENSE](LICENSE) file.
+
+```text
+Copyright 2026 Mechon AI Team <cemetery394@gmail.com>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```
