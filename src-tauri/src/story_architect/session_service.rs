@@ -778,6 +778,8 @@ impl StorySessionService {
             engineer_edited,
             override_provider_id,
             override_model,
+            None,
+            None,
         ).await?;
         logs.push(format!("[GENERATED] Received assistant turn ({} tokens, {}ms). Provider: {}, Model: {}",
             turn_result.assistant_message.token_count,
@@ -854,6 +856,10 @@ impl StorySessionService {
         session_id: &str,
         override_provider_id: Option<&str>,
         override_model: Option<&str>,
+        override_planning_provider_id: Option<&str>,
+        override_planning_model: Option<&str>,
+        override_evaluation_provider_id: Option<&str>,
+        override_evaluation_model: Option<&str>,
     ) -> Result<AutoStepResult, AppError> {
         let mut logs = Vec::new();
         let session = Self::get_session(pool, session_id).await?;
@@ -961,13 +967,58 @@ impl StorySessionService {
             }
         }
 
-        // 1. Get or generate proposed prompt using Planning Agent's independent configuration
-        let plan_p = session.planning_provider_id.as_deref().unwrap_or("mock");
-        let plan_m = session.planning_model.as_deref().unwrap_or("default");
-        let inf_p = override_provider_id.or(session.inference_provider_id.as_deref()).unwrap_or("mock");
-        let inf_m = override_model.or(session.inference_model.as_deref()).unwrap_or("default");
-        let eval_p = session.evaluation_provider_id.as_deref().unwrap_or("mock");
-        let eval_m = session.evaluation_model.as_deref().unwrap_or("default");
+        // 1. Authoritative resolution of independent tri-agent configurations
+        let plan_p = override_planning_provider_id
+            .filter(|p| !p.trim().is_empty())
+            .or(session.planning_provider_id.as_deref())
+            .unwrap_or("mock");
+        let plan_m = override_planning_model
+            .filter(|m| !m.trim().is_empty())
+            .or(session.planning_model.as_deref())
+            .unwrap_or("default");
+
+        let inf_p = override_provider_id
+            .filter(|p| !p.trim().is_empty())
+            .or(session.inference_provider_id.as_deref())
+            .unwrap_or("mock");
+        let inf_m = override_model
+            .filter(|m| !m.trim().is_empty())
+            .or(session.inference_model.as_deref())
+            .unwrap_or("default");
+
+        let eval_p = override_evaluation_provider_id
+            .filter(|p| !p.trim().is_empty())
+            .or(session.evaluation_provider_id.as_deref())
+            .unwrap_or("mock");
+        let eval_m = override_evaluation_model
+            .filter(|m| !m.trim().is_empty())
+            .or(session.evaluation_model.as_deref())
+            .unwrap_or("default");
+
+        // Persist explicit overrides to session so next steps retain configuration
+        if override_planning_provider_id.is_some() || override_provider_id.is_some() || override_evaluation_provider_id.is_some() {
+            let _ = sqlx::query(
+                "UPDATE story_architect_sessions SET 
+                    planning_provider_id = COALESCE(?, planning_provider_id),
+                    planning_model = COALESCE(?, planning_model),
+                    inference_provider_id = COALESCE(?, inference_provider_id),
+                    inference_model = COALESCE(?, inference_model),
+                    evaluation_provider_id = COALESCE(?, evaluation_provider_id),
+                    evaluation_model = COALESCE(?, evaluation_model),
+                    updated_at = ?
+                 WHERE id = ?"
+            )
+            .bind(override_planning_provider_id)
+            .bind(override_planning_model)
+            .bind(override_provider_id)
+            .bind(override_model)
+            .bind(override_evaluation_provider_id)
+            .bind(override_evaluation_model)
+            .bind(Utc::now().to_rfc3339())
+            .bind(session_id)
+            .execute(pool)
+            .await;
+        }
 
         let prompt_history = match PromptHistoryService::get_latest_proposed(pool, session_id).await? {
             Some(p) => {
@@ -978,8 +1029,8 @@ impl StorySessionService {
                 logs.push(format!("[PLANNING] Planning Agent generating prompt using provider='{}', model='{}'...", plan_p, plan_m));
                 let p = PlanningAgentService::generate_next_prompt(
                     pool, vault, session_id, None,
-                    session.planning_provider_id.as_deref(),
-                    session.planning_model.as_deref()
+                    Some(plan_p),
+                    Some(plan_m)
                 ).await?;
                 logs.push(format!("[PLANNING] Generated new prompt (turn {}): \"{}\"", p.turn_index, p.prompt_content));
                 p
@@ -1014,6 +1065,8 @@ impl StorySessionService {
             false,
             Some(inf_p),
             Some(inf_m),
+            Some(eval_p),
+            Some(eval_m),
         ).await?;
         logs.push(format!("[GENERATED] Assistant turn generated ({} tokens, {}ms). Provider: {}, Model: {}",
             turn_result.assistant_message.token_count,
@@ -1060,8 +1113,8 @@ impl StorySessionService {
         logs.push(format!("[NEXT_PROMPT] Planning Agent (provider='{}', model='{}') generating next prompt for subsequent turn...", plan_p, plan_m));
         let next_prompt = PlanningAgentService::generate_next_prompt(
             pool, vault, session_id, None,
-            session.planning_provider_id.as_deref(),
-            session.planning_model.as_deref()
+            Some(plan_p),
+            Some(plan_m)
         ).await?;
         logs.push(format!("[NEXT_PROMPT] Next prompt prepared: \"{}\"", next_prompt.prompt_content));
 

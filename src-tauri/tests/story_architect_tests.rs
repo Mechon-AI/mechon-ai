@@ -248,6 +248,8 @@ async fn test_autonomous_prompt_generation_execution_and_evaluation() {
         false,
         None,
         None,
+        None,
+        None,
     )
     .await
     .expect("Execution service failed to execute turn");
@@ -271,6 +273,10 @@ async fn test_autonomous_prompt_generation_execution_and_evaluation() {
         &pool,
         &vault,
         &session.id,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
     )
@@ -353,6 +359,10 @@ async fn test_manual_mode_and_prompt_review_workflow() {
         &session.id,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
     )
     .await
     .expect("Failed autonomous step in manual mode");
@@ -371,6 +381,8 @@ async fn test_manual_mode_and_prompt_review_workflow() {
         edited_prompt_text,
         Some(&proposed.id),
         true, // engineer_edited = true
+        None,
+        None,
         None,
         None,
     )
@@ -437,6 +449,10 @@ async fn test_consecutive_multi_turn_autonomous_execution() {
             &pool,
             &vault,
             &session.id,
+            None,
+            None,
+            None,
+            None,
             None,
             None,
         )
@@ -517,6 +533,10 @@ async fn test_commit_to_sft_db_constraints_and_duplicate_prevention() {
         &pool,
         &vault,
         &session.id,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
     )

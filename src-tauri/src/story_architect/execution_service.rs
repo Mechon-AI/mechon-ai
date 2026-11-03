@@ -28,6 +28,8 @@ impl ExecutionService {
         engineer_edited: bool,
         override_provider_id: Option<&str>,
         override_model: Option<&str>,
+        override_eval_provider_id: Option<&str>,
+        override_eval_model: Option<&str>,
     ) -> Result<ExecutionTurnResult, AppError> {
         let start_time = Instant::now();
 
@@ -290,7 +292,7 @@ impl ExecutionService {
             pool, vault, session_id, assistant_turn_index,
             approved_prompt, &assistant_content,
             active_milestone_id.as_deref(), active_milestone_title.as_deref(),
-            None, None
+            override_eval_provider_id, override_eval_model
         ).await?;
 
         // 12. Update Narrative State

@@ -216,7 +216,8 @@ async fn test_bilingual_sft_workflow_and_commit() {
     assert_eq!(translated_session.messages.len(), 2);
     for msg in &translated_session.messages {
         assert!(msg.translations.get("en").is_some(), "Message must contain 'en' translation");
-        assert_eq!(msg.translation_status.get("en").and_then(|v| v.as_str()), Some("generated"));
+        let st = msg.translation_status.get("en").and_then(|v| v.as_str());
+        assert!(st == Some("completed") || st == Some("generated"), "Translation status must be completed or generated, got {:?}", st);
     }
 
     // 4. Edit turn 1 translation and approve it

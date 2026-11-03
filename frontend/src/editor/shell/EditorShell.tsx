@@ -131,7 +131,7 @@ export const EditorShell: React.FC = () => {
       </div>
 
       {/* 2. Toolbar */}
-      <div className="relative z-40 shrink-0">
+      <div className="relative z-50 shrink-0">
         <EditorToolbar
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
           onOpenQuickOpen={() => setCommandPaletteOpen(true)}

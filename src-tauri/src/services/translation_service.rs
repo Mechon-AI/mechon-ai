@@ -1,16 +1,19 @@
 use sqlx::SqlitePool;
 use serde_json::{json, Value};
+use tracing::{info, error};
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
 use crate::models::{SFTMessage, SFTSession};
 use crate::providers::factory::ProviderFactory;
 use crate::providers::models::{ChatMessage, ChatRequest};
+use crate::providers::errors::{ProviderError, ProviderErrorCode};
 use crate::services::provider_service::ProviderService;
 use crate::services::sft_service::SFTService;
 
 pub struct TranslationService;
 
 impl TranslationService {
+    /// Standard translate session method for backward compatibility
     pub async fn translate_session(
         pool: &SqlitePool,
         vault: &dyn CredentialStore,
@@ -19,12 +22,62 @@ impl TranslationService {
         provider_id: Option<&str>,
         model: Option<&str>,
     ) -> Result<SFTSession, AppError> {
+        Self::translate_session_selective(
+            pool,
+            vault,
+            session_id,
+            target_language,
+            provider_id,
+            model,
+            None,
+            false,
+        ).await
+    }
+
+    /// Selective / configurable translation supporting selective message IDs, preservation of edited/approved turns, and structured observability
+    pub async fn translate_session_selective(
+        pool: &SqlitePool,
+        vault: &dyn CredentialStore,
+        session_id: &str,
+        target_language: &str,
+        provider_id: Option<&str>,
+        model: Option<&str>,
+        message_ids: Option<&[String]>,
+        force_regenerate: bool,
+    ) -> Result<SFTSession, AppError> {
+        let start_time = std::time::Instant::now();
         let session = SFTService::get_session(pool, session_id).await?;
         if session.messages.is_empty() {
             return Err(AppError::Validation("Session has no messages to translate.".to_string()));
         }
 
-        // Determine active provider
+        // Filter messages eligible for translation
+        let target_messages: Vec<SFTMessage> = session.messages.clone().into_iter().filter(|m| {
+            if let Some(ids) = message_ids {
+                if !ids.iter().any(|id| id == &m.id) {
+                    return false;
+                }
+            }
+            if force_regenerate {
+                return true;
+            }
+            let st = m.translation_status.get(target_language)
+                .and_then(|v| v.as_str())
+                .unwrap_or("pending");
+            let has_text = m.translations.get(target_language)
+                .and_then(|v| v.as_str())
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false);
+
+            st == "pending" || st == "failed" || !has_text
+        }).collect();
+
+        if target_messages.is_empty() {
+            info!("[TRANSLATION] No eligible untranslated messages found for target_language='{}'. Returning intact.", target_language);
+            return SFTService::get_session(pool, session_id).await;
+        }
+
+        // Determine active provider & model
         let (p_id, p_model) = Self::resolve_provider_and_model(pool, vault, provider_id, model, &session).await?;
         let provider = ProviderService::get(pool, &p_id, vault).await?;
         let api_key = ProviderService::get_raw_key(pool, &p_id, vault).await?;
@@ -37,7 +90,7 @@ impl TranslationService {
         );
 
         // Build messages payload for translation prompt
-        let conversation_payload: Vec<Value> = session.messages.iter().map(|m| {
+        let conversation_payload: Vec<Value> = target_messages.iter().map(|m| {
             json!({
                 "id": m.id,
                 "role": m.role,
@@ -64,11 +117,11 @@ impl TranslationService {
         );
 
         let chat_req = ChatRequest {
-            model: p_model,
+            model: p_model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
-                    content: "You are an expert conversational dataset translator. Output pure JSON only.".to_string(),
+                    content: "You are an expert conversational dataset translator. Output pure JSON only without extra conversational remarks.".to_string(),
                 },
                 ChatMessage {
                     role: "user".to_string(),
@@ -81,14 +134,59 @@ impl TranslationService {
             stream: false,
         };
 
-        let response = instance.chat(chat_req).await.map_err(AppError::ProviderStructured)?;
-        let translated_map = Self::parse_translations(&response.content, &session.messages);
+        let response = match instance.chat(chat_req).await {
+            Ok(resp) => resp,
+            Err(err) => {
+                error!(
+                    "[TRANSLATION] LLM request failed. agent='Translation Engine' provider='{}' model='{}' source='{}' target='{}' error='{}'",
+                    p_id, p_model, source_info.code, target_info.code, err
+                );
+                // Mark turns as failed
+                for msg in &target_messages {
+                    let mut status_val = msg.translation_status.clone();
+                    if !status_val.is_object() {
+                        status_val = json!({});
+                    }
+                    if let Some(map) = status_val.as_object_mut() {
+                        map.insert(target_language.to_string(), json!("failed"));
+                    }
+                    let status_str = serde_json::to_string(&status_val).unwrap_or_else(|_| "{}".to_string());
+                    let _ = sqlx::query("UPDATE sft_messages SET translation_status_json = ? WHERE id = ?")
+                        .bind(&status_str)
+                        .bind(&msg.id)
+                        .execute(pool)
+                        .await;
+                }
+                return Err(AppError::ProviderStructured(err));
+            }
+        };
 
-        // Update each message in DB
-        for msg in &session.messages {
-            let translated_text = translated_map.get(&msg.id).cloned().unwrap_or_else(|| {
-                format!("[{}] {}", target_language.to_uppercase(), msg.content)
-            });
+        let translated_map = Self::parse_translations(&response.content, &target_messages, &provider.provider_type)?;
+
+        // Update each translated message in DB
+        for msg in &target_messages {
+            let translated_text = match translated_map.get(&msg.id) {
+                Some(txt) if !txt.trim().is_empty() => txt.clone(),
+                _ => {
+                    if provider.provider_type == "mock" {
+                        format!("[{}] {}", target_language.to_uppercase(), msg.content)
+                    } else {
+                        // Mark as failed if translation missing from non-mock output
+                        let mut status_val = msg.translation_status.clone();
+                        if !status_val.is_object() { status_val = json!({}); }
+                        if let Some(map) = status_val.as_object_mut() {
+                            map.insert(target_language.to_string(), json!("failed"));
+                        }
+                        let status_str = serde_json::to_string(&status_val).unwrap_or_else(|_| "{}".to_string());
+                        let _ = sqlx::query("UPDATE sft_messages SET translation_status_json = ? WHERE id = ?")
+                            .bind(&status_str)
+                            .bind(&msg.id)
+                            .execute(pool)
+                            .await;
+                        continue;
+                    }
+                }
+            };
 
             let mut trans_val = msg.translations.clone();
             if !trans_val.is_object() {
@@ -103,7 +201,7 @@ impl TranslationService {
                 status_val = json!({});
             }
             if let Some(map) = status_val.as_object_mut() {
-                map.insert(target_language.to_string(), json!("generated"));
+                map.insert(target_language.to_string(), json!("completed"));
             }
 
             let trans_str = serde_json::to_string(&trans_val)?;
@@ -138,6 +236,12 @@ impl TranslationService {
         .execute(pool)
         .await?;
 
+        let duration_ms = start_time.elapsed().as_millis();
+        info!(
+            "[TRANSLATION] agent='Translation Engine' provider='{}' model='{}' source='{}' target='{}' status='COMPLETED' turns={} duration_ms={}",
+            p_id, p_model, source_info.code, target_info.code, target_messages.len(), duration_ms
+        );
+
         SFTService::get_session(pool, session_id).await
     }
 
@@ -150,6 +254,7 @@ impl TranslationService {
         provider_id: Option<&str>,
         model: Option<&str>,
     ) -> Result<SFTMessage, AppError> {
+        let start_time = std::time::Instant::now();
         let session = SFTService::get_session(pool, session_id).await?;
         let target_msg = session.messages.iter().find(|m| m.id == message_id)
             .ok_or_else(|| AppError::NotFound(format!("Message {} not found in session", message_id)))?;
@@ -196,7 +301,7 @@ impl TranslationService {
         );
 
         let chat_req = ChatRequest {
-            model: p_model,
+            model: p_model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "user".to_string(),
@@ -209,7 +314,28 @@ impl TranslationService {
             stream: false,
         };
 
-        let response = instance.chat(chat_req).await.map_err(AppError::ProviderStructured)?;
+        let response = match instance.chat(chat_req).await {
+            Ok(resp) => resp,
+            Err(err) => {
+                error!(
+                    "[TRANSLATION] Single message translation failed. agent='Translation Engine' message_id='{}' provider='{}' model='{}' error='{}'",
+                    message_id, p_id, p_model, err
+                );
+                let mut status_val = target_msg.translation_status.clone();
+                if !status_val.is_object() { status_val = json!({}); }
+                if let Some(map) = status_val.as_object_mut() {
+                    map.insert(target_language.to_string(), json!("failed"));
+                }
+                let status_str = serde_json::to_string(&status_val).unwrap_or_else(|_| "{}".to_string());
+                let _ = sqlx::query("UPDATE sft_messages SET translation_status_json = ? WHERE id = ?")
+                    .bind(&status_str)
+                    .bind(message_id)
+                    .execute(pool)
+                    .await;
+                return Err(AppError::ProviderStructured(err));
+            }
+        };
+
         let translated_text = response.content.trim().to_string();
 
         let mut trans_val = target_msg.translations.clone();
@@ -225,7 +351,7 @@ impl TranslationService {
             status_val = json!({});
         }
         if let Some(map) = status_val.as_object_mut() {
-            map.insert(target_language.to_string(), json!("generated"));
+            map.insert(target_language.to_string(), json!("completed"));
         }
 
         let trans_str = serde_json::to_string(&trans_val)?;
@@ -240,9 +366,51 @@ impl TranslationService {
         .execute(pool)
         .await?;
 
+        let duration_ms = start_time.elapsed().as_millis();
+        info!(
+            "[TRANSLATION] agent='Translation Engine' single_turn='{}' provider='{}' model='{}' source='{}' target='{}' status='COMPLETED' duration_ms={}",
+            message_id, p_id, p_model, source_info.code, target_info.code, duration_ms
+        );
+
         let updated_messages = SFTService::get_messages(pool, session_id).await?;
         updated_messages.into_iter().find(|m| m.id == message_id)
             .ok_or_else(|| AppError::NotFound(format!("Message {} not found", message_id)))
+    }
+
+    pub async fn retry_failed_translations(
+        pool: &SqlitePool,
+        vault: &dyn CredentialStore,
+        session_id: &str,
+        target_language: &str,
+        provider_id: Option<&str>,
+        model: Option<&str>,
+    ) -> Result<SFTSession, AppError> {
+        let session = SFTService::get_session(pool, session_id).await?;
+        let failed_ids: Vec<String> = session.messages.iter().filter(|m| {
+            let st = m.translation_status.get(target_language)
+                .and_then(|v| v.as_str())
+                .unwrap_or("pending");
+            let has_text = m.translations.get(target_language)
+                .and_then(|v| v.as_str())
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false);
+            st == "failed" || st == "pending" || !has_text
+        }).map(|m| m.id.clone()).collect();
+
+        if failed_ids.is_empty() {
+            return Ok(session);
+        }
+
+        Self::translate_session_selective(
+            pool,
+            vault,
+            session_id,
+            target_language,
+            provider_id,
+            model,
+            Some(&failed_ids),
+            true,
+        ).await
     }
 
     pub async fn update_message_translation(
@@ -341,14 +509,35 @@ impl TranslationService {
         Ok((provider.id, model))
     }
 
-    fn parse_translations(raw_content: &str, messages: &[SFTMessage]) -> std::collections::HashMap<String, String> {
+    fn parse_translations(
+        raw_content: &str,
+        messages: &[SFTMessage],
+        provider_type: &str,
+    ) -> Result<std::collections::HashMap<String, String>, AppError> {
         let mut map = std::collections::HashMap::new();
 
         let trimmed = raw_content.trim();
-        let json_str = if trimmed.starts_with("```json") {
-            trimmed.trim_start_matches("```json").trim_end_matches("```").trim()
-        } else if trimmed.starts_with("```") {
-            trimmed.trim_start_matches("```").trim_end_matches("```").trim()
+        // Extract JSON substring if surrounded by markdown code blocks or explanatory text
+        let json_str = if let Some(start) = trimmed.find("```json") {
+            let content_after = &trimmed[start + 7..];
+            if let Some(end) = content_after.rfind("```") {
+                content_after[..end].trim()
+            } else {
+                content_after.trim()
+            }
+        } else if let Some(start) = trimmed.find("```") {
+            let content_after = &trimmed[start + 3..];
+            if let Some(end) = content_after.rfind("```") {
+                content_after[..end].trim()
+            } else {
+                content_after.trim()
+            }
+        } else if let Some(start) = trimmed.find('{') {
+            if let Some(end) = trimmed.rfind('}') {
+                &trimmed[start..=end]
+            } else {
+                trimmed
+            }
         } else {
             trimmed
         };
@@ -365,13 +554,20 @@ impl TranslationService {
         }
 
         if map.is_empty() {
-            for (idx, msg) in messages.iter().enumerate() {
-                let simulated = format!("{}: translated content turn {}", msg.role, idx + 1);
-                map.insert(msg.id.clone(), simulated);
+            if provider_type == "mock" {
+                for (idx, msg) in messages.iter().enumerate() {
+                    let simulated = format!("{}: translated content turn {}", msg.role, idx + 1);
+                    map.insert(msg.id.clone(), simulated);
+                }
+            } else {
+                return Err(AppError::ProviderStructured(ProviderError::new(
+                    ProviderErrorCode::InvalidResponse,
+                    format!("Failed to parse translation JSON from model output. Output received: {}", if trimmed.len() > 160 { &trimmed[..160] } else { trimmed })
+                )));
             }
         }
 
-        map
+        Ok(map)
     }
 
     pub async fn approve_all_translations(

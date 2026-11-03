@@ -142,6 +142,10 @@ pub async fn execute_autonomous_step(
     session_id: String,
     provider_id: Option<String>,
     model: Option<String>,
+    planning_provider_id: Option<String>,
+    planning_model: Option<String>,
+    evaluation_provider_id: Option<String>,
+    evaluation_model: Option<String>,
 ) -> Result<AutoStepResult, AppError> {
     StorySessionService::execute_autonomous_step(
         Some(&app),
@@ -150,6 +154,10 @@ pub async fn execute_autonomous_step(
         &session_id,
         provider_id.as_deref(),
         model.as_deref(),
+        planning_provider_id.as_deref(),
+        planning_model.as_deref(),
+        evaluation_provider_id.as_deref(),
+        evaluation_model.as_deref(),
     ).await
 }
 

@@ -447,8 +447,18 @@ export const translateSFTSession = (data: {
   target_language: string
   provider_id?: string
   model?: string
+  message_ids?: string[]
+  force_regenerate?: boolean
 }): Promise<SFTSession> =>
   invoke<SFTSession>('translate_sft_session', { data })
+
+export const retrySFTTranslations = (data: {
+  session_id: string
+  target_language: string
+  provider_id?: string
+  model?: string
+}): Promise<SFTSession> =>
+  invoke<SFTSession>('retry_sft_translations', { data })
 
 export const translateSFTMessage = (data: {
   session_id: string
@@ -749,9 +759,21 @@ export const approveAndExecuteTurn = (
 export const executeAutonomousStep = (
   sessionId: string,
   providerId?: string,
-  model?: string
+  model?: string,
+  planningProviderId?: string,
+  planningModel?: string,
+  evaluationProviderId?: string,
+  evaluationModel?: string
 ): Promise<AutoStepResult> =>
-  invoke<AutoStepResult>('execute_autonomous_step', { sessionId, providerId, model })
+  invoke<AutoStepResult>('execute_autonomous_step', {
+    sessionId,
+    providerId,
+    model,
+    planningProviderId,
+    planningModel,
+    evaluationProviderId,
+    evaluationModel
+  })
 
 export const pauseStorySession = (sessionId: string, reason?: string): Promise<void> =>
   invoke<void>('pause_story_session', { sessionId, reason })

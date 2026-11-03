@@ -91,6 +91,12 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
     - Native support for multi-turn preference schemas: `prompt: [...]`, `chosen: [...]`, and `rejected: [...]`.
     - Direct export to JSON and JSONL formats for seamless consumption by `trl.DPOTrainer`.
 
+- **Subsystem Model Synchronization & Multilingual Translation Pipeline (v1.2.2)**:
+  - **Independent Subsystem Model Architecture**: Clear separation of model configurations across Main Inference Engine, Planning Agent, Translation Engine, and Evaluation Agent, with dedicated subsystem model routing and zero cross-leakage.
+  - **Multilingual Translation Pipeline**: Selective and full-conversation translation engine with status tracking (`pending`, `completed`, `edited`, `approved`, `failed`), dynamic language pair support, context preservation, and retry mechanisms.
+  - **Story Architect UI Refinement**: Relocated conversation composer and Planning Agent workbench into the Right-Side Dock, restoring full height to the Central Narrative Scene Viewport.
+  - **Stacking Context & Dropdown Stability**: Fixed popover layering and visual compositing artifacts across Linux desktop and KDE Plasma environments.
+
 - **Modular Desktop Editor Architecture & Narrative Engineering Workstation (v1.2.1)**:
   - Professional IDE design inspired by modern developer workstations and engineering editors.
   - **Story Architect Central Viewport**: 100% dedicated conversation authoring workspace ("Scene View") with chronological dialogue turns, in-place prompt editing, downstream revision invalidation, and live token streaming.

@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import {
-  Sparkles,
   Terminal,
   Activity,
   FileCode2,
@@ -14,32 +13,16 @@ import {
   Trash2
 } from 'lucide-react'
 import type {
-  PlanningPromptHistory,
-  ExecutionMode,
   StoryMessage,
   StorySession
 } from '../../types/story_architect'
-import { PromptWorkbench } from './PromptWorkbench'
-import { useStoryWorkspaceStore, StoryBottomTab } from './useStoryWorkspaceStore'
+import { useStoryWorkspaceStore } from './useStoryWorkspaceStore'
 
 interface StoryBottomDockProps {
   session: StorySession | null
   messages: StoryMessage[]
-  proposedPrompt: PlanningPromptHistory | null
-  executionMode: ExecutionMode | string
-  onApproveAndExecute: (content: string, promptHistoryId?: string, edited?: boolean) => Promise<void>
-  onRegenerate: (feedback?: string) => Promise<void>
-  onExecuteAutoStep: () => Promise<void>
-  onToggleAutonomy: (mode: ExecutionMode) => Promise<void>
-  isGenerating: boolean
-  isExecuting: boolean
-  pauseReason?: string | null
-  isAutoRunning?: boolean
-  onToggleAutoRun?: () => void
   stateMachineStage?: string
-  errorMessage?: string | null
-  onRetry?: () => void
-  onDismissError?: () => void
+  isAutoRunning?: boolean
   executionLogs: string[]
   onOpenCommitModal?: () => void
 }
@@ -47,26 +30,13 @@ interface StoryBottomDockProps {
 export const StoryBottomDock: React.FC<StoryBottomDockProps> = ({
   session,
   messages,
-  proposedPrompt,
-  executionMode,
-  onApproveAndExecute,
-  onRegenerate,
-  onExecuteAutoStep,
-  onToggleAutonomy,
-  isGenerating,
-  isExecuting,
-  pauseReason,
-  isAutoRunning,
-  onToggleAutoRun,
   stateMachineStage,
-  errorMessage,
-  onRetry,
-  onDismissError,
+  isAutoRunning = false,
   executionLogs,
   onOpenCommitModal
 }) => {
   const { layout, setBottomTab } = useStoryWorkspaceStore()
-  const activeTab = layout.bottomActiveTab
+  const activeTab = layout.bottomActiveTab === ('workbench' as any) ? 'logs' : layout.bottomActiveTab
 
   const [copiedPreview, setCopiedPreview] = useState(false)
   const [logFilter, setLogFilter] = useState('')
@@ -104,22 +74,6 @@ export const StoryBottomDock: React.FC<StoryBottomDockProps> = ({
       {/* 1. Tab Strip */}
       <div className="h-8 px-2 border-b border-border flex items-center justify-between bg-card/90 shrink-0 text-xs">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setBottomTab('workbench')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-colors shrink-0 ${
-              activeTab === 'workbench'
-                ? 'bg-secondary text-foreground font-semibold shadow-xs'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            title="Planning Agent Workbench"
-          >
-            <Sparkles className="w-3 h-3 text-primary" />
-            <span>Planning Agent</span>
-            {proposedPrompt && proposedPrompt.status === 'proposed' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            )}
-          </button>
-
           <button
             onClick={() => setBottomTab('logs')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-colors shrink-0 ${
@@ -200,28 +154,6 @@ export const StoryBottomDock: React.FC<StoryBottomDockProps> = ({
 
       {/* 2. Content Body */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'workbench' && (
-          <div className="h-full">
-            <PromptWorkbench
-              proposedPrompt={proposedPrompt}
-              executionMode={executionMode}
-              onApproveAndExecute={onApproveAndExecute}
-              onRegenerate={onRegenerate}
-              onExecuteAutoStep={onExecuteAutoStep}
-              onToggleAutonomy={onToggleAutonomy}
-              isGenerating={isGenerating}
-              isExecuting={isExecuting}
-              pauseReason={pauseReason}
-              isAutoRunning={isAutoRunning}
-              onToggleAutoRun={onToggleAutoRun}
-              stateMachineStage={stateMachineStage}
-              errorMessage={errorMessage}
-              onRetry={onRetry}
-              onDismissError={onDismissError}
-            />
-          </div>
-        )}
-
         {activeTab === 'logs' && (
           <div className="p-3 font-mono text-[11px] space-y-1 select-text">
             {filteredLogs.length === 0 ? (

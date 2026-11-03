@@ -152,6 +152,10 @@ async fn test_tri_agent_independent_model_configuration_and_routing() {
         &session.id,
         None, // No manual override - strictly use tri-agent configs
         None,
+        None,
+        None,
+        None,
+        None,
     )
     .await
     .expect("Autonomous step failed");
@@ -280,6 +284,10 @@ async fn test_tri_agent_invalid_provider_or_rate_limit_fails_explicitly() {
         &pool,
         &vault,
         &session.id,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
     )

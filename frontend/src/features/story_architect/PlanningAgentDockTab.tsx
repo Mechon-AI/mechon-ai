@@ -144,10 +144,15 @@ export const PlanningAgentDockTab: React.FC<PlanningAgentDockTabProps> = ({
           </div>
         </div>
 
-        {/* Model Indicator */}
-        <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary/80 border border-border text-[10px] font-mono text-muted-foreground">
-          <Cpu className="w-2.5 h-2.5 text-primary shrink-0" />
-          <span className="truncate max-w-[100px]">{activeModel || 'default'}</span>
+        {/* Planning Model Indicator */}
+        <div
+          className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] font-mono text-purple-300"
+          title={`Planning Agent Model: ${session?.planning_model || session?.planning_agent_config?.model_id || activeModel || 'default'}`}
+        >
+          <Bot className="w-2.5 h-2.5 text-purple-400 shrink-0" />
+          <span className="truncate max-w-[120px] font-semibold">
+            {session?.planning_model || session?.planning_agent_config?.model_id || activeModel || 'default'}
+          </span>
         </div>
       </div>
 

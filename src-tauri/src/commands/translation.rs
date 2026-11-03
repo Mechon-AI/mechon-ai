@@ -12,6 +12,8 @@ pub struct TranslateSessionInput {
     pub target_language: String,
     pub provider_id: Option<String>,
     pub model: Option<String>,
+    pub message_ids: Option<Vec<String>>,
+    pub force_regenerate: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
@@ -44,7 +46,25 @@ pub async fn translate_sft_session(
     vault: State<'_, Arc<dyn CredentialStore>>,
     data: TranslateSessionInput,
 ) -> Result<SFTSession, AppError> {
-    TranslationService::translate_session(
+    TranslationService::translate_session_selective(
+        &pool,
+        vault.inner().as_ref(),
+        &data.session_id,
+        &data.target_language,
+        data.provider_id.as_deref(),
+        data.model.as_deref(),
+        data.message_ids.as_deref(),
+        data.force_regenerate.unwrap_or(false),
+    ).await
+}
+
+#[tauri::command]
+pub async fn retry_sft_translations(
+    pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    data: TranslateSessionInput,
+) -> Result<SFTSession, AppError> {
+    TranslationService::retry_failed_translations(
         &pool,
         vault.inner().as_ref(),
         &data.session_id,

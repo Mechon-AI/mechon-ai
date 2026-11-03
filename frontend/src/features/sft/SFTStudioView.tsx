@@ -35,6 +35,8 @@ import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
 import { useInspectorStore } from '../../editor/stores/useInspectorStore'
+import { useSubsystemConfigStore } from '../../editor/stores/useSubsystemConfigStore'
+import { useConsoleStore } from '../../editor/stores/useConsoleStore'
 import {
   getSFTSessions,
   getSFTSession,
@@ -50,6 +52,7 @@ import {
   generateCompletion,
   translateSFTSession,
   translateSFTMessage,
+  retrySFTTranslations,
   updateSFTMessageTranslation,
   batchUpdateTranslationStatus,
   loadCorpusRecordIntoSession,
@@ -105,6 +108,8 @@ export const SFTStudioView: React.FC = () => {
   const [commitVersionTag, setCommitVersionTag] = useState('')
   const [commitVersionDesc, setCommitVersionDesc] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
+  const [isTranslatingAll, setIsTranslatingAll] = useState(false)
+  const [selectedTurnIds, setSelectedTurnIds] = useState<string[]>([])
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -279,14 +284,15 @@ export const SFTStudioView: React.FC = () => {
     if (!userText) return
     if (!retryUserText) setInputContent('')
 
-    const pId = activeSession.provider_id || activeProviderId
+    const inferenceConfig = useSubsystemConfigStore.getState().configs.main_inference
+    const pId = inferenceConfig?.provider_id || activeProviderId || activeSession.provider_id
     const targetProviderObj = providers.find(p => p.id === pId)
     const availableModels = targetProviderObj?.models_cache && targetProviderObj.models_cache.length > 0
       ? targetProviderObj.models_cache
       : []
 
-    let targetModel = activeSession.model || activeModel
-    if (availableModels.length > 0 && !availableModels.includes(targetModel)) {
+    let targetModel = inferenceConfig?.model_id || activeModel || activeSession.model
+    if (availableModels.length > 0 && targetModel && !availableModels.includes(targetModel)) {
       targetModel = (targetProviderObj?.default_model && availableModels.includes(targetProviderObj.default_model))
         ? targetProviderObj.default_model
         : availableModels[0]
@@ -416,8 +422,9 @@ export const SFTStudioView: React.FC = () => {
       const lastUser = [...msgs].reverse().find(m => m.role === 'user')
       if (lastUser) {
         setIsGenerating(true)
-        const pId = activeProviderId || activeSession.provider_id
-        const targetModel = activeModel || activeSession.model
+        const inferenceConfig = useSubsystemConfigStore.getState().configs.main_inference
+        const pId = inferenceConfig?.provider_id || activeProviderId || activeSession.provider_id
+        const targetModel = inferenceConfig?.model_id || activeModel || activeSession.model
         if (activeSession.provider_id !== pId || activeSession.model !== targetModel) {
           updateSFTSession(activeSession.id, { provider_id: pId, model: targetModel })
         }
@@ -516,13 +523,99 @@ export const SFTStudioView: React.FC = () => {
     showFeedback('success', `Removed language ${lookupLanguage(langToRemove).name}.`)
   }
 
+  const handleTranslateAll = async (forceRegenerate = false) => {
+    if (!activeSession) return
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
+    const transConfig = useSubsystemConfigStore.getState().configs.translation
+    const pId = transConfig?.provider_id || activeProviderId
+    const targetModel = transConfig?.model_id || activeModel
+
+    setIsTranslatingAll(true)
+    try {
+      const updated = await translateSFTSession({
+        session_id: activeSession.id,
+        target_language: targetLang,
+        provider_id: pId,
+        model: targetModel,
+        force_regenerate: forceRegenerate
+      })
+      setActiveSession(updated)
+      showFeedback('success', `Translation completed for ${lookupLanguage(targetLang).name}.`)
+      useConsoleStore.getState().addLog('info', 'inference', `Translated conversation into ${targetLang} using ${targetModel}`)
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Translation failed'))
+      useConsoleStore.getState().addLog('error', 'inference', `Translation failed: ${err?.message || err}`)
+    } finally {
+      setIsTranslatingAll(false)
+    }
+  }
+
+  const handleTranslateSelected = async () => {
+    if (!activeSession || selectedTurnIds.length === 0) return
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
+    const transConfig = useSubsystemConfigStore.getState().configs.translation
+    const pId = transConfig?.provider_id || activeProviderId
+    const targetModel = transConfig?.model_id || activeModel
+
+    setIsTranslatingAll(true)
+    try {
+      const updated = await translateSFTSession({
+        session_id: activeSession.id,
+        target_language: targetLang,
+        provider_id: pId,
+        model: targetModel,
+        message_ids: selectedTurnIds,
+        force_regenerate: true
+      })
+      setActiveSession(updated)
+      const count = selectedTurnIds.length
+      setSelectedTurnIds([])
+      showFeedback('success', `Translated ${count} selected turns.`)
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Selected turns translation failed'))
+    } finally {
+      setIsTranslatingAll(false)
+    }
+  }
+
+  const handleRetryFailedTurns = async () => {
+    if (!activeSession) return
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
+    const transConfig = useSubsystemConfigStore.getState().configs.translation
+    const pId = transConfig?.provider_id || activeProviderId
+    const targetModel = transConfig?.model_id || activeModel
+
+    setIsTranslatingAll(true)
+    try {
+      const updated = await retrySFTTranslations({
+        session_id: activeSession.id,
+        target_language: targetLang,
+        provider_id: pId,
+        model: targetModel
+      })
+      setActiveSession(updated)
+      showFeedback('success', 'Retried failed translations.')
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Retry failed'))
+    } finally {
+      setIsTranslatingAll(false)
+    }
+  }
+
   const handleTranslateSingleTurn = async (messageId: string) => {
     if (!activeSession) return
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
-    const pId = activeSession.provider_id || activeProviderId
-    const targetModel = activeSession.model || activeModel
+    const transConfig = useSubsystemConfigStore.getState().configs.translation
+    const pId = transConfig?.provider_id || activeProviderId
+    const targetModel = transConfig?.model_id || activeModel
 
     setIsRegeneratingTurnId(messageId)
     try {
@@ -552,16 +645,17 @@ export const SFTStudioView: React.FC = () => {
       : activeSession.secondary_language || 'en'
     const msg = activeSession.messages.find(m => m.id === messageId)
     const text = content !== undefined ? content : (msg?.translations?.[targetLang] || '')
+    const status = content !== undefined ? 'edited' : 'approved'
 
     try {
       await updateSFTMessageTranslation({
         message_id: messageId,
         target_language: targetLang,
         content: text,
-        status: 'approved'
+        status: status
       })
       await loadSessionDetails(activeSession.id)
-      showFeedback('success', 'Turn translation approved.')
+      showFeedback('success', status === 'edited' ? 'Translation updated.' : 'Turn translation approved.')
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Approval failed'))
     }
@@ -807,7 +901,7 @@ export const SFTStudioView: React.FC = () => {
                 {/* Active Model Indicator Badge */}
                 <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary/80 border border-border text-[11px] font-mono text-muted-foreground">
                   <Cpu className="h-3 w-3 text-primary shrink-0" />
-                  <span className="truncate max-w-[130px]">{activeSession.model || activeModel || 'default'}</span>
+                  <span className="truncate max-w-[130px]" title="Active generation model">{useSubsystemConfigStore.getState().configs.main_inference?.model_id || activeModel || activeSession.model || 'default'}</span>
                 </div>
 
                 <button
@@ -1135,6 +1229,84 @@ export const SFTStudioView: React.FC = () => {
                   /* Side-by-Side Multilingual Review Interface */
                   <div className="flex-1 overflow-y-auto p-6 space-y-6">
                     <div className="max-w-5xl mx-auto space-y-4">
+                      {/* Translation Agent Control Bar */}
+                      {(() => {
+                        const transConfig = useSubsystemConfigStore.getState().configs.translation
+                        const transProvider = providers.find(p => p.id === transConfig?.provider_id) || providers[0]
+                        const transModel = transConfig?.model_id || transProvider?.default_model || 'default'
+                        const targetInfo = lookupLanguage(activeTargetLanguage)
+                        
+                        const untranslatedCount = activeSession.messages.filter(m => {
+                          const st = m.translation_status?.[activeTargetLanguage]
+                          const text = m.translations?.[activeTargetLanguage]
+                          return !text || st === 'pending'
+                        }).length
+                        const failedCount = activeSession.messages.filter(m => m.translation_status?.[activeTargetLanguage] === 'failed').length
+
+                        return (
+                          <div className="p-3 rounded-xl bg-card border border-border flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+                            {/* Left: Translation Agent Configuration */}
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 font-semibold text-xs">
+                                <Languages className="w-4 h-4" />
+                                <span>Translation Agent:</span>
+                              </div>
+
+                              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/80 border border-border font-mono text-[11px] text-foreground">
+                                <Cpu className="w-3.5 h-3.5 text-primary shrink-0" />
+                                <span className="font-semibold">{transProvider?.name || 'Default'}:</span>
+                                <span className="text-muted-foreground">{transModel}</span>
+                              </div>
+                            </div>
+
+                            {/* Right: Actions */}
+                            <div className="flex items-center gap-2">
+                              {selectedTurnIds.length > 0 && (
+                                <button
+                                  onClick={handleTranslateSelected}
+                                  disabled={isTranslatingAll}
+                                  className="px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                                >
+                                  {isTranslatingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                  <span>Translate Selected ({selectedTurnIds.length})</span>
+                                </button>
+                              )}
+
+                              {failedCount > 0 && (
+                                <button
+                                  onClick={handleRetryFailedTurns}
+                                  disabled={isTranslatingAll}
+                                  className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${isTranslatingAll ? 'animate-spin' : ''}`} />
+                                  <span>Retry Failed ({failedCount})</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleTranslateAll(false)}
+                                disabled={isTranslatingAll || activeSession.messages.length === 0}
+                                className="px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                                title={`Translate all pending turns to ${targetInfo.name}`}
+                              >
+                                {isTranslatingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                <span>{untranslatedCount > 0 ? `Translate All (${untranslatedCount} pending)` : 'Translate All Turns'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleTranslateAll(true)}
+                                disabled={isTranslatingAll || activeSession.messages.length === 0}
+                                className="px-2.5 py-1 rounded-lg bg-secondary hover:bg-accent border border-border text-foreground text-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Force regenerate all translations in conversation"
+                              >
+                                <RefreshCw className={`w-3 h-3 ${isTranslatingAll ? 'animate-spin' : ''}`} />
+                                <span>Force Regenerate</span>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
                       {/* Comparison Columns Header */}
                       {(() => {
                         const pLang = lookupLanguage(activeSession.primary_language || 'id')
@@ -1177,9 +1349,10 @@ export const SFTStudioView: React.FC = () => {
                       {activeSession.messages && activeSession.messages.length > 0 ? (
                         activeSession.messages.map((m, index) => {
                           const transText = m.translations?.[activeTargetLanguage] || ''
-                          const status = (m.translation_status?.[activeTargetLanguage] || 'pending').toLowerCase()
+                          const status = (m.translation_status?.[activeTargetLanguage] || (transText ? 'completed' : 'pending')).toLowerCase()
                           const isEditing = editingTranslationId === m.id
                           const isRegenerating = isRegeneratingTurnId === m.id
+                          const isChecked = selectedTurnIds.includes(m.id)
                           const pInfo = lookupLanguage(activeSession.primary_language || 'id')
                           const sInfo = lookupLanguage(activeTargetLanguage)
 
@@ -1188,7 +1361,20 @@ export const SFTStudioView: React.FC = () => {
                               {/* Left Column: Original Primary Text */}
                               <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs shadow-sm">
                                 <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                                  <span className="font-bold text-foreground">{m.role}</span>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        setSelectedTurnIds(prev =>
+                                          prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                                        )
+                                      }}
+                                      className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                                      title="Select turn for translation"
+                                    />
+                                    <span className="font-bold text-foreground">{m.role}</span>
+                                  </div>
                                   <span>Turn {index + 1}</span>
                                 </div>
                                 <div
@@ -1202,18 +1388,32 @@ export const SFTStudioView: React.FC = () => {
                               </div>
 
                               {/* Right Column: Aligned Translation Text */}
-                              <div className="p-4 rounded-xl bg-card border border-sky-500/30 space-y-3 text-xs shadow-sm">
+                              <div className={`p-4 rounded-xl bg-card space-y-3 text-xs shadow-sm border ${
+                                status === 'failed'
+                                  ? 'border-rose-500/50'
+                                  : status === 'approved'
+                                  ? 'border-emerald-500/40'
+                                  : status === 'edited'
+                                  ? 'border-purple-500/40'
+                                  : status === 'completed'
+                                  ? 'border-sky-500/40'
+                                  : 'border-border'
+                              }`}>
                                 <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
                                   <span className="font-bold text-sky-400">{m.role} ({sInfo.code.toUpperCase()})</span>
                                   <span
                                     className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                                       status === 'approved'
                                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                        : status === 'generated'
+                                        : status === 'edited'
+                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                        : status === 'completed' || status === 'generated'
                                         ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                                         : status === 'rejected'
                                         ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                        : 'bg-secondary text-muted-foreground'
+                                        : status === 'failed'
+                                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
+                                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                                     }`}
                                   >
                                     {status}
@@ -1245,7 +1445,7 @@ export const SFTStudioView: React.FC = () => {
                                         }}
                                         className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer"
                                       >
-                                        Save & Approve
+                                        Save Changes
                                       </button>
                                     </div>
                                   </div>
@@ -1260,7 +1460,7 @@ export const SFTStudioView: React.FC = () => {
                                       <ReactMarkdown>{transText}</ReactMarkdown>
                                     ) : (
                                       <span className="text-muted-foreground italic">
-                                        No translation for {sInfo.name} yet. Click "Regenerate" or use "Translate LLM".
+                                        No translation for {sInfo.name} yet. Click "Translate All" above or "Regenerate" below.
                                       </span>
                                     )}
                                   </div>
@@ -1290,6 +1490,17 @@ export const SFTStudioView: React.FC = () => {
                                         <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin text-sky-400' : ''}`} />
                                         <span>Regenerate</span>
                                       </button>
+                                      {status === 'failed' && (
+                                        <button
+                                          onClick={() => handleTranslateSingleTurn(m.id)}
+                                          disabled={isRegenerating}
+                                          className="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                          title="Retry this failed turn"
+                                        >
+                                          <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin' : ''}`} />
+                                          <span>Retry</span>
+                                        </button>
+                                      )}
                                     </div>
 
                                     <div className="flex items-center gap-1.5">

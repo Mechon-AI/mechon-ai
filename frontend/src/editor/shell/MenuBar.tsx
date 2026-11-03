@@ -390,7 +390,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   return (
     <div
       ref={menuBarRef}
-      className="h-7 border-b border-border bg-card/90 backdrop-blur-md px-2 flex items-center gap-1 select-none shrink-0 text-xs font-medium z-40 relative"
+      className="h-7 border-b border-border bg-card px-2 flex items-center gap-1 select-none shrink-0 text-xs font-medium z-50 relative"
     >
       <div className="flex items-center gap-1.5 mr-2 pl-1">
         <img src="/mechon-icon.svg" alt="Mechon Logo" className="h-4 w-4 drop-shadow-xs" />
@@ -416,7 +416,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           </button>
 
           {activeMenu === menu.id && (
-            <div className="absolute left-0 top-full mt-0.5 w-56 rounded-lg border border-border bg-popover p-1 shadow-2xl z-50 text-xs divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute left-0 top-full mt-0.5 w-56 rounded-lg border border-border bg-[#11131a] dark:bg-[#11131a] light:bg-white p-1 shadow-2xl z-50 text-xs divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100">
               <div className="py-0.5">
                 {menu.items.map((item, idx) => {
                   if (item.separator) {

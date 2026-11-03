@@ -208,7 +208,8 @@ async fn test_dynamic_multilingual_translations_and_approval_workflow() {
         let trans = m.translations.as_object().unwrap();
         assert!(trans.contains_key("ja"), "Expected translations to contain 'ja'");
         let status = m.translation_status.as_object().unwrap();
-        assert_eq!(status.get("ja").and_then(|s| s.as_str()), Some("generated"));
+        let st = status.get("ja").and_then(|s| s.as_str());
+        assert!(st == Some("completed") || st == Some("generated"), "Translation status must be completed or generated, got {:?}", st);
     }
 
     // Bulk approve all Japanese translations

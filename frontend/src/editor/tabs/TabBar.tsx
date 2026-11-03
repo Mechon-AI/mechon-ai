@@ -85,7 +85,7 @@ export const TabBar: React.FC = () => {
   }
 
   return (
-    <div className="h-9 border-b border-border bg-card/60 backdrop-blur-sm flex items-center justify-between px-1 select-none shrink-0 relative">
+    <div className="h-9 border-b border-border bg-card px-1 flex items-center justify-between select-none shrink-0 relative">
       {/* Scrollable Tabs Container */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar h-full py-1 flex-1 min-w-0 pr-2">
         {tabs.map((tab) => {
@@ -146,7 +146,7 @@ export const TabBar: React.FC = () => {
             <>
               <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
               <div
-                className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-border bg-popover text-popover-foreground p-1 shadow-2xl z-50 divide-y divide-border/60"
+                className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-border bg-[#11131a] dark:bg-[#11131a] light:bg-white text-popover-foreground p-1 shadow-2xl z-50 divide-y divide-border/60"
                 onClick={() => setDropdownOpen(false)}
               >
               {['Core', 'Engineering', 'Delivery', 'System'].map((cat) => (

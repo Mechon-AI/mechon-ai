@@ -83,7 +83,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   }
 
   return (
-    <div className="h-10 border-b border-border bg-card/95 backdrop-blur-md px-3 flex items-center justify-between gap-3 select-none shrink-0 text-xs relative z-40">
+    <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between gap-3 select-none shrink-0 text-xs relative z-50">
       {/* Left: Project Selector & Layout Presets */}
       <div className="flex items-center gap-2">
         {/* Project Selector */}
@@ -101,7 +101,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setProjectDropdown(false)} />
               <div
-                className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-border bg-popover text-popover-foreground p-1 shadow-2xl z-50 divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-border bg-[#11131a] dark:bg-[#11131a] light:bg-white text-popover-foreground p-1 shadow-2xl z-50 divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100"
                 onClick={() => setProjectDropdown(false)}
               >
                 <div className="max-h-48 overflow-y-auto py-0.5">
@@ -149,7 +149,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           {presetDropdown && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setPresetDropdown(false)} />
-              <div className="absolute left-0 top-full mt-1 w-60 rounded-xl border border-border bg-popover text-popover-foreground p-1 shadow-2xl z-50 text-xs divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute left-0 top-full mt-1 w-60 rounded-xl border border-border bg-[#11131a] dark:bg-[#11131a] light:bg-white text-popover-foreground p-1 shadow-2xl z-50 text-xs divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-100">
                 <div className="py-1">
                   <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
                     Presets

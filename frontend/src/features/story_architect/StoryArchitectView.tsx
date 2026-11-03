@@ -20,6 +20,7 @@ import {
 import { listen } from '@tauri-apps/api/event'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
+import { useSubsystemConfigStore } from '../../editor/stores/useSubsystemConfigStore'
 import { ResizeDivider } from '../../components/common/ResizeDivider'
 import type {
   StorySession,
@@ -395,16 +396,19 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('planning')
     setExecutionError(null)
     try {
+      const planningConfig = useSubsystemConfigStore.getState().configs.planning
       const planningProvider =
-        activeProviderId ||
         activeSession.planning_provider_id ||
         activeSession.planning_agent_config?.provider_id ||
+        planningConfig?.provider_id ||
+        activeProviderId ||
         undefined
       const planningModel =
-        activeModel ||
         activeSession.planning_model ||
         activeSession.planning_agent_config?.model_id ||
         activeSession.planning_agent_config?.model ||
+        planningConfig?.model_id ||
+        activeModel ||
         undefined
       const p = await generateNextPrompt(
         activeSession.id,
@@ -489,21 +493,51 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('generating')
     setExecutionError(null)
     try {
+      const subs = useSubsystemConfigStore.getState().configs
       const inferenceProvider =
-        activeProviderId ||
         activeSession.inference_provider_id ||
         activeSession.inference_agent_config?.provider_id ||
+        subs.main_inference?.provider_id ||
+        activeProviderId ||
         undefined
       const inferenceModel =
-        activeModel ||
         activeSession.inference_model ||
         activeSession.inference_agent_config?.model_id ||
         activeSession.inference_agent_config?.model ||
+        subs.main_inference?.model_id ||
+        activeModel ||
         undefined
+
+      const planningProvider =
+        activeSession.planning_provider_id ||
+        activeSession.planning_agent_config?.provider_id ||
+        subs.planning?.provider_id ||
+        undefined
+      const planningModel =
+        activeSession.planning_model ||
+        activeSession.planning_agent_config?.model_id ||
+        subs.planning?.model_id ||
+        undefined
+
+      const evaluationProvider =
+        activeSession.evaluation_provider_id ||
+        activeSession.evaluation_agent_config?.provider_id ||
+        subs.evaluation?.provider_id ||
+        undefined
+      const evaluationModel =
+        activeSession.evaluation_model ||
+        activeSession.evaluation_agent_config?.model_id ||
+        subs.evaluation?.model_id ||
+        undefined
+
       const result: AutoStepResult = await executeAutonomousStep(
         activeSession.id,
         inferenceProvider,
-        inferenceModel
+        inferenceModel,
+        planningProvider,
+        planningModel,
+        evaluationProvider,
+        evaluationModel
       )
 
       if (result.logs && result.logs.length > 0) {
@@ -809,21 +843,8 @@ export const StoryArchitectView: React.FC = () => {
                     <StoryBottomDock
                       session={activeSession}
                       messages={messages}
-                      proposedPrompt={proposedPrompt}
-                      executionMode={activeSession.execution_mode}
-                      onApproveAndExecute={handleApproveAndExecute}
-                      onRegenerate={handleGenerateNextPrompt}
-                      onExecuteAutoStep={handleExecuteAutoStep}
-                      onToggleAutonomy={handleToggleAutonomy}
-                      isGenerating={isGeneratingPrompt}
-                      isExecuting={isExecutingTurn}
-                      pauseReason={pauseReason}
-                      isAutoRunning={isAutoRunning}
-                      onToggleAutoRun={handleToggleAutoRun}
                       stateMachineStage={stateMachineStage}
-                      errorMessage={executionError}
-                      onRetry={handleExecuteAutoStep}
-                      onDismissError={() => setExecutionError(null)}
+                      isAutoRunning={isAutoRunning}
                       executionLogs={executionLogs}
                       onOpenCommitModal={() => setCommitModalOpen(true)}
                     />

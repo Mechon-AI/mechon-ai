@@ -117,6 +117,7 @@ pub fn run() {
             // Translation & Bilingual Engineering
             commands::translation::translate_sft_session,
             commands::translation::translate_sft_message,
+            commands::translation::retry_sft_translations,
             commands::translation::update_sft_message_translation,
             commands::translation::batch_update_translation_status,
             commands::translation::approve_all_translations,

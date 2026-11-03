@@ -10,7 +10,7 @@ export type StoryWorkspacePreset =
 
 export type StoryLeftTab = 'scenarios' | 'hierarchy' | 'characters' | 'phases' | 'objectives'
 export type StoryRightTab = 'workbench' | 'spec' | 'narrative' | 'agent' | 'ground_truths' | 'generation'
-export type StoryBottomTab = 'workbench' | 'logs' | 'diagnostics' | 'sft_preview'
+export type StoryBottomTab = 'logs' | 'diagnostics' | 'sft_preview'
 
 export interface StoryWorkspaceLayout {
   currentPreset: StoryWorkspacePreset
@@ -26,7 +26,7 @@ export interface StoryWorkspaceLayout {
   customPresets: Record<string, Partial<StoryWorkspaceLayout>>
 }
 
-const STORAGE_KEY = 'mechon_story_architect_layout_preset_v3'
+const STORAGE_KEY = 'mechon_story_architect_layout_preset_v4'
 
 const DEFAULT_LAYOUT: StoryWorkspaceLayout = {
   currentPreset: 'conversation-focus',

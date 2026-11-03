@@ -20,7 +20,6 @@ import {
   useStoryWorkspaceStore,
   StoryWorkspacePreset
 } from './useStoryWorkspaceStore'
-import { ProviderModelSelector } from '../../editor/shell/ProviderModelSelector'
 
 interface StoryArchitectToolbarProps {
   session: StorySession | null
@@ -82,7 +81,7 @@ export const StoryArchitectToolbar: React.FC<StoryArchitectToolbarProps> = ({
   const turnsRecorded = session ? Math.floor((session.tokens_used > 0 ? 1 : 0) /* placeholder */) : 0
 
   return (
-    <div className="h-10 border-b border-border bg-card/90 backdrop-blur-md px-3 flex items-center justify-between gap-3 shrink-0 text-xs select-none z-30 relative">
+    <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between gap-3 shrink-0 text-xs select-none z-30 relative">
       {/* 1. Left: Scenario Title, Status Badge, Metrics */}
       <div className="flex items-center gap-2 truncate">
         <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -181,13 +180,8 @@ export const StoryArchitectToolbar: React.FC<StoryArchitectToolbarProps> = ({
         </div>
       )}
 
-      {/* 3. Right: Model, Presets, Dock Toggles, Commit to SFT */}
+      {/* 3. Right: Presets, Dock Toggles, Commit to SFT */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* Interactive Provider & Model Selector */}
-        <div className="hidden xl:flex items-center">
-          <ProviderModelSelector />
-        </div>
-
         {/* Layout Preset Selector */}
         <div className="relative">
           <button
