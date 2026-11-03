@@ -225,80 +225,167 @@ Mechon AI uses a **100% native desktop architecture**. There is **zero Python re
 ```mermaid
 graph TD
     subgraph Frontend ["Frontend Shell (React 18 + TypeScript + Vite 6)"]
-        UI_SFT["Mechon SFT Studio<br/>(Chat & Bilingual Review)"]
-        UI_DPO["Mechon DPO Studio<br/>(Pairwise Evaluation)"]
-        UI_Corpus["Mechon Corpus<br/>(Explorer & Multi-Select)"]
-        UI_Export["Export Center<br/>(Selective & Canonical)"]
-        UI_Providers["Provider Manager<br/>(Registry & Diagnostics)"]
-        UI_Store["Zustand Stores & TanStack Query"]
+        UI_Dashboard["Dashboard & Workspace"]
+        UI_SFT["Mechon SFT Studio<br/>Chat, Bilingual & Revision"]
+        UI_DPO["Mechon DPO Studio<br/>Pairwise Evaluation"]
+        UI_Story["Story Architect<br/>Planning & Agentic Authoring"]
+        UI_Corpus["Mechon Corpus<br/>Explorer & Dataset Inspector"]
+        UI_Export["Export Center<br/>Selective & Multilingual Export"]
+        UI_Providers["Provider Manager<br/>Registry & Diagnostics"]
+        UI_Engineering["Dataset Engineering<br/>Quality, Deduplication & Analytics"]
+        UI_Layout["Workspace Layout Manager<br/>Resizable Panels & Persistent Ratios"]
+        UI_State["Zustand Stores & TanStack Query"]
     end
 
     subgraph IPC ["Tauri 2 Native IPC Boundary"]
-        Tauri_Bridge["tauri::generate_handler! (Type-Safe Direct IPC)"]
+        Bridge["Type-Safe Tauri Commands"]
+        Events["Tauri Event Bus<br/>Streaming, Progress & Agent Events"]
     end
 
-    subgraph Rust_Core ["Native Rust Backend Core (src-tauri)"]
-        Svc_SFT["SFT Service<br/>(Session Drafting & Atomic Commits)"]
-        Svc_DPO["DPO Service<br/>(Dual Generation & Annotation)"]
-        Svc_Dataset["Dataset Service<br/>(Corpus & Version Snapshots)"]
-        Svc_Trans["Translation Service<br/>(Contextual Turn Alignment)"]
-        Svc_Export["Export Service<br/>(JSONL, JSON, CSV Transforms)"]
-        Svc_Valid["Validation Service<br/>(Anomaly & Alternation Audits)"]
-        
-        subgraph Providers ["Model Provider Subsystem"]
-            Reg["Provider Registry"]
-            Adapter_Mock["Mock Provider (Offline)"]
-            Adapter_Ollama["Ollama Native Adapter"]
-            Adapter_Groq["Groq Fast Inference Adapter"]
-            Adapter_OpenAI["OpenAI-Compatible Universal Adapter"]
-            Adapter_Anthropic["Anthropic Messages Adapter"]
+    subgraph Rust_Core ["Native Rust Backend Core"]
+
+        subgraph Authoring ["Dataset Authoring Services"]
+            Svc_SFT["SFT Service<br/>Session & Atomic Commits"]
+            Svc_DPO["DPO Service<br/>Dual Generation & Annotation"]
+            Svc_Story["Story Planning Service<br/>Premise, Characters & Objectives"]
+            Svc_Conversation["Conversation Engine<br/>Multi-Turn Context & Execution"]
+            Svc_Revision["Revision Service<br/>Edit, Regenerate & Restore"]
+        end
+
+        subgraph Agentic ["Agentic Dataset Engineering Engine"]
+            Planner["Planning Agent<br/>Story-to-Prompt Generation"]
+            Context["Narrative Context Manager<br/>Continuity & Ground Truths"]
+            Evaluator["Progress Evaluation Agent<br/>Milestone & Objective Tracking"]
+            Approval["Human-in-the-Loop Controller<br/>Manual / Hybrid / Auto-Allow"]
+            Orchestrator["Agent Orchestrator<br/>Autonomous Execution Loop"]
+            Provenance["Agent Provenance Tracker<br/>Prompt & Generation History"]
+        end
+
+        subgraph Provider_System ["Model Provider Orchestration"]
+            Config["Authoritative Provider Config<br/>Provider & Model Resolution"]
+            Router["Provider Router<br/>Request Dispatch & Session Overrides"]
+            Registry["Provider Registry"]
+            Capabilities["Model Capability Registry<br/>Parameters & Protocol Support"]
+            Diagnostics["Provider Diagnostics<br/>Health, Auth & Generation Tests"]
+            Retry["Error & Retry Manager<br/>429, Timeout & Recovery"]
+
+            Mock["Mock Adapter"]
+            Ollama["Ollama Adapter"]
+            Groq["Groq Adapter"]
+            OpenAI["OpenAI-Compatible Adapter"]
+            Anthropic["Anthropic Messages Adapter"]
+            Streaming["Unified Streaming Engine<br/>Provider-Specific SSE Parsers"]
+        end
+
+        subgraph Data_Engineering ["Dataset Engineering Services"]
+            Dataset["Dataset Service<br/>Corpus & Record Management"]
+            Translation["Translation Service<br/>Dynamic Language Pairs"]
+            Export["Export Service<br/>JSONL, JSON, CSV & TXT"]
+            Validation["Quality Validation Service<br/>Schema & Structural Audits"]
+            Dedup["Deduplication Engine"]
+            Analytics["Sequence & Dataset Analytics"]
+            Versioning["Dataset Versioning<br/>SHA-256 Snapshots & Rollback"]
         end
 
         subgraph Security ["Security & Credential Vault"]
             Vault["HybridCredentialVault"]
-            KDE_Secret["FreeDesktop Secret Service / KWallet (D-Bus)"]
-            AES_Enc["Encrypted Local Fallback (AES-256-GCM)"]
+            Secret["FreeDesktop Secret Service / KWallet"]
+            AES["AES-256-GCM Encrypted Fallback"]
         end
 
-        subgraph Storage ["Database Subsystem"]
-            SQLx_Pool["SQLx Connection Pool (WAL Mode)"]
-            SQLite_DB[("Local SQLite 3 Database<br/>~/.local/share/mechon-ai/mechon.db")]
+        subgraph Storage ["Persistent Storage"]
+            Pool["SQLx Connection Pool<br/>WAL & Foreign Keys"]
+            DB[("SQLite Database")]
+            FileStore["Local Dataset & Backup Storage"]
         end
     end
 
-    UI_SFT --> Tauri_Bridge
-    UI_DPO --> Tauri_Bridge
-    UI_Corpus --> Tauri_Bridge
-    UI_Export --> Tauri_Bridge
-    UI_Providers --> Tauri_Bridge
+    UI_Dashboard --> Bridge
+    UI_SFT --> Bridge
+    UI_DPO --> Bridge
+    UI_Story --> Bridge
+    UI_Corpus --> Bridge
+    UI_Export --> Bridge
+    UI_Providers --> Bridge
+    UI_Engineering --> Bridge
+    UI_Layout --> Bridge
 
-    Tauri_Bridge --> Svc_SFT
-    Tauri_Bridge --> Svc_DPO
-    Tauri_Bridge --> Svc_Dataset
-    Tauri_Bridge --> Svc_Trans
-    Tauri_Bridge --> Svc_Export
-    Tauri_Bridge --> Svc_Valid
+    Bridge --> Svc_SFT
+    Bridge --> Svc_DPO
+    Bridge --> Svc_Story
+    Bridge --> Svc_Conversation
+    Bridge --> Svc_Revision
+    Bridge --> Dataset
+    Bridge --> Translation
+    Bridge --> Export
+    Bridge --> Validation
+    Bridge --> Diagnostics
 
-    Svc_SFT --> Reg
-    Svc_DPO --> Reg
-    Svc_Trans --> Reg
+    Svc_Story --> Planner
+    Planner --> Context
+    Context --> Evaluator
+    Evaluator --> Approval
+    Approval --> Orchestrator
+    Orchestrator --> Svc_Conversation
+    Svc_Conversation --> Planner
 
-    Reg --> Adapter_Mock
-    Reg --> Adapter_Ollama
-    Reg --> Adapter_Groq
-    Reg --> Adapter_OpenAI
-    Reg --> Adapter_Anthropic
+    Orchestrator --> Provenance
+    Svc_Conversation --> Provenance
+    Svc_Revision --> Provenance
 
-    Reg --> Vault
-    Vault --> KDE_Secret
-    Vault --> AES_Enc
+    Approval --> Events
+    Orchestrator --> Events
+    Streaming --> Events
+    Events --> UI_State
 
-    Svc_SFT --> SQLx_Pool
-    Svc_DPO --> SQLx_Pool
-    Svc_Dataset --> SQLx_Pool
-    Svc_Trans --> SQLx_Pool
-    Svc_Export --> SQLx_Pool
-    SQLx_Pool --> SQLite_DB
+    Svc_SFT --> Router
+    Svc_DPO --> Router
+    Translation --> Router
+    Planner --> Router
+    Svc_Conversation --> Router
+    Svc_Revision --> Router
+
+    Config --> Router
+    Router --> Registry
+    Registry --> Capabilities
+    Registry --> Mock
+    Registry --> Ollama
+    Registry --> Groq
+    Registry --> OpenAI
+    Registry --> Anthropic
+
+    Registry --> Streaming
+    Router --> Retry
+    Router --> Vault
+    Diagnostics --> Registry
+
+    Svc_SFT --> Dataset
+    Svc_Conversation --> Dataset
+    Svc_Revision --> Dataset
+    Dataset --> Validation
+    Dataset --> Dedup
+    Dataset --> Analytics
+    Dataset --> Versioning
+    Dataset --> Export
+
+    Translation --> Dataset
+    Validation --> Versioning
+    Versioning --> FileStore
+    Export --> FileStore
+
+    Router --> Pool
+    Svc_SFT --> Pool
+    Svc_DPO --> Pool
+    Svc_Story --> Pool
+    Svc_Conversation --> Pool
+    Svc_Revision --> Pool
+    Dataset --> Pool
+    Translation --> Pool
+    Versioning --> Pool
+    Pool --> DB
+
+    Vault --> Secret
+    Vault --> AES
 ```
 
 For full architectural specifications, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
