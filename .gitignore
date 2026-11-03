@@ -41,5 +41,6 @@ Thumbs.db
 # Packaging build artifacts
 packaging/arch/pkg/
 packaging/arch/src/
+packaging/arch/mechon-ai/
 packaging/arch/*.pkg.tar.*
 packaging/arch/*.tar.gz
