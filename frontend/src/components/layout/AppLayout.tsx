@@ -323,7 +323,7 @@ export const AppLayout: React.FC = () => {
               <div className="p-3 rounded-lg bg-secondary/30 border border-border/70 text-[10px] space-y-1 font-mono">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Version:</span>
-                  <span className="text-foreground">1.0.0 (Release)</span>
+                  <span className="text-foreground">1.1.0 (Release)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Architecture:</span>

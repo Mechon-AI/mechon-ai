@@ -261,8 +261,8 @@ makepkg -si
 
 *Or install from the latest release asset:*
 ```bash
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/PKGBUILD
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/mechon-ai.desktop
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/PKGBUILD
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/mechon-ai.desktop
 makepkg -si
 ```
 
@@ -271,9 +271,9 @@ makepkg -si
 Download the official standalone release from [GitHub Releases](https://github.com/Mechon-AI/mechon-ai/releases):
 
 ```bash
-wget https://github.com/Mechon-AI/mechon-ai/releases/download/v1.0.0/mechon-ai-v1.0.0-linux-x86_64.tar.gz
-tar -xzvf mechon-ai-v1.0.0-linux-x86_64.tar.gz
-cd mechon-ai-v1.0.0-linux-x86_64
+wget https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/mechon-ai-v1.1.0-linux-x86_64.tar.gz
+tar -xzvf mechon-ai-v1.1.0-linux-x86_64.tar.gz
+cd mechon-ai-v1.1.0-linux-x86_64
 ./mechon-ai
 ```
 

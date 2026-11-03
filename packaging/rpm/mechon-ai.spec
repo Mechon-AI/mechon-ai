@@ -1,5 +1,5 @@
 Name:           mechon-ai
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Native desktop workstation for SFT and DPO dataset engineering
 
@@ -38,5 +38,9 @@ install -m 644 src-tauri/icons/icon.png %{buildroot}%{_datadir}/icons/hicolor/51
 %{_datadir}/icons/hicolor/512x512/apps/mechon-ai.png
 
 %changelog
+* Tue Nov 03 2026 Mechon AI Team <cemetery394@gmail.com> - 1.1.0-1
+- Hapus legacy code: remove obsolete Python backend, legacy dependencies, and align 100% native Rust architecture
+- Selective dataset export and bilingual dataset engineering workflows
+
 * Sun Nov 02 2026 Mechon AI Team <cemetery394@gmail.com> - 1.0.0-1
 - Official initial release of Mechon AI
