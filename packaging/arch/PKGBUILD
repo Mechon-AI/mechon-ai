@@ -1,8 +1,9 @@
 # Maintainer: Mechon AI Team <cemetery394@gmail.com>
-pkgname=mechon-ai
-pkgver=1.1.2
+pkgname=mechon-ai-git
+_pkgname=mechon-ai
+pkgver=1.1.3.r0.gf4c1613
 pkgrel=1
-pkgdesc="Local-first desktop workstation for SFT and DPO dataset engineering"
+pkgdesc="Local-first desktop workstation for SFT and DPO dataset engineering (always builds latest commit from git)"
 arch=('x86_64')
 url="https://github.com/Mechon-AI/mechon-ai"
 license=('Apache-2.0')
@@ -19,6 +20,7 @@ depends=(
 )
 makedepends=(
     'cargo'
+    'git'
     'nodejs>=18'
     'npm'
     'pkgconf'
@@ -27,29 +29,37 @@ makedepends=(
 optdepends=(
     'ollama: local offline inference runtime'
 )
+provides=('mechon-ai')
+conflicts=('mechon-ai')
 options=('!lto')
 source=(
-    "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+    "$_pkgname::git+$url.git#branch=main"
     "mechon-ai.desktop"
 )
 sha256sums=(
-    '4afbdfcc537f876df14b0ebc8b45fbc27dabba5815eac475a70c70661d335561'
+    'SKIP'
     'c958bfc8aa215ff6589ba48f78b5958ae45d19dc6aec3d45c0ebad7b9e2089b5'
 )
 
+pkgver() {
+    cd "$srcdir/$_pkgname"
+    git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
 build() {
     # 1. Compile React frontend
-    cd "$srcdir/$pkgname-$pkgver/frontend"
+    cd "$srcdir/$_pkgname/frontend"
     npm install
     npm run build
 
     # 2. Compile native Tauri Rust desktop executable
-    cd "$srcdir/$pkgname-$pkgver/src-tauri"
+    cd "$srcdir/$_pkgname/src-tauri"
     cargo build --release --locked --bin mechon-ai
 }
 
 package() {
-    cd "$srcdir/$pkgname-$pkgver"
+    cd "$srcdir/$_pkgname"
 
     # Install native binary
     install -Dm755 "src-tauri/target/release/mechon-ai" "$pkgdir/usr/bin/mechon-ai"
@@ -67,6 +77,6 @@ package() {
     install -Dm644 "assets/mechon-icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/mechon-ai.svg"
 
     # Install documentation & license
-    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$_pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$_pkgname/LICENSE"
 }

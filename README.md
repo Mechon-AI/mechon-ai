@@ -311,21 +311,21 @@ Mechon AI is designed primarily for **Linux** workstations, with dedicated packa
 
 ### Arch Linux / EndeavourOS / Manjaro / CachyOS (Primary Platform)
 
-Mechon AI provides a validated, native `PKGBUILD` that compiles from source:
+Mechon AI provides a validated, native `PKGBUILD` that always pulls and compiles the latest commit from git:
 
 ```bash
 # Clone the repository
 git clone https://github.com/Mechon-AI/mechon-ai.git
 cd mechon-ai/packaging/arch
 
-# Compile and install native package
+# Compile and install the latest commit
 makepkg -si
 ```
 
-*Or install from the latest release asset:*
+*Or download the PKGBUILD standalone and build directly:*
 ```bash
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.1/PKGBUILD
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.1/mechon-ai.desktop
+curl -LO https://raw.githubusercontent.com/Mechon-AI/mechon-ai/main/packaging/arch/PKGBUILD
+curl -LO https://raw.githubusercontent.com/Mechon-AI/mechon-ai/main/packaging/arch/mechon-ai.desktop
 makepkg -si
 ```
 
