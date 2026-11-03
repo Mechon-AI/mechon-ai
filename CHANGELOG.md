@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.3] - 2026-11-03
+
+### Added
+- **Mechon Story Architect & Autonomous Conversation Engine:**
+  - Structured multi-phase interaction planning with objective definitions and persona alignment.
+  - Dual-agent loop combining a Planning Agent for prompt engineering and a Narrative / Task Evaluation Agent for context tracking.
+  - Deterministic state machine (`IDLE` → `PLANNING` → `AWAITING_APPROVAL` → `GENERATING` → `EVALUATING` → `UPDATING_CONTEXT` → `NEXT_PROMPT` → `GENERATING`).
+  - Three execution policies: `Manual Review`, `Hybrid Safety`, and `Step Autonomous Turn`.
+  - In-flight prompt revision workbench and historical turn editing with automatic downstream branch truncation.
+  - Direct atomic commitment from Story Architect into canonical Supervised Fine-Tuning (SFT) datasets.
+- **4-Tier Operational Diagnostics Suite:**
+  - End-to-end multi-step verification pipeline in Provider Manager testing Network Connection, Credential Authentication, Dynamic Model Discovery, Non-Streaming Generation, and Token Streaming SSE.
+  - Interactive diagnostics inspection modal with latency, token count, and health reporting.
+- **Anthropic Dynamic Model Discovery:** Added `/v1/models` integration for live enumeration of user-accessible Claude models.
+
+### Fixed
+- **Anthropic Claude 5.5 HTTP 400 Parameter Deprecation:**
+  - Automatically suppresses deprecated/disallowed `temperature` and `top_p` sampling parameters for Claude 5.5 generation models (`claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`).
+  - Added adaptive runtime auto-recovery in both non-streaming and streaming handlers to catch client parameter deprecations and retry transparently without interruption.
+  - Sanitized error diagnostics reporting request ID, error type, model ID, and parameter details without exposing credentials.
+- **Multi-Provider Adapter Integrity:**
+  - Fixed reasoning parameter handling for OpenAI `o1`/`o3`/`o4` models (`max_completion_tokens`, `developer` role, suppressed sampling).
+  - Normalized URL path parsing across local and cloud providers (vLLM, LM Studio, Ollama, GLM, Groq).
+  - Fixed token metrics extraction across Gemini, Ollama, Anthropic, and OpenAI.
+- **Provider Switching & Stale Model References:**
+  - Eliminated stale session-level model persistence and desynchronization in Mechon SFT and Story Architect.
+  - Sidebar drafts and model dropdown selectors immediately synchronize with SQLite state.
+
+---
+
 ## [1.1.2] - 2026-11-03
 
 ### Added
