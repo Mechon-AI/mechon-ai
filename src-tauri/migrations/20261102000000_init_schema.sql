@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS sft_sessions (
     temperature REAL NOT NULL DEFAULT 0.7,
     top_p REAL NOT NULL DEFAULT 0.9,
     max_tokens INTEGER NOT NULL DEFAULT 2048,
+    language_mode TEXT NOT NULL DEFAULT 'monolingual',
+    primary_language TEXT NOT NULL DEFAULT 'id',
+    secondary_language TEXT NOT NULL DEFAULT 'en',
     committed_record_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -58,6 +61,8 @@ CREATE TABLE IF NOT EXISTS sft_messages (
     sequence_order INTEGER NOT NULL,
     model TEXT,
     token_count INTEGER NOT NULL DEFAULT 0,
+    translations_json TEXT NOT NULL DEFAULT '{}',
+    translation_status_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     FOREIGN KEY(session_id) REFERENCES sft_sessions(id) ON DELETE CASCADE
 );
@@ -71,6 +76,9 @@ CREATE TABLE IF NOT EXISTS sft_records (
     messages_json TEXT NOT NULL,
     turn_count INTEGER NOT NULL DEFAULT 0,
     character_count INTEGER NOT NULL DEFAULT 0,
+    language_mode TEXT NOT NULL DEFAULT 'monolingual',
+    primary_language TEXT NOT NULL DEFAULT 'id',
+    secondary_language TEXT NOT NULL DEFAULT 'en',
     metadata_json TEXT NOT NULL DEFAULT '{}',
     revision INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,

@@ -6,37 +6,114 @@ use crate::errors::AppError;
 
 pub struct ExportService;
 
+fn transform_messages_for_bilingual_mode(
+    messages: &Value,
+    bilingual_mode: Option<&str>,
+    _primary_lang: &str,
+    secondary_lang: &str,
+) -> Value {
+    let mode = bilingual_mode.unwrap_or("canonical_aligned").to_lowercase();
+    match mode.as_str() {
+        "primary_only" => {
+            if let Some(arr) = messages.as_array() {
+                let transformed: Vec<Value> = arr.iter().map(|m| {
+                    let role = m.get("role").cloned().unwrap_or(json!("user"));
+                    let content = m.get("content").cloned().unwrap_or(json!(""));
+                    json!({
+                        "role": role,
+                        "content": content
+                    })
+                }).collect();
+                Value::Array(transformed)
+            } else {
+                messages.clone()
+            }
+        }
+        "secondary_only" => {
+            if let Some(arr) = messages.as_array() {
+                let transformed: Vec<Value> = arr.iter().map(|m| {
+                    let role = m.get("role").cloned().unwrap_or(json!("user"));
+                    let content = if let Some(trans) = m.get("translations").and_then(|t| t.as_object()) {
+                        trans.get(secondary_lang)
+                            .or_else(|| trans.get("en"))
+                            .or_else(|| trans.values().next())
+                            .and_then(|v| v.as_str())
+                            .map(|s| json!(s))
+                            .unwrap_or_else(|| m.get("content").cloned().unwrap_or(json!("")))
+                    } else {
+                        m.get("content").cloned().unwrap_or(json!(""))
+                    };
+                    json!({
+                        "role": role,
+                        "content": content
+                    })
+                }).collect();
+                Value::Array(transformed)
+            } else {
+                messages.clone()
+            }
+        }
+        _ => {
+            // canonical_aligned: preserve messages structure as is
+            messages.clone()
+        }
+    }
+}
+
 impl ExportService {
     pub async fn export_sft(
         pool: &SqlitePool,
         project_id: &str,
         format_type: &str,
         include_metadata: bool,
+        record_ids: Option<Vec<String>>,
+        bilingual_mode: Option<&str>,
     ) -> Result<String, AppError> {
-        let (records, _) = crate::services::dataset_service::DatasetService::list_sft_records(
-            pool,
-            project_id,
-            None,
-            None,
-            100000,
-            0,
-        ).await?;
+        let records = if let Some(ref ids) = record_ids {
+            if ids.is_empty() {
+                return Err(AppError::Validation("No examples selected. Select records from Mechon Corpus first.".to_string()));
+            }
+            crate::services::dataset_service::DatasetService::get_sft_records_by_ids(
+                pool,
+                project_id,
+                ids,
+            ).await?
+        } else {
+            let (recs, _) = crate::services::dataset_service::DatasetService::list_sft_records(
+                pool,
+                project_id,
+                None,
+                None,
+                100000,
+                0,
+            ).await?;
+            recs
+        };
 
         match format_type.to_lowercase().as_str() {
             "json" => {
                 let items: Vec<Value> = records.into_iter().map(|r| {
+                    let final_messages = transform_messages_for_bilingual_mode(
+                        &r.messages,
+                        bilingual_mode,
+                        &r.primary_language,
+                        &r.secondary_language,
+                    );
                     if include_metadata {
                         json!({
                             "id": r.id,
-                            "messages": r.messages,
+                            "messages": final_messages,
                             "turn_count": r.turn_count,
                             "character_count": r.character_count,
+                            "language_mode": r.language_mode,
+                            "primary_language": r.primary_language,
+                            "secondary_language": r.secondary_language,
                             "metadata": r.metadata,
                             "created_at": r.created_at
                         })
                     } else {
                         json!({
-                            "messages": r.messages
+                            "messages": final_messages
                         })
                     }
                 }).collect();
@@ -45,13 +122,22 @@ impl ExportService {
             "csv" => {
                 let mut wtr = csv::Writer::from_writer(vec![]);
                 if include_metadata {
-                    wtr.write_record(&["id", "messages", "turn_count", "metadata", "created_at"])
+                    wtr.write_record(&["id", "messages", "turn_count", "language_mode", "primary_language", "secondary_language", "metadata", "created_at"])
                         .map_err(|e| AppError::Internal(e.to_string()))?;
                     for r in records {
+                        let final_messages = transform_messages_for_bilingual_mode(
+                            &r.messages,
+                            bilingual_mode,
+                            &r.primary_language,
+                            &r.secondary_language,
+                        );
                         wtr.write_record(&[
                             r.id,
-                            r.messages.to_string(),
+                            final_messages.to_string(),
                             r.turn_count.to_string(),
+                            r.language_mode,
+                            r.primary_language,
+                            r.secondary_language,
                             r.metadata.to_string(),
                             r.created_at,
                         ]).map_err(|e| AppError::Internal(e.to_string()))?;
@@ -59,7 +145,13 @@ impl ExportService {
                 } else {
                     wtr.write_record(&["messages"]).map_err(|e| AppError::Internal(e.to_string()))?;
                     for r in records {
-                        wtr.write_record(&[r.messages.to_string()]).map_err(|e| AppError::Internal(e.to_string()))?;
+                        let final_messages = transform_messages_for_bilingual_mode(
+                            &r.messages,
+                            bilingual_mode,
+                            &r.primary_language,
+                            &r.secondary_language,
+                        );
+                        wtr.write_record(&[final_messages.to_string()]).map_err(|e| AppError::Internal(e.to_string()))?;
                     }
                 }
                 let bytes = wtr.into_inner().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -68,8 +160,14 @@ impl ExportService {
             "txt" => {
                 let mut texts = Vec::new();
                 for r in records {
+                    let final_messages = transform_messages_for_bilingual_mode(
+                        &r.messages,
+                        bilingual_mode,
+                        &r.primary_language,
+                        &r.secondary_language,
+                    );
                     let mut conv = String::new();
-                    if let Some(msgs) = r.messages.as_array() {
+                    if let Some(msgs) = final_messages.as_array() {
                         for m in msgs {
                             let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
                             let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -85,18 +183,27 @@ impl ExportService {
                 // Default: JSONL
                 let mut lines = Vec::new();
                 for r in records {
+                    let final_messages = transform_messages_for_bilingual_mode(
+                        &r.messages,
+                        bilingual_mode,
+                        &r.primary_language,
+                        &r.secondary_language,
+                    );
                     let obj = if include_metadata {
                         json!({
                             "id": r.id,
-                            "messages": r.messages,
+                            "messages": final_messages,
                             "turn_count": r.turn_count,
                             "character_count": r.character_count,
+                            "language_mode": r.language_mode,
+                            "primary_language": r.primary_language,
+                            "secondary_language": r.secondary_language,
                             "metadata": r.metadata,
                             "created_at": r.created_at
                         })
                     } else {
                         json!({
-                            "messages": r.messages
+                            "messages": final_messages
                         })
                     };
                     lines.push(serde_json::to_string(&obj)?);
@@ -112,15 +219,30 @@ impl ExportService {
         format_type: &str,
         include_metadata: bool,
         only_completed: bool,
+        record_ids: Option<Vec<String>>,
     ) -> Result<String, AppError> {
-        let (tasks, _) = crate::services::dpo_service::DPOService::list(
-            pool,
-            project_id,
-            if only_completed { Some("completed") } else { None },
-            None,
-            100000,
-            0,
-        ).await?;
+        let tasks = if let Some(ref ids) = record_ids {
+            if ids.is_empty() {
+                return Err(AppError::Validation("No examples selected. Select records from Mechon Corpus first.".to_string()));
+            }
+            let mut list = crate::services::dpo_service::DPOService::get_tasks_by_ids(
+                pool, project_id, ids,
+            ).await?;
+            if only_completed {
+                list.retain(|t| t.status == "completed" || t.preference.is_some());
+            }
+            list
+        } else {
+            let (list, _) = crate::services::dpo_service::DPOService::list(
+                pool,
+                project_id,
+                if only_completed { Some("completed") } else { None },
+                None,
+                100000,
+                0,
+            ).await?;
+            list
+        };
 
         let items: Vec<Value> = tasks.into_iter().filter_map(|t| {
             let (chosen, rejected, is_definitive) = match t.preference.as_deref() {
@@ -308,22 +430,54 @@ impl ExportService {
         }))
     }
 
-    pub async fn count_sft(pool: &SqlitePool, project_id: &str) -> Result<usize, AppError> {
-        let (_, total) = crate::services::dataset_service::DatasetService::list_sft_records(
-            pool, project_id, None, None, 1, 0,
-        ).await?;
-        Ok(total as usize)
+    pub async fn count_sft(
+        pool: &SqlitePool,
+        project_id: &str,
+        record_ids: Option<&[String]>,
+    ) -> Result<usize, AppError> {
+        if let Some(ids) = record_ids {
+            if ids.is_empty() {
+                return Ok(0);
+            }
+            let records = crate::services::dataset_service::DatasetService::get_sft_records_by_ids(
+                pool, project_id, ids,
+            ).await?;
+            Ok(records.len())
+        } else {
+            let (_, total) = crate::services::dataset_service::DatasetService::list_sft_records(
+                pool, project_id, None, None, 1, 0,
+            ).await?;
+            Ok(total as usize)
+        }
     }
 
-    pub async fn count_dpo(pool: &SqlitePool, project_id: &str, only_completed: bool) -> Result<usize, AppError> {
-        let (tasks, _) = crate::services::dpo_service::DPOService::list(
-            pool,
-            project_id,
-            if only_completed { Some("completed") } else { None },
-            None,
-            100000,
-            0,
-        ).await?;
-        Ok(tasks.len())
+    pub async fn count_dpo(
+        pool: &SqlitePool,
+        project_id: &str,
+        only_completed: bool,
+        record_ids: Option<&[String]>,
+    ) -> Result<usize, AppError> {
+        if let Some(ids) = record_ids {
+            if ids.is_empty() {
+                return Ok(0);
+            }
+            let mut tasks = crate::services::dpo_service::DPOService::get_tasks_by_ids(
+                pool, project_id, ids,
+            ).await?;
+            if only_completed {
+                tasks.retain(|t| t.status == "completed" || t.preference.is_some());
+            }
+            Ok(tasks.len())
+        } else {
+            let (tasks, _) = crate::services::dpo_service::DPOService::list(
+                pool,
+                project_id,
+                if only_completed { Some("completed") } else { None },
+                None,
+                100000,
+                0,
+            ).await?;
+            Ok(tasks.len())
+        }
     }
 }

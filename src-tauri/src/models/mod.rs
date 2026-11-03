@@ -30,6 +30,22 @@ pub struct ProjectUpdateInput {
     pub settings: Option<Value>,
 }
 
+fn default_empty_json_object() -> Value {
+    Value::Object(serde_json::Map::new())
+}
+
+fn default_monolingual() -> String {
+    "monolingual".to_string()
+}
+
+fn default_id_lang() -> String {
+    "id".to_string()
+}
+
+fn default_en_lang() -> String {
+    "en".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFTMessage {
     pub id: String,
@@ -39,6 +55,10 @@ pub struct SFTMessage {
     pub sequence_order: i64,
     pub model: Option<String>,
     pub token_count: i64,
+    #[serde(default = "default_empty_json_object")]
+    pub translations: Value,
+    #[serde(default = "default_empty_json_object")]
+    pub translation_status: Value,
     pub created_at: String,
 }
 
@@ -61,6 +81,12 @@ pub struct SFTSession {
     pub temperature: f64,
     pub top_p: f64,
     pub max_tokens: i64,
+    #[serde(default = "default_monolingual")]
+    pub language_mode: String,
+    #[serde(default = "default_id_lang")]
+    pub primary_language: String,
+    #[serde(default = "default_en_lang")]
+    pub secondary_language: String,
     pub committed_record_id: Option<String>,
     pub messages: Vec<SFTMessage>,
     pub created_at: String,
@@ -77,6 +103,9 @@ pub struct SFTSessionCreateInput {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_tokens: Option<i64>,
+    pub language_mode: Option<String>,
+    pub primary_language: Option<String>,
+    pub secondary_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +118,9 @@ pub struct SFTSessionUpdateInput {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_tokens: Option<i64>,
+    pub language_mode: Option<String>,
+    pub primary_language: Option<String>,
+    pub secondary_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +128,9 @@ pub struct SFTCommitInput {
     pub title_override: Option<String>,
     pub tags: Option<Vec<String>>,
     pub metadata: Option<Value>,
+    pub language_mode: Option<String>,
+    pub primary_language: Option<String>,
+    pub secondary_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +141,12 @@ pub struct SFTRecord {
     pub messages: Value,
     pub turn_count: i64,
     pub character_count: i64,
+    #[serde(default = "default_monolingual")]
+    pub language_mode: String,
+    #[serde(default = "default_id_lang")]
+    pub primary_language: String,
+    #[serde(default = "default_en_lang")]
+    pub secondary_language: String,
     pub metadata: Value,
     pub revision: i64,
     pub created_at: String,
@@ -116,6 +157,9 @@ pub struct SFTRecord {
 pub struct SFTRecordUpdateInput {
     pub messages: Option<Value>,
     pub metadata: Option<Value>,
+    pub language_mode: Option<String>,
+    pub primary_language: Option<String>,
+    pub secondary_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

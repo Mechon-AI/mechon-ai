@@ -9,12 +9,16 @@ pub async fn export_sft_dataset(
     project_id: String,
     format_type: Option<String>,
     include_metadata: Option<bool>,
+    record_ids: Option<Vec<String>>,
+    bilingual_mode: Option<String>,
 ) -> Result<String, AppError> {
     ExportService::export_sft(
         &pool,
         &project_id,
         format_type.as_deref().unwrap_or("jsonl"),
         include_metadata.unwrap_or(true),
+        record_ids,
+        bilingual_mode.as_deref(),
     ).await
 }
 
@@ -25,6 +29,7 @@ pub async fn export_dpo_dataset(
     format_type: Option<String>,
     include_metadata: Option<bool>,
     only_completed: Option<bool>,
+    record_ids: Option<Vec<String>>,
 ) -> Result<String, AppError> {
     ExportService::export_dpo(
         &pool,
@@ -32,6 +37,7 @@ pub async fn export_dpo_dataset(
         format_type.as_deref().unwrap_or("jsonl"),
         include_metadata.unwrap_or(true),
         only_completed.unwrap_or(true),
+        record_ids,
     ).await
 }
 
@@ -52,6 +58,8 @@ pub struct ExportToFileInput {
     pub include_metadata: Option<bool>,
     pub only_completed: Option<bool>,
     pub destination_path: Option<String>,
+    pub record_ids: Option<Vec<String>>,
+    pub bilingual_mode: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -74,6 +82,12 @@ pub async fn export_dataset_to_file(
         .await
         .map_err(|e| AppError::NotFound(format!("Project not found: {}", e)))?;
 
+    if let Some(ref ids) = params.record_ids {
+        if ids.is_empty() {
+            return Err(AppError::Validation("No examples selected. Select records from Mechon Corpus first.".to_string()));
+        }
+    }
+
     let fmt = params.format_type.to_lowercase();
     let ext = match fmt.as_str() {
         "json" => "json",
@@ -84,9 +98,14 @@ pub async fn export_dataset_to_file(
 
     let pipeline_lower = params.pipeline.to_lowercase();
     let (content, record_count) = if pipeline_lower == "dpo" {
-        let count = ExportService::count_dpo(&pool, &params.project_id, params.only_completed.unwrap_or(true)).await?;
+        let count = ExportService::count_dpo(
+            &pool,
+            &params.project_id,
+            params.only_completed.unwrap_or(true),
+            params.record_ids.as_deref(),
+        ).await?;
         if count == 0 {
-            return Err(AppError::Validation("Cannot export empty dataset: no DPO records exist in this project.".to_string()));
+            return Err(AppError::Validation("Cannot export empty dataset: no matching DPO records found.".to_string()));
         }
         let text = ExportService::export_dpo(
             &pool,
@@ -94,18 +113,25 @@ pub async fn export_dataset_to_file(
             &fmt,
             params.include_metadata.unwrap_or(true),
             params.only_completed.unwrap_or(true),
+            params.record_ids,
         ).await?;
         (text, count)
     } else {
-        let count = ExportService::count_sft(&pool, &params.project_id).await?;
+        let count = ExportService::count_sft(
+            &pool,
+            &params.project_id,
+            params.record_ids.as_deref(),
+        ).await?;
         if count == 0 {
-            return Err(AppError::Validation("Cannot export empty dataset: no committed SFT records exist in this project.".to_string()));
+            return Err(AppError::Validation("Cannot export empty dataset: no matching SFT records found.".to_string()));
         }
         let text = ExportService::export_sft(
             &pool,
             &params.project_id,
             &fmt,
             params.include_metadata.unwrap_or(true),
+            params.record_ids,
+            params.bilingual_mode.as_deref(),
         ).await?;
         (text, count)
     };

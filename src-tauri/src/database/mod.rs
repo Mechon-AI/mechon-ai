@@ -64,6 +64,18 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
         .execute(&pool)
         .await;
 
+    // Ensure bilingual columns exist on existing databases
+    let _ = sqlx::query("ALTER TABLE sft_sessions ADD COLUMN language_mode TEXT NOT NULL DEFAULT 'monolingual'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_sessions ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'id'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_sessions ADD COLUMN secondary_language TEXT NOT NULL DEFAULT 'en'").execute(&pool).await;
+
+    let _ = sqlx::query("ALTER TABLE sft_messages ADD COLUMN translations_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_messages ADD COLUMN translation_status_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+
+    let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN language_mode TEXT NOT NULL DEFAULT 'monolingual'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'id'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN secondary_language TEXT NOT NULL DEFAULT 'en'").execute(&pool).await;
+
     info!("Migrations completed successfully.");
 
     // Seed default data if needed

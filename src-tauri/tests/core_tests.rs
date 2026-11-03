@@ -83,6 +83,9 @@ async fn test_sft_conversation_to_single_record_commit() {
         temperature: Some(0.7),
         top_p: Some(0.9),
         max_tokens: Some(2048),
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     assert_eq!(session.status, "draft");
@@ -118,6 +121,9 @@ async fn test_sft_conversation_to_single_record_commit() {
         title_override: None,
         tags: Some(vec!["rust".to_string(), "memory-safety".to_string()]),
         metadata: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     assert_eq!(record.turn_count, 4);
@@ -142,6 +148,9 @@ async fn test_sft_conversation_to_single_record_commit() {
         title_override: Some("Updated Title".to_string()),
         tags: Some(vec!["updated-tag".to_string()]),
         metadata: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     assert_eq!(record_retry.id, record.id);
@@ -220,6 +229,9 @@ async fn test_dataset_validation_engine() {
         temperature: None,
         top_p: None,
         max_tokens: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
@@ -238,6 +250,9 @@ async fn test_dataset_validation_engine() {
         title_override: None,
         tags: None,
         metadata: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     let report_valid = ValidationService::validate_dataset(&pool, &project.id, "sft").await.unwrap();
@@ -276,7 +291,7 @@ async fn test_dataset_export_and_versioning() {
     }).await.unwrap();
 
     // Export DPO in JSONL
-    let export_jsonl = ExportService::export_dpo(&pool, &project.id, "jsonl", false, true).await.unwrap();
+    let export_jsonl = ExportService::export_dpo(&pool, &project.id, "jsonl", false, true, None).await.unwrap();
     assert!(export_jsonl.contains("shellfish"));
     assert!(export_jsonl.contains("\"chosen\""));
     assert!(export_jsonl.contains("\"rejected\""));

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   FileDown,
   Upload,
@@ -9,9 +10,13 @@ import {
   RefreshCw,
   Eye,
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle,
+  Layers,
+  Languages
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
+import { useSelectionStore } from '../../stores/useSelectionStore'
 import {
   exportSFTDataset,
   exportDPODataset,
@@ -22,10 +27,17 @@ import {
 import { formatErrorMessage } from '../../utils/errors'
 
 export const ExportCenterView: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const { activeProjectId, getActiveProject, ensureActiveProject } = useProjectStore()
+  const { selectedSftIds, selectedDpoIds } = useSelectionStore()
   const activeProject = getActiveProject()
 
-  const [pipeline, setPipeline] = useState<'sft' | 'dpo'>('sft')
+  const initialPipeline = searchParams.get('pipeline') === 'dpo' ? 'dpo' : 'sft'
+  const initialSource = searchParams.get('source') === 'selected' ? 'selected' : 'entire'
+
+  const [pipeline, setPipeline] = useState<'sft' | 'dpo'>(initialPipeline)
+  const [exportSource, setExportSource] = useState<'entire' | 'selected'>(initialSource)
+  const [bilingualMode, setBilingualMode] = useState<'canonical_aligned' | 'primary_only' | 'secondary_only'>('canonical_aligned')
   const [format, setFormat] = useState('jsonl')
   const [includeMetadata, setIncludeMetadata] = useState(true)
   const [previewContent, setPreviewContent] = useState('')
@@ -38,6 +50,9 @@ export const ExportCenterView: React.FC = () => {
   const [importReport, setImportReport] = useState<any>(null)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
+  const selectedCount = pipeline === 'sft' ? selectedSftIds.length : selectedDpoIds.length
+  const isSelectiveEmpty = exportSource === 'selected' && selectedCount === 0
+
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message })
     setTimeout(() => setNotification(null), 4000)
@@ -45,7 +60,7 @@ export const ExportCenterView: React.FC = () => {
 
   useEffect(() => {
     initView()
-  }, [activeProjectId, pipeline, format, includeMetadata])
+  }, [activeProjectId, pipeline, format, includeMetadata, exportSource, bilingualMode, selectedSftIds, selectedDpoIds])
 
   const initView = async () => {
     let pId = activeProjectId
@@ -60,15 +75,23 @@ export const ExportCenterView: React.FC = () => {
   const loadPreview = async (projectId?: string) => {
     const targetProject = projectId || activeProjectId
     if (!targetProject) return
+
+    if (exportSource === 'selected' && selectedCount === 0) {
+      setPreviewContent('(No examples selected. Select records from Mechon Corpus first to use selective export.)')
+      return
+    }
+
     setIsLoadingPreview(true)
     try {
       let text = ''
+      const targetIds = exportSource === 'selected' ? (pipeline === 'sft' ? selectedSftIds : selectedDpoIds) : undefined
+
       if (pipeline === 'sft') {
-        text = await exportSFTDataset(targetProject, format, includeMetadata)
+        text = await exportSFTDataset(targetProject, format, includeMetadata, targetIds, bilingualMode)
       } else {
-        text = await exportDPODataset(targetProject, format, includeMetadata)
+        text = await exportDPODataset(targetProject, format, includeMetadata, true, targetIds)
       }
-      setPreviewContent(text || '(No committed records in this dataset yet. Create and commit records first.)')
+      setPreviewContent(text || '(No matching records in this dataset. Create and commit records first.)')
     } catch (err: any) {
       setPreviewContent(`Export preview: ${formatErrorMessage(err)}`)
     } finally {
@@ -80,6 +103,11 @@ export const ExportCenterView: React.FC = () => {
   const [lastExportResult, setLastExportResult] = useState<ExportToFileResult | null>(null)
 
   const handleExportToFile = async () => {
+    if (isSelectiveEmpty) {
+      showFeedback('error', 'No examples selected. Select records from Mechon Corpus first.')
+      return
+    }
+
     let pId = activeProjectId
     if (!pId) {
       pId = await ensureActiveProject()
@@ -91,12 +119,16 @@ export const ExportCenterView: React.FC = () => {
 
     setIsExporting(true)
     try {
+      const targetIds = exportSource === 'selected' ? (pipeline === 'sft' ? selectedSftIds : selectedDpoIds) : undefined
+
       const res = await exportDatasetToFile({
         project_id: pId,
         pipeline,
         format_type: format,
         include_metadata: includeMetadata,
-        only_completed: true
+        only_completed: true,
+        record_ids: targetIds,
+        bilingual_mode: bilingualMode
       })
 
       if (res.cancelled) {
@@ -148,9 +180,24 @@ export const ExportCenterView: React.FC = () => {
           <FileDown className="h-5 w-5 text-primary" /> Import & Export Center
         </h2>
         <p className="text-xs text-muted-foreground">
-          Export verified fine-tuning and alignment datasets in canonical JSONL, JSON, and CSV formats, or import external files.
+          Export verified fine-tuning and alignment datasets in canonical JSONL, JSON, CSV formats, or export selective records.
         </p>
       </div>
+
+      {notification && (
+        <div
+          className={`px-4 py-2.5 rounded-lg text-xs flex items-center justify-between border ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : 'bg-destructive/10 text-destructive border-destructive/20'
+          }`}
+        >
+          <span>{notification.message}</span>
+          <button onClick={() => setNotification(null)} className="p-0.5 hover:opacity-75">
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Export Pipeline Controls */}
@@ -184,7 +231,73 @@ export const ExportCenterView: React.FC = () => {
             </div>
 
             <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
-              2. Target Format
+              2. Export Scope
+            </span>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setExportSource('entire')}
+                className={`py-2 rounded-lg font-medium border text-xs transition-all ${
+                  exportSource === 'entire'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-secondary hover:bg-accent border-border text-muted-foreground'
+                }`}
+              >
+                Entire Corpus
+              </button>
+              <button
+                onClick={() => setExportSource('selected')}
+                className={`py-2 rounded-lg font-medium border text-xs transition-all relative ${
+                  exportSource === 'selected'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-secondary hover:bg-accent border-border text-muted-foreground'
+                }`}
+              >
+                Selected Examples ({selectedCount})
+              </button>
+            </div>
+
+            {isSelectiveEmpty && (
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  No examples selected. Go to <strong>Mechon Corpus</strong> to select individual records first.
+                </span>
+              </div>
+            )}
+
+            {pipeline === 'sft' && (
+              <>
+                <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
+                  3. Bilingual Dataset Mode
+                </span>
+                <div className="space-y-1.5">
+                  {[
+                    { id: 'canonical_aligned', label: 'Aligned Bilingual (Canonical)', desc: 'Full turns with translations map' },
+                    { id: 'primary_only', label: 'Primary Language Only (ID)', desc: 'Only Indonesian / source content' },
+                    { id: 'secondary_only', label: 'Secondary Language Only (EN)', desc: 'Only translated target content' }
+                  ].map(m => (
+                    <label key={m.id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary cursor-pointer">
+                      <input
+                        type="radio"
+                        name="bilingualMode"
+                        value={m.id}
+                        checked={bilingualMode === m.id}
+                        onChange={() => setBilingualMode(m.id as any)}
+                        className="accent-primary"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold">{m.label}</span>
+                        <span className="text-[10px] text-muted-foreground">{m.desc}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
+              {pipeline === 'sft' ? '4.' : '3.'} Target Format
             </span>
 
             <div className="space-y-1.5">
@@ -207,7 +320,7 @@ export const ExportCenterView: React.FC = () => {
             </div>
 
             <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] block pt-2 border-t border-border">
-              3. Export Options
+              {pipeline === 'sft' ? '5.' : '4.'} Metadata Options
             </span>
 
             <label className="flex items-center gap-2 cursor-pointer">
@@ -222,11 +335,11 @@ export const ExportCenterView: React.FC = () => {
 
             <button
               onClick={handleExportToFile}
-              disabled={isLoadingPreview || isExporting}
-              className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 pt-2"
+              disabled={isLoadingPreview || isExporting || isSelectiveEmpty}
+              className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 pt-2 cursor-pointer"
             >
               <Download className={`h-4 w-4 ${isExporting ? 'animate-spin' : ''}`} />
-              {isExporting ? 'Exporting to File...' : 'Export Dataset to File (Native Dialog)'}
+              {isExporting ? 'Exporting to File...' : exportSource === 'selected' ? `Export ${selectedCount} Selected (Native Dialog)` : 'Export Entire Dataset (Native Dialog)'}
             </button>
 
             {lastExportResult && lastExportResult.success && (
@@ -261,7 +374,7 @@ export const ExportCenterView: React.FC = () => {
               <button
                 type="submit"
                 disabled={!importFile || isImporting}
-                className="w-full py-2 rounded-lg bg-secondary hover:bg-accent border border-border text-xs font-semibold text-foreground flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2 rounded-lg bg-secondary hover:bg-accent border border-border text-xs font-semibold text-foreground flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isImporting ? 'Parsing & Importing...' : 'Upload & Import'}
               </button>
@@ -285,7 +398,7 @@ export const ExportCenterView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <FileCode className="h-4 w-4 text-primary" />
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Live Output Preview ({format.toUpperCase()})
+                  Live Output Preview ({format.toUpperCase()} • {exportSource === 'selected' ? `Selected (${selectedCount})` : 'Entire'})
                 </span>
               </div>
 
@@ -299,7 +412,7 @@ export const ExportCenterView: React.FC = () => {
                 </button>
                 <button
                   onClick={handleCopy}
-                  className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1"
+                  className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1 cursor-pointer"
                 >
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                   <span>Copy</span>

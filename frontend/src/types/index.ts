@@ -19,6 +19,8 @@ export interface SFTMessage {
   sequence_order: number
   model?: string
   token_count: number
+  translations?: Record<string, string>
+  translation_status?: Record<string, 'pending' | 'generated' | 'edited' | 'approved' | 'failed' | string>
   created_at: string
 }
 
@@ -33,19 +35,32 @@ export interface SFTSession {
   temperature: number
   top_p: number
   max_tokens: number
+  language_mode?: 'monolingual' | 'bilingual'
+  primary_language?: string
+  secondary_language?: string
   committed_record_id?: string
   messages: SFTMessage[]
   created_at: string
   updated_at: string
 }
 
+export interface SFTRecordMessage {
+  role: string
+  content: string
+  translations?: Record<string, string>
+  translation_status?: Record<string, string>
+}
+
 export interface SFTRecord {
   id: string
   project_id: string
   session_id?: string
-  messages: Array<{ role: string; content: string }>
+  messages: SFTRecordMessage[]
   turn_count: number
   character_count: number
+  language_mode?: 'monolingual' | 'bilingual'
+  primary_language?: string
+  secondary_language?: string
   metadata: {
     tags?: string[]
     source?: string
@@ -57,6 +72,17 @@ export interface SFTRecord {
   revision: number
   created_at: string
   updated_at: string
+}
+
+export interface ExportToFileInput {
+  project_id: string
+  pipeline: 'sft' | 'dpo'
+  format_type: 'jsonl' | 'json' | 'csv' | 'txt'
+  include_metadata?: boolean
+  only_completed?: boolean
+  destination_path?: string
+  record_ids?: string[]
+  bilingual_mode?: 'canonical_aligned' | 'primary_only' | 'secondary_only'
 }
 
 export interface DPOTask {

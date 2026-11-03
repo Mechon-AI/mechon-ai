@@ -18,14 +18,14 @@ impl SFTService {
     ) -> Result<Vec<SFTSession>, AppError> {
         let (sql, bind_status) = match status {
             Some(s) if !s.is_empty() => (
-                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, committed_record_id, created_at, updated_at
+                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
                  FROM sft_sessions
                  WHERE project_id = ? AND status = ?
                  ORDER BY updated_at DESC",
                 Some(s),
             ),
             _ => (
-                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, committed_record_id, created_at, updated_at
+                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
                  FROM sft_sessions
                  WHERE project_id = ?
                  ORDER BY updated_at DESC",
@@ -34,13 +34,13 @@ impl SFTService {
         };
 
         let rows = if let Some(s) = bind_status {
-            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, Option<String>, String, String)>(sql)
+            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(sql)
                 .bind(project_id)
                 .bind(s)
                 .fetch_all(pool)
                 .await?
         } else {
-            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, Option<String>, String, String)>(sql)
+            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(sql)
                 .bind(project_id)
                 .fetch_all(pool)
                 .await?
@@ -60,10 +60,13 @@ impl SFTService {
                 temperature: r.7,
                 top_p: r.8,
                 max_tokens: r.9,
-                committed_record_id: r.10,
+                language_mode: r.10,
+                primary_language: r.11,
+                secondary_language: r.12,
+                committed_record_id: r.13,
                 messages,
-                created_at: r.11,
-                updated_at: r.12,
+                created_at: r.14,
+                updated_at: r.15,
             });
         }
 
@@ -71,8 +74,8 @@ impl SFTService {
     }
 
     pub async fn get_session(pool: &SqlitePool, session_id: &str) -> Result<SFTSession, AppError> {
-        let row = sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, Option<String>, String, String)>(
-            "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, committed_record_id, created_at, updated_at
+        let row = sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(
+            "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
              FROM sft_sessions
              WHERE id = ?"
         )
@@ -94,16 +97,19 @@ impl SFTService {
             temperature: row.7,
             top_p: row.8,
             max_tokens: row.9,
-            committed_record_id: row.10,
+            language_mode: row.10,
+            primary_language: row.11,
+            secondary_language: row.12,
+            committed_record_id: row.13,
             messages,
-            created_at: row.11,
-            updated_at: row.12,
+            created_at: row.14,
+            updated_at: row.15,
         })
     }
 
     pub async fn get_messages(pool: &SqlitePool, session_id: &str) -> Result<Vec<SFTMessage>, AppError> {
-        let rows = sqlx::query_as::<_, (String, String, String, String, i64, Option<String>, i64, String)>(
-            "SELECT id, session_id, role, content, sequence_order, model, token_count, created_at
+        let rows = sqlx::query_as::<_, (String, String, String, String, i64, Option<String>, i64, String, String, String)>(
+            "SELECT id, session_id, role, content, sequence_order, model, token_count, translations_json, translation_status_json, created_at
              FROM sft_messages
              WHERE session_id = ?
              ORDER BY sequence_order ASC"
@@ -112,15 +118,21 @@ impl SFTService {
         .fetch_all(pool)
         .await?;
 
-        let messages = rows.into_iter().map(|r| SFTMessage {
-            id: r.0,
-            session_id: r.1,
-            role: r.2,
-            content: r.3,
-            sequence_order: r.4,
-            model: r.5,
-            token_count: r.6,
-            created_at: r.7,
+        let messages = rows.into_iter().map(|r| {
+            let translations: Value = serde_json::from_str(&r.7).unwrap_or(json!({}));
+            let translation_status: Value = serde_json::from_str(&r.8).unwrap_or(json!({}));
+            SFTMessage {
+                id: r.0,
+                session_id: r.1,
+                role: r.2,
+                content: r.3,
+                sequence_order: r.4,
+                model: r.5,
+                token_count: r.6,
+                translations,
+                translation_status,
+                created_at: r.9,
+            }
         }).collect();
 
         Ok(messages)
@@ -134,10 +146,13 @@ impl SFTService {
         let temperature = input.temperature.unwrap_or(0.7);
         let top_p = input.top_p.unwrap_or(0.9);
         let max_tokens = input.max_tokens.unwrap_or(2048);
+        let language_mode = input.language_mode.unwrap_or_else(|| "monolingual".to_string());
+        let primary_language = input.primary_language.unwrap_or_else(|| "id".to_string());
+        let secondary_language = input.secondary_language.unwrap_or_else(|| "en".to_string());
 
         sqlx::query(
-            "INSERT INTO sft_sessions (id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO sft_sessions (id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
         .bind(&input.project_id)
@@ -148,6 +163,9 @@ impl SFTService {
         .bind(temperature)
         .bind(top_p)
         .bind(max_tokens)
+        .bind(&language_mode)
+        .bind(&primary_language)
+        .bind(&secondary_language)
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -168,9 +186,12 @@ impl SFTService {
         let temperature = input.temperature.unwrap_or(existing.temperature);
         let top_p = input.top_p.unwrap_or(existing.top_p);
         let max_tokens = input.max_tokens.unwrap_or(existing.max_tokens);
+        let language_mode = input.language_mode.unwrap_or(existing.language_mode);
+        let primary_language = input.primary_language.unwrap_or(existing.primary_language);
+        let secondary_language = input.secondary_language.unwrap_or(existing.secondary_language);
 
         sqlx::query(
-            "UPDATE sft_sessions SET title = ?, system_prompt = ?, status = ?, provider_id = ?, model = ?, temperature = ?, top_p = ?, max_tokens = ?, updated_at = ?
+            "UPDATE sft_sessions SET title = ?, system_prompt = ?, status = ?, provider_id = ?, model = ?, temperature = ?, top_p = ?, max_tokens = ?, language_mode = ?, primary_language = ?, secondary_language = ?, updated_at = ?
              WHERE id = ?"
         )
         .bind(&title)
@@ -181,6 +202,9 @@ impl SFTService {
         .bind(temperature)
         .bind(top_p)
         .bind(max_tokens)
+        .bind(&language_mode)
+        .bind(&primary_language)
+        .bind(&secondary_language)
         .bind(&now)
         .bind(session_id)
         .execute(pool)
@@ -208,15 +232,31 @@ impl SFTService {
             temperature: Some(original.temperature),
             top_p: Some(original.top_p),
             max_tokens: Some(original.max_tokens),
+            language_mode: Some(original.language_mode),
+            primary_language: Some(original.primary_language),
+            secondary_language: Some(original.secondary_language),
         }).await?;
 
         // Clone messages
         for msg in original.messages {
-            Self::add_message(pool, &new_session.id, SFTMessageCreateInput {
+            let new_msg = Self::add_message(pool, &new_session.id, SFTMessageCreateInput {
                 role: msg.role,
                 content: msg.content,
                 model: msg.model,
             }).await?;
+
+            if !msg.translations.as_object().map(|m| m.is_empty()).unwrap_or(true) {
+                let trans_str = serde_json::to_string(&msg.translations)?;
+                let status_str = serde_json::to_string(&msg.translation_status)?;
+                let _ = sqlx::query(
+                    "UPDATE sft_messages SET translations_json = ?, translation_status_json = ? WHERE id = ?"
+                )
+                .bind(&trans_str)
+                .bind(&status_str)
+                .bind(&new_msg.id)
+                .execute(pool)
+                .await;
+            }
         }
 
         Self::get_session(pool, &new_session.id).await
@@ -241,8 +281,8 @@ impl SFTService {
         let token_count = (input.content.len() as i64 / 4).max(1);
 
         sqlx::query(
-            "INSERT INTO sft_messages (id, session_id, role, content, sequence_order, model, token_count, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO sft_messages (id, session_id, role, content, sequence_order, model, token_count, translations_json, translation_status_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, '{}', '{}', ?)"
         )
         .bind(&id)
         .bind(session_id)
@@ -270,6 +310,8 @@ impl SFTService {
             sequence_order: next_seq.0,
             model: input.model,
             token_count,
+            translations: json!({}),
+            translation_status: json!({}),
             created_at: now,
         })
     }
@@ -329,16 +371,38 @@ impl SFTService {
         }
 
         let mut total_chars = 0;
+        let is_bilingual = session.language_mode == "bilingual" 
+            || input.language_mode.as_deref() == Some("bilingual")
+            || session.messages.iter().any(|m| m.translations.as_object().map(|o| !o.is_empty()).unwrap_or(false));
+
         for msg in &session.messages {
             total_chars += msg.content.len() as i64;
-            messages_array.push(json!({
-                "role": msg.role,
-                "content": msg.content
-            }));
+            let mut msg_map = serde_json::Map::new();
+            msg_map.insert("role".to_string(), json!(msg.role));
+            msg_map.insert("content".to_string(), json!(msg.content));
+
+            if is_bilingual {
+                if let Some(trans_obj) = msg.translations.as_object() {
+                    if !trans_obj.is_empty() {
+                        msg_map.insert("translations".to_string(), msg.translations.clone());
+                    }
+                }
+                if let Some(status_obj) = msg.translation_status.as_object() {
+                    if !status_obj.is_empty() {
+                        msg_map.insert("translation_status".to_string(), msg.translation_status.clone());
+                    }
+                }
+            }
+
+            messages_array.push(Value::Object(msg_map));
         }
 
         let turn_count = session.messages.len() as i64;
         let messages_json = serde_json::to_string(&messages_array)?;
+
+        let final_lang_mode = input.language_mode.unwrap_or(session.language_mode);
+        let final_primary_lang = input.primary_language.unwrap_or(session.primary_language);
+        let final_secondary_lang = input.secondary_language.unwrap_or(session.secondary_language);
 
         let mut metadata_obj = match input.metadata {
             Some(Value::Object(map)) => map,
@@ -357,6 +421,9 @@ impl SFTService {
             metadata_obj.insert("model".to_string(), json!(model));
         }
         metadata_obj.insert("source_session_id".to_string(), json!(session.id));
+        metadata_obj.insert("language_mode".to_string(), json!(final_lang_mode));
+        metadata_obj.insert("primary_language".to_string(), json!(final_primary_lang));
+        metadata_obj.insert("secondary_language".to_string(), json!(final_secondary_lang));
 
         let metadata_json = serde_json::to_string(&Value::Object(metadata_obj))?;
 
@@ -365,12 +432,15 @@ impl SFTService {
             // Update existing record
             sqlx::query(
                 "UPDATE sft_records
-                 SET messages_json = ?, turn_count = ?, character_count = ?, metadata_json = ?, revision = revision + 1, updated_at = ?
+                 SET messages_json = ?, turn_count = ?, character_count = ?, language_mode = ?, primary_language = ?, secondary_language = ?, metadata_json = ?, revision = revision + 1, updated_at = ?
                  WHERE id = ?"
             )
             .bind(&messages_json)
             .bind(turn_count)
             .bind(total_chars)
+            .bind(&final_lang_mode)
+            .bind(&final_primary_lang)
+            .bind(&final_secondary_lang)
             .bind(&metadata_json)
             .bind(&now)
             .bind(existing_record_id)
@@ -382,8 +452,8 @@ impl SFTService {
             // Insert brand new single SFT record
             let new_id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO sft_records (id, project_id, session_id, messages_json, turn_count, character_count, metadata_json, revision, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+                "INSERT INTO sft_records (id, project_id, session_id, messages_json, turn_count, character_count, language_mode, primary_language, secondary_language, metadata_json, revision, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
             )
             .bind(&new_id)
             .bind(&session.project_id)
@@ -391,6 +461,9 @@ impl SFTService {
             .bind(&messages_json)
             .bind(turn_count)
             .bind(total_chars)
+            .bind(&final_lang_mode)
+            .bind(&final_primary_lang)
+            .bind(&final_secondary_lang)
             .bind(&metadata_json)
             .bind(&now)
             .bind(&now)

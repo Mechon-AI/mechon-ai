@@ -109,12 +109,21 @@ pub async fn get_sft_records(
     project_id: String,
     search: Option<String>,
     tag: Option<String>,
+    language_mode: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<serde_json::Value, AppError> {
     let lim = limit.unwrap_or(50);
     let off = offset.unwrap_or(0);
-    let (records, total) = DatasetService::list_sft_records(&pool, &project_id, search.as_deref(), tag.as_deref(), lim, off).await?;
+    let (records, total) = DatasetService::list_sft_records_with_filter(
+        &pool,
+        &project_id,
+        search.as_deref(),
+        tag.as_deref(),
+        language_mode.as_deref(),
+        lim,
+        off,
+    ).await?;
     Ok(json!({
         "records": records,
         "total": total

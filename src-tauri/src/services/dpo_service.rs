@@ -96,6 +96,53 @@ impl DPOService {
         Ok((tasks, total))
     }
 
+    pub async fn get_tasks_by_ids(
+        pool: &SqlitePool,
+        project_id: &str,
+        ids: &[String],
+    ) -> Result<Vec<DPOTask>, AppError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT id, project_id, prompt, system_prompt, response_a, response_b, preference, rationale, helpfulness_rating, factuality_rating, status, metadata_json, created_at, updated_at
+             FROM dpo_tasks
+             WHERE project_id = ? AND id IN ({})
+             ORDER BY updated_at DESC",
+            placeholders
+        );
+        let mut query = sqlx::query_as::<_, (
+            String, String, String, Option<String>, String, String,
+            Option<String>, Option<String>, Option<i64>, Option<i64>,
+            String, String, String, String
+        )>(&sql).bind(project_id);
+        for id in ids {
+            query = query.bind(id);
+        }
+        let rows = query.fetch_all(pool).await?;
+        let tasks = rows.into_iter().map(|r| {
+            let metadata: Value = serde_json::from_str(&r.11).unwrap_or(serde_json::json!({}));
+            DPOTask {
+                id: r.0,
+                project_id: r.1,
+                prompt: r.2,
+                system_prompt: r.3,
+                response_a: r.4,
+                response_b: r.5,
+                preference: r.6,
+                rationale: r.7,
+                helpfulness_rating: r.8,
+                factuality_rating: r.9,
+                status: r.10,
+                metadata,
+                created_at: r.12,
+                updated_at: r.13,
+            }
+        }).collect();
+        Ok(tasks)
+    }
+
     pub async fn get(pool: &SqlitePool, id: &str) -> Result<DPOTask, AppError> {
         let row = sqlx::query_as::<_, (
             String, String, String, Option<String>, String, String,

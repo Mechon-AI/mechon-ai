@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import type {
   Project,
   SFTSession,
+  SFTMessage,
   SFTRecord,
   DPOTask,
   Provider,
@@ -120,6 +121,7 @@ export const getSFTRecords = (
   projectId: string,
   search?: string,
   tag?: string,
+  languageMode?: string,
   limit = 50,
   offset = 0
 ): Promise<{ records: SFTRecord[]; total: number }> =>
@@ -127,6 +129,7 @@ export const getSFTRecords = (
     projectId,
     search,
     tag,
+    languageMode,
     limit,
     offset
   })
@@ -373,30 +376,71 @@ export const getDashboardAnalytics = (projectId?: string): Promise<any> =>
   invoke('get_dashboard_analytics', { projectId })
 
 // -------------------------------------------------------------
+// Translation & Bilingual API
+// -------------------------------------------------------------
+export const translateSFTSession = (data: {
+  session_id: string
+  target_language: string
+  provider_id?: string
+  model?: string
+}): Promise<SFTSession> =>
+  invoke<SFTSession>('translate_sft_session', { data })
+
+export const translateSFTMessage = (data: {
+  session_id: string
+  message_id: string
+  target_language: string
+  provider_id?: string
+  model?: string
+}): Promise<SFTMessage> =>
+  invoke<SFTMessage>('translate_sft_message', { data })
+
+export const updateSFTMessageTranslation = (data: {
+  message_id: string
+  target_language: string
+  content: string
+  status: string
+}): Promise<void> =>
+  invoke('update_sft_message_translation', { data })
+
+export const batchUpdateTranslationStatus = (data: {
+  session_id: string
+  target_language: string
+  status: string
+}): Promise<SFTSession> =>
+  invoke<SFTSession>('batch_update_translation_status', { data })
+
+// -------------------------------------------------------------
 // Import & Export API
 // -------------------------------------------------------------
 export const exportSFTDataset = (
   projectId: string,
   format = 'jsonl',
-  includeMetadata = true
+  includeMetadata = true,
+  recordIds?: string[],
+  bilingualMode?: string
 ): Promise<string> =>
   invoke<string>('export_sft_dataset', {
     projectId,
     formatType: format,
-    includeMetadata
+    includeMetadata,
+    recordIds,
+    bilingualMode
   })
 
 export const exportDPODataset = (
   projectId: string,
   format = 'jsonl',
   includeMetadata = true,
-  onlyCompleted = true
+  onlyCompleted = true,
+  recordIds?: string[]
 ): Promise<string> =>
   invoke<string>('export_dpo_dataset', {
     projectId,
     formatType: format,
     includeMetadata,
-    onlyCompleted
+    onlyCompleted,
+    recordIds
   })
 
 export interface ExportToFileParams {
@@ -406,6 +450,8 @@ export interface ExportToFileParams {
   include_metadata?: boolean
   only_completed?: boolean
   destination_path?: string
+  record_ids?: string[]
+  bilingual_mode?: 'canonical_aligned' | 'primary_only' | 'secondary_only'
 }
 
 export interface ExportToFileResult {

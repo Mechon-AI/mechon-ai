@@ -20,10 +20,14 @@ import {
   X,
   AlertCircle,
   CheckCircle,
-  FileText
+  FileText,
+  Languages,
+  CheckSquare,
+  Square
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
+import { useSelectionStore } from '../../stores/useSelectionStore'
 import {
   getSFTRecords,
   deleteSFTRecord,
@@ -39,14 +43,27 @@ import type { SFTRecord, DPOTask } from '../../types'
 export const DatasetExplorerView: React.FC = () => {
   const navigate = useNavigate()
   const { activeProjectId, ensureActiveProject } = useProjectStore()
+  const {
+    selectedSftIds,
+    selectedDpoIds,
+    toggleSftSelection,
+    selectAllVisibleSft,
+    clearSftSelection,
+    isSftSelected,
+    toggleDpoSelection,
+    selectAllVisibleDpo,
+    clearDpoSelection,
+    isDpoSelected
+  } = useSelectionStore()
 
   const [activeTab, setActiveTab] = useState<'sft' | 'dpo'>('sft')
   const [search, setSearch] = useState('')
+  const [languageFilter, setLanguageFilter] = useState<'all' | 'bilingual' | 'monolingual'>('all')
   const [sftRecords, setSftRecords] = useState<SFTRecord[]>([])
   const [dpoTasks, setDpoTasks] = useState<DPOTask[]>([])
   const [selectedSFT, setSelectedSFT] = useState<SFTRecord | null>(null)
   const [selectedDPO, setSelectedDPO] = useState<DPOTask | null>(null)
-  const [viewMode, setViewMode] = useState<'rendered' | 'json'>('rendered')
+  const [viewMode, setViewMode] = useState<'rendered' | 'bilingual' | 'json'>('rendered')
   const [copied, setCopied] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -68,7 +85,7 @@ export const DatasetExplorerView: React.FC = () => {
 
   useEffect(() => {
     initView()
-  }, [activeProjectId, activeTab, search])
+  }, [activeProjectId, activeTab, search, languageFilter])
 
   const initView = async () => {
     let pId = activeProjectId
@@ -85,7 +102,8 @@ export const DatasetExplorerView: React.FC = () => {
     if (!targetProject) return
     try {
       if (activeTab === 'sft') {
-        const res = await getSFTRecords(targetProject, search || undefined)
+        const langMode = languageFilter !== 'all' ? languageFilter : undefined
+        const res = await getSFTRecords(targetProject, search || undefined, undefined, langMode)
         setSftRecords(res.records)
         if (res.records.length > 0 && !selectedSFT) {
           setSelectedSFT(res.records[0])
@@ -250,6 +268,86 @@ export const DatasetExplorerView: React.FC = () => {
               className="w-full pl-8 pr-3 py-1.5 rounded-md bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
+
+          {activeTab === 'sft' && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
+                <Languages className="h-3 w-3" /> Language Mode:
+              </span>
+              <div className="flex rounded bg-secondary p-0.5 border border-border">
+                {(['all', 'bilingual', 'monolingual'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setLanguageFilter(mode)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors ${
+                      languageFilter === mode ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {mode === 'bilingual' ? 'Bilingual' : mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Master Selection Control Bar */}
+        <div className="px-3 py-2 bg-secondary/40 border-b border-border flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (activeTab === 'sft') {
+                  selectAllVisibleSft(sftRecords.map(r => r.id))
+                } else {
+                  selectAllVisibleDpo(dpoTasks.map(t => t.id))
+                }
+              }}
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium text-xs cursor-pointer"
+              title="Toggle select all visible"
+            >
+              {activeTab === 'sft' ? (
+                sftRecords.length > 0 && sftRecords.every(r => isSftSelected(r.id)) ? (
+                  <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <Square className="h-3.5 w-3.5" />
+                )
+              ) : (
+                dpoTasks.length > 0 && dpoTasks.every(t => isDpoSelected(t.id)) ? (
+                  <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <Square className="h-3.5 w-3.5" />
+                )
+              )}
+              <span className="text-[11px]">Select All</span>
+            </button>
+
+            {(activeTab === 'sft' ? selectedSftIds.length : selectedDpoIds.length) > 0 && (
+              <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary font-mono font-bold text-[10px]">
+                {activeTab === 'sft' ? selectedSftIds.length : selectedDpoIds.length} selected
+              </span>
+            )}
+          </div>
+
+          {(activeTab === 'sft' ? selectedSftIds.length : selectedDpoIds.length) > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  if (activeTab === 'sft') clearSftSelection()
+                  else clearDpoSelection()
+                }}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => navigate(`/export?pipeline=${activeTab}&source=selected`)}
+                className="px-2 py-1 rounded bg-primary text-primary-foreground font-semibold text-[10px] flex items-center gap-1 shadow-sm hover:opacity-90 cursor-pointer"
+              >
+                <Download className="h-3 w-3" />
+                Export ({activeTab === 'sft' ? selectedSftIds.length : selectedDpoIds.length})
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Records List */}
@@ -257,38 +355,62 @@ export const DatasetExplorerView: React.FC = () => {
           {activeTab === 'sft' ? (
             sftRecords.length > 0 ? (
               sftRecords.map(r => {
-                const isSelected = selectedSFT?.id === r.id
+                const isCurrent = selectedSFT?.id === r.id
+                const isSelected = isSftSelected(r.id)
                 const firstUser = r.messages?.find(m => m.role === 'user')
                 const title = r.metadata?.title || firstUser?.content || 'Conversation Record'
+                const isBilingual = r.language_mode === 'bilingual' || r.messages?.some(m => m.translations && Object.keys(m.translations).length > 0)
 
                 return (
                   <div
                     key={r.id}
                     onClick={() => setSelectedSFT(r)}
                     className={`p-3 rounded-lg text-xs cursor-pointer border transition-all space-y-1.5 ${
-                      isSelected
+                      isCurrent
                         ? 'bg-primary/10 border-primary text-foreground shadow-sm'
+                        : isSelected
+                        ? 'bg-primary/5 border-primary/40 text-foreground'
                         : 'bg-card/50 hover:bg-secondary/60 border-border/50 text-muted-foreground'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-xs truncate max-w-[200px]">{title}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        #{r.id.slice(0, 6)}
-                      </span>
-                    </div>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => {
+                          e.stopPropagation()
+                          toggleSftSelection(r.id)
+                        }}
+                        className="mt-0.5 h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary cursor-pointer shrink-0"
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-foreground text-xs truncate max-w-[170px]">{title}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            #{r.id.slice(0, 6)}
+                          </span>
+                        </div>
 
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">
-                      {firstUser?.content || 'No prompt preview'}
-                    </p>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2">
+                          {firstUser?.content || 'No prompt preview'}
+                        </p>
 
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
-                      <span>{r.turn_count} turns • {r.character_count} chars</span>
-                      {r.metadata?.tags && r.metadata.tags.length > 0 && (
-                        <span className="text-primary truncate max-w-[100px]">
-                          {r.metadata.tags.join(', ')}
-                        </span>
-                      )}
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
+                          <span>{r.turn_count} turns</span>
+                          <div className="flex items-center gap-1">
+                            {isBilingual && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                {(r.primary_language || 'id').toUpperCase()} ↔ {(r.secondary_language || 'en').toUpperCase()}
+                              </span>
+                            )}
+                            {r.metadata?.tags && r.metadata.tags.length > 0 && (
+                              <span className="text-primary truncate max-w-[70px]">
+                                #{r.metadata.tags[0]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )
@@ -296,7 +418,7 @@ export const DatasetExplorerView: React.FC = () => {
             ) : (
               <div className="p-6 text-center text-xs text-muted-foreground space-y-2">
                 <Database className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-                <p>No committed SFT records found in this project.</p>
+                <p>No SFT records match the current filter.</p>
                 <button
                   onClick={() => navigate('/sft')}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium text-xs"
@@ -308,33 +430,49 @@ export const DatasetExplorerView: React.FC = () => {
           ) : (
             dpoTasks.length > 0 ? (
               dpoTasks.map(t => {
-                const isSelected = selectedDPO?.id === t.id
+                const isCurrent = selectedDPO?.id === t.id
+                const isSelected = isDpoSelected(t.id)
                 return (
                   <div
                     key={t.id}
                     onClick={() => setSelectedDPO(t)}
                     className={`p-3 rounded-lg text-xs cursor-pointer border transition-all space-y-1.5 ${
-                      isSelected
+                      isCurrent
                         ? 'bg-primary/10 border-primary text-foreground shadow-sm'
+                        : isSelected
+                        ? 'bg-primary/5 border-primary/40 text-foreground'
                         : 'bg-card/50 hover:bg-secondary/60 border-border/50 text-muted-foreground'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-xs truncate max-w-[200px]">{t.prompt}</span>
-                      {t.preference ? (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
-                          {t.preference}
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-accent text-muted-foreground">
-                          PENDING
-                        </span>
-                      )}
-                    </div>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => {
+                          e.stopPropagation()
+                          toggleDpoSelection(t.id)
+                        }}
+                        className="mt-0.5 h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary cursor-pointer shrink-0"
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-foreground text-xs truncate max-w-[170px]">{t.prompt}</span>
+                          {t.preference ? (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
+                              {t.preference}
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-accent text-muted-foreground">
+                              PENDING
+                            </span>
+                          )}
+                        </div>
 
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">
-                      {t.response_a || 'Awaiting response generation'}
-                    </p>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2">
+                          {t.response_a || 'Awaiting response generation'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )
               })
@@ -379,6 +517,17 @@ export const DatasetExplorerView: React.FC = () => {
               >
                 <Eye className="h-3.5 w-3.5" /> Rendered
               </button>
+              {activeTab === 'sft' && (selectedSFT?.language_mode === 'bilingual' || selectedSFT?.messages?.some(m => m.translations && Object.keys(m.translations).length > 0)) && (
+                <button
+                  onClick={() => setViewMode('bilingual')}
+                  className={`px-2.5 py-1 rounded text-xs flex items-center gap-1 font-medium transition-colors ${
+                    viewMode === 'bilingual' ? 'bg-cyan-600 text-white shadow-sm' : 'text-muted-foreground hover:text-cyan-400'
+                  }`}
+                  title="Side-by-Side Bilingual Aligned View"
+                >
+                  <Languages className="h-3.5 w-3.5" /> Bilingual Aligned
+                </button>
+              )}
               <button
                 onClick={() => setViewMode('json')}
                 className={`px-2.5 py-1 rounded text-xs flex items-center gap-1 font-medium transition-colors ${
@@ -530,6 +679,77 @@ export const DatasetExplorerView: React.FC = () => {
                           </div>
                           <div className="prose prose-invert prose-xs max-w-none break-words">
                             <ReactMarkdown>{m.content}</ReactMarkdown>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : viewMode === 'bilingual' ? (
+                <div className="max-w-5xl mx-auto space-y-4">
+                  {/* Bilingual Header Banner */}
+                  <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Languages className="h-5 w-5 text-cyan-400" />
+                      <div>
+                        <h4 className="font-bold text-foreground">Bilingual Parallel Dataset View</h4>
+                        <p className="text-[11px] text-muted-foreground">
+                          Aligned turn-by-turn between {(selectedSFT.primary_language || 'id').toUpperCase()} and {(selectedSFT.secondary_language || 'en').toUpperCase()}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                      {(selectedSFT.primary_language || 'id').toUpperCase()} ↔ {(selectedSFT.secondary_language || 'en').toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Side-by-Side Column Headers */}
+                  <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
+                    <span className="text-primary flex items-center gap-1.5">
+                      Primary Language ({(selectedSFT.primary_language || 'id').toUpperCase()})
+                    </span>
+                    <span className="text-cyan-400 flex items-center gap-1.5">
+                      Secondary Translation ({(selectedSFT.secondary_language || 'en').toUpperCase()})
+                    </span>
+                  </div>
+
+                  {/* Aligned Turns */}
+                  <div className="space-y-4">
+                    {selectedSFT.messages?.map((m: any, idx: number) => {
+                      const secLang = selectedSFT.secondary_language || 'en'
+                      const trans = m.translations?.[secLang] || (m.translations ? Object.values(m.translations)[0] : null)
+                      const status = m.translation_status?.[secLang] || (m.translation_status ? Object.values(m.translation_status)[0] : 'approved')
+
+                      return (
+                        <div key={idx} className="grid grid-cols-2 gap-4">
+                          {/* Left: Primary Turn */}
+                          <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs">
+                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                              <span className="font-bold text-foreground">{m.role}</span>
+                              <span>Turn {idx + 1}</span>
+                            </div>
+                            <div className="prose prose-invert prose-xs max-w-none break-words">
+                              <ReactMarkdown>{m.content}</ReactMarkdown>
+                            </div>
+                          </div>
+
+                          {/* Right: Translated Turn */}
+                          <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-2 text-xs">
+                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                              <span className="font-bold text-cyan-400">{m.role} (Translated)</span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-primary/20 text-primary'
+                              }`}>
+                                {status as string}
+                              </span>
+                            </div>
+                            <div className="prose prose-invert prose-xs max-w-none break-words">
+                              {trans ? (
+                                <ReactMarkdown>{trans as string}</ReactMarkdown>
+                              ) : (
+                                <span className="text-muted-foreground italic">No translation available for this turn</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )

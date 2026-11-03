@@ -449,6 +449,9 @@ async fn test_data_integrity_sft_commit_and_dpo_task_metadata() {
         temperature: Some(0.6),
         top_p: Some(0.9),
         max_tokens: Some(2048),
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
@@ -467,6 +470,9 @@ async fn test_data_integrity_sft_commit_and_dpo_task_metadata() {
         title_override: None,
         tags: Some(vec!["concurrency".to_string()]),
         metadata: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
     assert_eq!(committed.turn_count, 2);
     assert_eq!(committed.messages.as_array().unwrap().len(), 3); // 1 system + 2 messages
@@ -510,7 +516,7 @@ async fn test_jsonl_export_standard_format_with_metadata() {
     }).await.unwrap();
 
     // Export DPO in JSONL format without metadata (standard prompt, chosen, rejected)
-    let jsonl_clean = ExportService::export_dpo(&pool, &project.id, "jsonl", false, true).await.unwrap();
+    let jsonl_clean = ExportService::export_dpo(&pool, &project.id, "jsonl", false, true, None).await.unwrap();
     assert!(!jsonl_clean.trim().is_empty());
 
     let parsed_line: Value = serde_json::from_str(jsonl_clean.lines().next().unwrap()).unwrap();
@@ -528,7 +534,7 @@ async fn test_jsonl_export_standard_format_with_metadata() {
     assert!(parsed_line.get("metadata").is_none());
 
     // Export DPO in JSONL format with metadata
-    let jsonl_rich = ExportService::export_dpo(&pool, &project.id, "jsonl", true, true).await.unwrap();
+    let jsonl_rich = ExportService::export_dpo(&pool, &project.id, "jsonl", true, true, None).await.unwrap();
     let parsed_rich: Value = serde_json::from_str(jsonl_rich.lines().next().unwrap()).unwrap();
     assert_eq!(parsed_rich["chosen"], parsed_line["chosen"]);
     assert_eq!(parsed_rich["metadata"]["model_a"], "claude-3-5-sonnet");
@@ -768,6 +774,9 @@ async fn test_export_dataset_to_file_all_formats_and_integrity() {
         temperature: Some(0.7),
         top_p: Some(0.9),
         max_tokens: Some(1024),
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
@@ -786,6 +795,9 @@ async fn test_export_dataset_to_file_all_formats_and_integrity() {
         title_override: None,
         tags: Some(vec!["translation".to_string(), "unicode".to_string()]),
         metadata: None,
+        language_mode: None,
+        primary_language: None,
+        secondary_language: None,
     }).await.unwrap();
 
     // 2. Create DPO task and annotate
@@ -812,7 +824,7 @@ async fn test_export_dataset_to_file_all_formats_and_integrity() {
     // Test SFT in JSONL, JSON, CSV, TXT
     for fmt in &["jsonl", "json", "csv", "txt"] {
         let dest = temp_dir.join(format!("sft_export.{}", fmt));
-        let content = ExportService::export_sft(&pool, &project.id, fmt, true).await.unwrap();
+        let content = ExportService::export_sft(&pool, &project.id, fmt, true, None, None).await.unwrap();
         assert!(!content.is_empty(), "SFT {} content must not be empty", fmt);
 
         tokio::fs::write(&dest, content.as_bytes()).await.unwrap();
@@ -847,7 +859,7 @@ async fn test_export_dataset_to_file_all_formats_and_integrity() {
     // Test DPO in JSONL, JSON, CSV, TXT
     for fmt in &["jsonl", "json", "csv", "txt"] {
         let dest = temp_dir.join(format!("dpo_export.{}", fmt));
-        let content = ExportService::export_dpo(&pool, &project.id, fmt, true, true).await.unwrap();
+        let content = ExportService::export_dpo(&pool, &project.id, fmt, true, true, None).await.unwrap();
         assert!(!content.is_empty(), "DPO {} content must not be empty", fmt);
 
         tokio::fs::write(&dest, content.as_bytes()).await.unwrap();
@@ -898,9 +910,9 @@ async fn test_export_empty_dataset_rejection() {
         settings: None,
     }).await.unwrap();
 
-    let count_sft = ExportService::count_sft(&pool, &project.id).await.unwrap();
+    let count_sft = ExportService::count_sft(&pool, &project.id, None).await.unwrap();
     assert_eq!(count_sft, 0);
 
-    let count_dpo = ExportService::count_dpo(&pool, &project.id, true).await.unwrap();
+    let count_dpo = ExportService::count_dpo(&pool, &project.id, true, None).await.unwrap();
     assert_eq!(count_dpo, 0);
 }

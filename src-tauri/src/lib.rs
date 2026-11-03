@@ -106,6 +106,12 @@ pub fn run() {
             commands::providers::generate_dpo_pair,
             commands::providers::stream_completion,
 
+            // Translation & Bilingual Engineering
+            commands::translation::translate_sft_session,
+            commands::translation::translate_sft_message,
+            commands::translation::update_sft_message_translation,
+            commands::translation::batch_update_translation_status,
+
             // Quality Control & Validation
             commands::validation::validate_dataset,
 

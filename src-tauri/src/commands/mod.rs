@@ -7,3 +7,4 @@ pub mod versions;
 pub mod analytics;
 pub mod export;
 pub mod settings;
+pub mod translation;
