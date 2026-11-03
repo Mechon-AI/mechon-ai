@@ -216,33 +216,48 @@ export const DPOStudioView: React.FC = () => {
 
     // Restore candidate metadata if present
     const meta = typeof t.metadata === 'object' && t.metadata !== null ? (t.metadata as Record<string, any>) : {}
-    if (meta.provider_a && providers.some(p => p.id === meta.provider_a)) {
-      setProviderIdA(meta.provider_a)
-    }
-    if (meta.model_a) {
-      setModelA(meta.model_a)
-    }
-    if (meta.provider_b && providers.some(p => p.id === meta.provider_b)) {
-      setProviderIdB(meta.provider_b)
-    }
-    if (meta.model_b) {
-      setModelB(meta.model_b)
-    }
+    const defaultP = providers.find(p => p.id === activeProviderId) || providers[0]
+
+    // Candidate A
+    const targetPA = (meta.provider_a && providers.some(p => p.id === meta.provider_a))
+      ? meta.provider_a
+      : (providerIdA && providers.some(p => p.id === providerIdA) ? providerIdA : defaultP?.id || '')
+    setProviderIdA(targetPA)
+    
+    const availableModelsA = getModelsForProvider(targetPA)
+    const targetMA = (meta.model_a && availableModelsA.includes(meta.model_a))
+      ? meta.model_a
+      : (modelA && availableModelsA.includes(modelA) ? modelA : (availableModelsA[0] || ''))
+    setModelA(targetMA)
+
+    if (meta.temp_a !== undefined) setTempA(Number(meta.temp_a))
+
+    // Candidate B
+    const targetPB = (meta.provider_b && providers.some(p => p.id === meta.provider_b))
+      ? meta.provider_b
+      : (providerIdB && providers.some(p => p.id === providerIdB) ? providerIdB : defaultP?.id || '')
+    setProviderIdB(targetPB)
+    
+    const availableModelsB = getModelsForProvider(targetPB)
+    const targetMB = (meta.model_b && availableModelsB.includes(meta.model_b))
+      ? meta.model_b
+      : (modelB && availableModelsB.includes(modelB) ? modelB : (availableModelsB[0] || ''))
+    setModelB(targetMB)
+
+    if (meta.temp_b !== undefined) setTempB(Number(meta.temp_b))
   }
 
   const handleProviderAChange = (pId: string) => {
     setProviderIdA(pId)
-    const p = providers.find(item => item.id === pId)
-    const newModel = p?.default_model || (p?.models_cache && p.models_cache[0]) || ''
-    setModelA(newModel)
+    const models = getModelsForProvider(pId)
+    setModelA(models[0] || '')
     setErrorA(null)
   }
 
   const handleProviderBChange = (pId: string) => {
     setProviderIdB(pId)
-    const p = providers.find(item => item.id === pId)
-    const newModel = p?.default_model || (p?.models_cache && p.models_cache[0]) || ''
-    setModelB(newModel)
+    const models = getModelsForProvider(pId)
+    setModelB(models[0] || '')
     setErrorB(null)
   }
 
@@ -663,20 +678,22 @@ export const DPOStudioView: React.FC = () => {
                       onClick={() => handleGenerateSingle('a')}
                       disabled={isGenerating || !prompt.trim()}
                       className="px-2.5 py-1 rounded text-[11px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+                      title="Generate or Regenerate Candidate A only"
                     >
-                      Regen A
+                      {responseA ? 'Regen A' : 'Generate A'}
                     </button>
                     <button
                       onClick={() => handleGenerateSingle('b')}
                       disabled={isGenerating || !prompt.trim()}
                       className="px-2.5 py-1 rounded text-[11px] font-medium bg-secondary hover:bg-accent border border-border text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+                      title="Generate or Regenerate Candidate B only"
                     >
-                      Regen B
+                      {responseB ? 'Regen B' : 'Generate B'}
                     </button>
                     <button
                       onClick={handleGenerateBoth}
                       disabled={isGenerating || !prompt.trim()}
-                      className="px-3 py-1 rounded text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-all"
+                      className="px-3.5 py-1 rounded text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-all"
                     >
                       <Sparkles className={`h-3.5 w-3.5 ${isGenerating ? 'animate-spin' : ''}`} /> Generate Both
                     </button>
@@ -742,9 +759,9 @@ export const DPOStudioView: React.FC = () => {
                             onClick={() => handleGenerateSingle('a')}
                             disabled={isGenerating || !prompt.trim() || !providerIdA || !modelA}
                             className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50"
-                            title="Regenerate Candidate A"
+                            title={responseA ? "Regenerate Candidate A" : "Generate Candidate A"}
                           >
-                            <Sparkles className="h-3 w-3" /> Regen A
+                            <Sparkles className="h-3 w-3" /> {responseA ? 'Regen A' : 'Generate A'}
                           </button>
                           <button
                             type="button"
@@ -771,12 +788,7 @@ export const DPOStudioView: React.FC = () => {
                           <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Provider</label>
                           <select
                             value={providerIdA}
-                            onChange={e => {
-                              const newP = e.target.value
-                              setProviderIdA(newP)
-                              const models = getModelsForProvider(newP)
-                              setModelA(models[0] || '')
-                            }}
+                            onChange={e => handleProviderAChange(e.target.value)}
                             className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none"
                           >
                             {providers.map(p => (
@@ -900,9 +912,9 @@ export const DPOStudioView: React.FC = () => {
                             onClick={() => handleGenerateSingle('b')}
                             disabled={isGenerating || !prompt.trim() || !providerIdB || !modelB}
                             className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50"
-                            title="Regenerate Candidate B"
+                            title={responseB ? "Regenerate Candidate B" : "Generate Candidate B"}
                           >
-                            <Sparkles className="h-3 w-3" /> Regen B
+                            <Sparkles className="h-3 w-3" /> {responseB ? 'Regen B' : 'Generate B'}
                           </button>
                           <button
                             type="button"
@@ -929,12 +941,7 @@ export const DPOStudioView: React.FC = () => {
                           <label className="text-[10px] uppercase font-semibold text-muted-foreground block mb-0.5">Provider</label>
                           <select
                             value={providerIdB}
-                            onChange={e => {
-                              const newP = e.target.value
-                              setProviderIdB(newP)
-                              const models = getModelsForProvider(newP)
-                              setModelB(models[0] || '')
-                            }}
+                            onChange={e => handleProviderBChange(e.target.value)}
                             className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none"
                           >
                             {providers.map(p => (

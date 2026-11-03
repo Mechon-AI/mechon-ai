@@ -65,6 +65,22 @@ impl ExportService {
                 let bytes = wtr.into_inner().map_err(|e| AppError::Internal(e.to_string()))?;
                 Ok(String::from_utf8_lossy(&bytes).to_string())
             }
+            "txt" => {
+                let mut texts = Vec::new();
+                for r in records {
+                    let mut conv = String::new();
+                    if let Some(msgs) = r.messages.as_array() {
+                        for m in msgs {
+                            let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                            conv.push_str(&format!("{}: {}\n\n", role.to_uppercase(), content));
+                        }
+                    }
+                    conv.push_str("----------------------------------------\n\n");
+                    texts.push(conv);
+                }
+                Ok(texts.concat())
+            }
             _ => {
                 // Default: JSONL
                 let mut lines = Vec::new();
@@ -162,6 +178,20 @@ impl ExportService {
                 }
                 let bytes = wtr.into_inner().map_err(|e| AppError::Internal(e.to_string()))?;
                 Ok(String::from_utf8_lossy(&bytes).to_string())
+            }
+            "txt" => {
+                let mut texts = Vec::new();
+                for it in &items {
+                    let prompt = it.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+                    let chosen = it.get("chosen").and_then(|v| v.as_str()).unwrap_or("");
+                    let rejected = it.get("rejected").and_then(|v| v.as_str()).unwrap_or("");
+                    let pref = it.get("preference").and_then(|v| v.as_str()).unwrap_or("");
+                    texts.push(format!(
+                        "PROMPT:\n{}\n\nCHOSEN [{}]:\n{}\n\nREJECTED:\n{}\n\n========================================\n\n",
+                        prompt, pref, chosen, rejected
+                    ));
+                }
+                Ok(texts.concat())
             }
             _ => {
                 let lines: Result<Vec<String>, _> = items.into_iter().map(|it| serde_json::to_string(&it)).collect();
@@ -276,5 +306,24 @@ impl ExportService {
             "imported_dpo_tasks": imported_dpo,
             "total_imported": imported_sft + imported_dpo
         }))
+    }
+
+    pub async fn count_sft(pool: &SqlitePool, project_id: &str) -> Result<usize, AppError> {
+        let (_, total) = crate::services::dataset_service::DatasetService::list_sft_records(
+            pool, project_id, None, None, 1, 0,
+        ).await?;
+        Ok(total as usize)
+    }
+
+    pub async fn count_dpo(pool: &SqlitePool, project_id: &str, only_completed: bool) -> Result<usize, AppError> {
+        let (tasks, _) = crate::services::dpo_service::DPOService::list(
+            pool,
+            project_id,
+            if only_completed { Some("completed") } else { None },
+            None,
+            100000,
+            0,
+        ).await?;
+        Ok(tasks.len())
     }
 }

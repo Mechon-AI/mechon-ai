@@ -350,14 +350,6 @@ pub async fn generate_dpo_pair(
     let err_a = res_a.as_ref().err().map(|e| e.message.clone());
     let err_b = res_b.as_ref().err().map(|e| e.message.clone());
 
-    if res_a.is_err() && res_b.is_err() {
-        return Err(AppError::Provider(format!(
-            "Both candidate generations failed.\n• Candidate A: {}\n• Candidate B: {}",
-            err_a.unwrap_or_default(),
-            err_b.unwrap_or_default()
-        )));
-    }
-
     let resp_a_content = res_a.map(|r| r.content).unwrap_or_default();
     let resp_b_content = res_b.map(|r| r.content).unwrap_or_default();
 

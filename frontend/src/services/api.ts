@@ -399,6 +399,28 @@ export const exportDPODataset = (
     onlyCompleted
   })
 
+export interface ExportToFileParams {
+  project_id: string
+  pipeline: 'sft' | 'dpo'
+  format_type: string
+  include_metadata?: boolean
+  only_completed?: boolean
+  destination_path?: string
+}
+
+export interface ExportToFileResult {
+  success: boolean
+  cancelled: boolean
+  file_path?: string
+  record_count: number
+  file_size_bytes: number
+  format: string
+  error?: string
+}
+
+export const exportDatasetToFile = (params: ExportToFileParams): Promise<ExportToFileResult> =>
+  invoke<ExportToFileResult>('export_dataset_to_file', { params })
+
 export const importDatasetFile = async (projectId: string, file: File): Promise<any> => {
   const content = await file.text()
   return invoke('import_dataset_file', { projectId, content })

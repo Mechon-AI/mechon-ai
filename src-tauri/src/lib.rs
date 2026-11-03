@@ -122,6 +122,7 @@ pub fn run() {
             commands::export::export_sft_dataset,
             commands::export::export_dpo_dataset,
             commands::export::import_dataset_file,
+            commands::export::export_dataset_to_file,
 
             // Settings & Maintenance
             commands::settings::get_settings,

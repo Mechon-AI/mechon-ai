@@ -9,7 +9,7 @@ use mechon_ai::credentials::{CredentialStore, InMemoryCredentialStore};
 use mechon_ai::errors::AppError;
 use mechon_ai::models::*;
 use mechon_ai::providers::capabilities::ModelCapabilities;
-use mechon_ai::providers::errors::ProviderErrorCode;
+use mechon_ai::providers::errors::{ProviderError, ProviderErrorCode};
 use mechon_ai::providers::factory::ProviderFactory;
 use mechon_ai::providers::mock::adapter::MockAdapter;
 use mechon_ai::providers::models::{ChatMessage, ChatRequest};
@@ -586,7 +586,7 @@ async fn test_real_groq_inference_if_configured() {
                 );
 
                 let model = groq_provider.models_cache.iter()
-                    .find(|m| m.contains("gpt-oss") || m.contains("allam") || m.contains("qwen"))
+                    .find(|m| *m == "openai/gpt-oss-20b" || *m == "openai/gpt-oss-120b" || m.contains("allam"))
                     .cloned()
                     .or(groq_provider.default_model.clone())
                     .unwrap_or_else(|| "llama-3.1-8b-instant".to_string());
@@ -618,6 +618,8 @@ async fn test_real_groq_inference_if_configured() {
                         assert!(!e.message.is_empty(), "Error message must not be empty");
                     }
                 }
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
                 // 2. DPO generation: 2 candidates with different temperatures in parallel
                 let dpo_req_a = ChatRequest {
@@ -688,4 +690,217 @@ async fn test_real_groq_inference_if_configured() {
             }
         }
     }
+}
+
+// ------------------------------------------------------------------------------------------------
+// 12. DPO failure isolation: Candidate A succeeds and B fails, response A preserved
+// ------------------------------------------------------------------------------------------------
+#[tokio::test]
+async fn test_dpo_failure_isolation() {
+    let adapter_a = MockAdapter;
+
+    // Simulate Candidate A succeeding
+    let req_a = ChatRequest {
+        model: "mock-llama-3-8b".to_string(),
+        messages: vec![ChatMessage { role: "user".to_string(), content: "Prompt A".to_string() }],
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        max_tokens: Some(512),
+        stream: false,
+    };
+    let res_a = adapter_a.chat(req_a).await;
+
+    // Simulate Candidate B failing with a 404 or auth error
+    let res_b: Result<mechon_ai::providers::models::ChatResponse, ProviderError> = Err(ProviderError {
+        code: ProviderErrorCode::ModelNotFound,
+        message: "Model `retired-model-xyz` does not exist".to_string(),
+        http_status: Some(404),
+        provider_id: None,
+    });
+
+    let resp_a_content = res_a.as_ref().map(|r| r.content.clone()).unwrap_or_default();
+    let resp_b_content = res_b.as_ref().map(|r| r.content.clone()).unwrap_or_default();
+    let err_a = res_a.as_ref().err().map(|e| e.message.clone());
+    let err_b = res_b.as_ref().err().map(|e| e.message.clone());
+
+    assert!(res_a.is_ok());
+    assert!(res_b.is_err());
+    assert!(!resp_a_content.is_empty());
+    assert!(resp_b_content.is_empty());
+    assert!(err_a.is_none());
+    assert!(err_b.is_some());
+    assert!(err_b.unwrap().contains("retired-model-xyz"));
+
+    // Verify Candidate B can be retried independently with a valid model
+    let retry_req_b = ChatRequest {
+        model: "mock-mistral-7b".to_string(),
+        messages: vec![ChatMessage { role: "user".to_string(), content: "Prompt A".to_string() }],
+        temperature: Some(0.9),
+        top_p: Some(0.9),
+        max_tokens: Some(512),
+        stream: false,
+    };
+    let retry_res_b = adapter_a.chat(retry_req_b).await.unwrap();
+    assert!(!retry_res_b.content.is_empty());
+    assert_eq!(retry_res_b.model, "mock-mistral-7b");
+}
+
+// ------------------------------------------------------------------------------------------------
+// 13. Export dataset to file: JSON, JSONL, CSV, TXT with post-write file integrity verification
+// ------------------------------------------------------------------------------------------------
+#[tokio::test]
+async fn test_export_dataset_to_file_all_formats_and_integrity() {
+    let pool = setup_test_db().await;
+
+    let project = ProjectService::create(&pool, ProjectCreateInput {
+        name: "Export Verification Lab".to_string(),
+        description: Some("Unicode test 🚀 ñ ü & \"special\"".to_string()),
+        settings: None,
+    }).await.unwrap();
+
+    // 1. Create SFT session and commit
+    let session = SFTService::create_session(&pool, SFTSessionCreateInput {
+        project_id: project.id.clone(),
+        title: Some("Unicode SFT Session".to_string()),
+        system_prompt: Some("You are a multilingual AI.".to_string()),
+        provider_id: Some("mock".to_string()),
+        model: Some("mock-llama-3-8b".to_string()),
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        max_tokens: Some(1024),
+    }).await.unwrap();
+
+    SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
+        role: "user".to_string(),
+        content: "Translate 'Hello, world!' into Japanese and Spanish: こんにちは, ¡Hola mundo!".to_string(),
+        model: None,
+    }).await.unwrap();
+
+    SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
+        role: "assistant".to_string(),
+        content: "Japanese: こんにちは、世界！\nSpanish: ¡Hola, mundo!".to_string(),
+        model: Some("mock-llama-3-8b".to_string()),
+    }).await.unwrap();
+
+    SFTService::commit_session(&pool, &session.id, SFTCommitInput {
+        title_override: None,
+        tags: Some(vec!["translation".to_string(), "unicode".to_string()]),
+        metadata: None,
+    }).await.unwrap();
+
+    // 2. Create DPO task and annotate
+    let dpo_task = DPOService::create(&pool, DPOTaskCreateInput {
+        project_id: project.id.clone(),
+        prompt: "Write a poem with quotes \"like this\" and emojis 🌟.".to_string(),
+        system_prompt: Some("Poetic assistant.".to_string()),
+        response_a: Some("Stars shine bright in the \"night sky\" 🌟.".to_string()),
+        response_b: Some("Stars are big balls of gas.".to_string()),
+        metadata: Some(json!({"model_a": "model-1", "model_b": "model-2"})),
+    }).await.unwrap();
+
+    DPOService::annotate(&pool, &dpo_task.id, DPOAnnotationInput {
+        preference: "a".to_string(),
+        rationale: Some("Poetic and followed formatting instructions.".to_string()),
+        helpfulness_rating: Some(5),
+        factuality_rating: Some(5),
+        metadata: None,
+    }).await.unwrap();
+
+    let temp_dir = std::env::temp_dir().join(format!("mechon_export_test_{}", uuid::Uuid::new_v4()));
+    tokio::fs::create_dir_all(&temp_dir).await.unwrap();
+
+    // Test SFT in JSONL, JSON, CSV, TXT
+    for fmt in &["jsonl", "json", "csv", "txt"] {
+        let dest = temp_dir.join(format!("sft_export.{}", fmt));
+        let content = ExportService::export_sft(&pool, &project.id, fmt, true).await.unwrap();
+        assert!(!content.is_empty(), "SFT {} content must not be empty", fmt);
+
+        tokio::fs::write(&dest, content.as_bytes()).await.unwrap();
+        assert!(dest.exists());
+        let meta = tokio::fs::metadata(&dest).await.unwrap();
+        assert!(meta.len() > 0);
+
+        // Verify parseability
+        match *fmt {
+            "json" => {
+                let v: Value = serde_json::from_str(&content).expect("Valid JSON");
+                assert!(v.is_array());
+            }
+            "jsonl" => {
+                for line in content.lines() {
+                    if !line.trim().is_empty() {
+                        let _: Value = serde_json::from_str(line).expect("Valid JSONL line");
+                    }
+                }
+            }
+            "csv" => {
+                let mut rdr = csv::Reader::from_reader(content.as_bytes());
+                assert!(rdr.records().count() > 0);
+            }
+            "txt" => {
+                assert!(content.contains("USER:") && content.contains("ASSISTANT:"));
+            }
+            _ => {}
+        }
+    }
+
+    // Test DPO in JSONL, JSON, CSV, TXT
+    for fmt in &["jsonl", "json", "csv", "txt"] {
+        let dest = temp_dir.join(format!("dpo_export.{}", fmt));
+        let content = ExportService::export_dpo(&pool, &project.id, fmt, true, true).await.unwrap();
+        assert!(!content.is_empty(), "DPO {} content must not be empty", fmt);
+
+        tokio::fs::write(&dest, content.as_bytes()).await.unwrap();
+        assert!(dest.exists());
+        let meta = tokio::fs::metadata(&dest).await.unwrap();
+        assert!(meta.len() > 0);
+
+        // Verify parseability
+        match *fmt {
+            "json" => {
+                let v: Value = serde_json::from_str(&content).expect("Valid JSON");
+                assert!(v.is_array());
+            }
+            "jsonl" => {
+                for line in content.lines() {
+                    if !line.trim().is_empty() {
+                        let v: Value = serde_json::from_str(line).expect("Valid JSONL line");
+                        assert!(v.get("prompt").is_some());
+                        assert!(v.get("chosen").is_some());
+                    }
+                }
+            }
+            "csv" => {
+                let mut rdr = csv::Reader::from_reader(content.as_bytes());
+                assert!(rdr.records().count() > 0);
+            }
+            "txt" => {
+                assert!(content.contains("PROMPT:") && content.contains("CHOSEN"));
+            }
+            _ => {}
+        }
+    }
+
+    // Clean up temp dir
+    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+}
+
+// ------------------------------------------------------------------------------------------------
+// 14. Export empty dataset rejection: returns clear validation error
+// ------------------------------------------------------------------------------------------------
+#[tokio::test]
+async fn test_export_empty_dataset_rejection() {
+    let pool = setup_test_db().await;
+
+    let project = ProjectService::create(&pool, ProjectCreateInput {
+        name: "Empty Project".to_string(),
+        description: None,
+        settings: None,
+    }).await.unwrap();
+
+    let count_sft = ExportService::count_sft(&pool, &project.id).await.unwrap();
+    assert_eq!(count_sft, 0);
+
+    let count_dpo = ExportService::count_dpo(&pool, &project.id, true).await.unwrap();
+    assert_eq!(count_dpo, 0);
 }

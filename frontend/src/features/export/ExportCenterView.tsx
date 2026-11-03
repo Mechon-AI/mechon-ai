@@ -8,14 +8,18 @@ import {
   Check,
   RefreshCw,
   Eye,
-  FileText
+  FileText,
+  CheckCircle2
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
 import {
   exportSFTDataset,
   exportDPODataset,
-  importDatasetFile
+  importDatasetFile,
+  exportDatasetToFile,
+  type ExportToFileResult
 } from '../../services/api'
+import { formatErrorMessage } from '../../utils/errors'
 
 export const ExportCenterView: React.FC = () => {
   const { activeProjectId, getActiveProject, ensureActiveProject } = useProjectStore()
@@ -66,24 +70,52 @@ export const ExportCenterView: React.FC = () => {
       }
       setPreviewContent(text || '(No committed records in this dataset yet. Create and commit records first.)')
     } catch (err: any) {
-      setPreviewContent(`Export preview: ${err.message}`)
+      setPreviewContent(`Export preview: ${formatErrorMessage(err)}`)
     } finally {
       setIsLoadingPreview(false)
     }
   }
 
-  const handleDownload = () => {
-    if (!previewContent) return
-    const blob = new Blob([previewContent], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const ext = format === 'jsonl' ? 'jsonl' : format === 'csv' ? 'csv' : 'json'
-    a.download = `${activeProject?.name || 'dataset'}_${pipeline}_export.${ext}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const [isExporting, setIsExporting] = useState(false)
+  const [lastExportResult, setLastExportResult] = useState<ExportToFileResult | null>(null)
+
+  const handleExportToFile = async () => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (!pId) {
+      showFeedback('error', 'No active project selected.')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const res = await exportDatasetToFile({
+        project_id: pId,
+        pipeline,
+        format_type: format,
+        include_metadata: includeMetadata,
+        only_completed: true
+      })
+
+      if (res.cancelled) {
+        showFeedback('error', 'Export was cancelled (no file selected).')
+        return
+      }
+
+      if (res.success && res.file_path) {
+        setLastExportResult(res)
+        showFeedback(
+          'success',
+          `Successfully exported ${res.record_count} records to ${res.file_path} (${res.file_size_bytes} bytes). Integrity verified.`
+        )
+      }
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Export failed'))
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleCopy = () => {
@@ -101,9 +133,9 @@ export const ExportCenterView: React.FC = () => {
       setImportReport(res)
       setImportFile(null)
       loadPreview()
-      showFeedback('success', `Import completed: ${res.imported_records || 0} records imported successfully.`)
+      showFeedback('success', `Import completed: ${res.total_imported || 0} records imported successfully.`)
     } catch (err: any) {
-      showFeedback('error', `Import failed: ${err.message}`)
+      showFeedback('error', formatErrorMessage(err, 'Import failed'))
     } finally {
       setIsImporting(false)
     }
@@ -156,7 +188,7 @@ export const ExportCenterView: React.FC = () => {
             </span>
 
             <div className="space-y-1.5">
-              {['jsonl', 'json', 'csv'].map(f => (
+              {['jsonl', 'json', 'csv', 'txt'].map(f => (
                 <label key={f} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary cursor-pointer">
                   <input
                     type="radio"
@@ -168,7 +200,7 @@ export const ExportCenterView: React.FC = () => {
                   />
                   <span className="font-mono uppercase text-xs font-semibold">{f}</span>
                   <span className="text-[10px] text-muted-foreground ml-auto">
-                    {f === 'jsonl' ? 'Standard Training' : f === 'json' ? 'Raw Array' : 'Spreadsheet'}
+                    {f === 'jsonl' ? 'Standard Training' : f === 'json' ? 'Raw Array' : f === 'csv' ? 'Spreadsheet' : 'Plain Text'}
                   </span>
                 </label>
               ))}
@@ -189,12 +221,27 @@ export const ExportCenterView: React.FC = () => {
             </label>
 
             <button
-              onClick={handleDownload}
-              disabled={!previewContent || isLoadingPreview}
+              onClick={handleExportToFile}
+              disabled={isLoadingPreview || isExporting}
               className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 pt-2"
             >
-              <Download className="h-4 w-4" /> Download Export File
+              <Download className={`h-4 w-4 ${isExporting ? 'animate-spin' : ''}`} />
+              {isExporting ? 'Exporting to File...' : 'Export Dataset to File (Native Dialog)'}
             </button>
+
+            {lastExportResult && lastExportResult.success && (
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] space-y-1">
+                <div className="font-bold flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> File Written & Verified!
+                </div>
+                <div className="truncate font-mono text-[10px] text-foreground" title={lastExportResult.file_path}>
+                  {lastExportResult.file_path}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {lastExportResult.record_count} records • {lastExportResult.file_size_bytes} bytes
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Import Card */}

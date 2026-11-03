@@ -22,7 +22,8 @@ import {
   Info,
   X,
   ExternalLink,
-  Code
+  Code,
+  RefreshCw
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
@@ -31,7 +32,7 @@ import { useThemeStore } from '../../stores/useThemeStore'
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate()
   const { projects, activeProjectId, setActiveProjectId, fetchProjects, getActiveProject } = useProjectStore()
-  const { providers, activeProviderId, activeModel, isOnline, fetchProviders } = useProviderStore()
+  const { providers, activeProviderId, activeModel, isOnline, fetchProviders, setActiveProviderId, setActiveModel } = useProviderStore()
   const { theme, toggleTheme } = useThemeStore()
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -45,6 +46,14 @@ export const AppLayout: React.FC = () => {
 
   const activeProject = getActiveProject()
   const activeProvider = providers.find(p => p.id === activeProviderId)
+
+  const getModelsForProvider = (pId: string): string[] => {
+    const p = providers.find(item => item.id === pId)
+    if (!p) return []
+    if (p.models_cache && p.models_cache.length > 0) return p.models_cache
+    if (p.default_model) return [p.default_model]
+    return []
+  }
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -199,9 +208,56 @@ export const AppLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              100% Local Offline
-            </span>
+            {/* Direct Model Selection in Inference */}
+            <div className="hidden sm:flex items-center gap-1.5 bg-secondary/80 border border-border/80 px-2.5 py-1 rounded-lg text-xs shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1 tracking-wider">
+                <Cpu className="h-3.5 w-3.5 text-primary" /> Inference:
+              </span>
+              <select
+                value={activeProviderId}
+                onChange={e => {
+                  const newPid = e.target.value
+                  setActiveProviderId(newPid)
+                  const p = providers.find(item => item.id === newPid)
+                  const newM = (p?.models_cache && p.models_cache[0]) || p?.default_model || ''
+                  if (newM) setActiveModel(newM)
+                }}
+                className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px] truncate"
+                title="Select Active Inference Provider"
+              >
+                {providers.map(p => (
+                  <option key={p.id} value={p.id} className="bg-card text-foreground">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
+              <span className="text-muted-foreground/60">/</span>
+
+              <select
+                value={activeModel}
+                onChange={e => setActiveModel(e.target.value)}
+                className="bg-transparent text-[11px] font-mono text-foreground outline-none cursor-pointer max-w-[180px] truncate"
+                title="Select Active Inference Model"
+              >
+                {getModelsForProvider(activeProviderId).map(m => (
+                  <option key={m} value={m} className="bg-card text-foreground font-mono">
+                    {m}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => fetchProviders()}
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors ml-0.5"
+                title="Refresh Provider Models"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </button>
+
+              <Circle className={`h-2 w-2 fill-current ${isOnline ? 'text-emerald-500' : 'text-amber-500'}`} />
+            </div>
 
             <button
               onClick={toggleTheme}

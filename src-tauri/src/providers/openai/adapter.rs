@@ -130,6 +130,8 @@ impl ModelProvider for OpenAICompatibleAdapter {
         let content = json
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
+            .or_else(|| json.pointer("/choices/0/message/reasoning_content").and_then(|v| v.as_str()))
+            .or_else(|| json.pointer("/choices/0/text").and_then(|v| v.as_str()))
             .unwrap_or("")
             .to_string();
 

@@ -8,16 +8,19 @@ import {
   MessageSquareCode,
   GitCompare,
   Copy,
-  Check
+  Check,
+  RefreshCw,
+  Cpu
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useProviderStore } from '../../stores/useProviderStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { generateCompletion, createSFTSession, addSFTMessage, createDPOTask } from '../../services/api'
+import { formatErrorMessage } from '../../utils/errors'
 
 export const PlaygroundView: React.FC = () => {
   const navigate = useNavigate()
-  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel } = useProviderStore()
+  const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel, fetchProviders } = useProviderStore()
   const { activeProjectId, ensureActiveProject } = useProjectStore()
 
   const [prompt, setPrompt] = useState('Explain gradient descent and provide a numerical example with eta = 0.1.')
@@ -28,10 +31,20 @@ export const PlaygroundView: React.FC = () => {
   const [output, setOutput] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const getModelsForProvider = (pId: string): string[] => {
+    const p = providers.find(item => item.id === pId)
+    if (!p) return []
+    if (p.models_cache && p.models_cache.length > 0) return p.models_cache
+    if (p.default_model) return [p.default_model]
+    return []
+  }
 
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return
     setIsGenerating(true)
+    setErrorMessage(null)
     try {
       const res = await generateCompletion({
         provider_id: activeProviderId,
@@ -44,7 +57,7 @@ export const PlaygroundView: React.FC = () => {
       })
       setOutput(res.content || '')
     } catch (err: any) {
-      alert(`Generation failed: ${err.message}`)
+      setErrorMessage(formatErrorMessage(err, 'Generation failed'))
     } finally {
       setIsGenerating(false)
     }
@@ -117,6 +130,63 @@ export const PlaygroundView: React.FC = () => {
         {/* Prompt Input & Controls */}
         <div className="space-y-4">
           <div className="p-5 rounded-xl bg-card border border-border space-y-4 shadow-sm text-xs">
+            {/* Direct Model Selection in Inference */}
+            <div className="space-y-2 pb-3 border-b border-border">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-foreground uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                  <Cpu className="h-3.5 w-3.5 text-primary" /> Inference Configuration
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fetchProviders()}
+                  className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                  title="Refresh providers and models"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5 uppercase font-medium">Provider</label>
+                  <select
+                    value={activeProviderId}
+                    onChange={e => {
+                      const newP = e.target.value
+                      setActiveProviderId(newP)
+                      const p = providers.find(item => item.id === newP)
+                      const newM = (p?.models_cache && p.models_cache[0]) || p?.default_model || ''
+                      if (newM) setActiveModel(newM)
+                    }}
+                    className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none"
+                  >
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5 uppercase font-medium">Model</label>
+                  <select
+                    value={activeModel}
+                    onChange={e => setActiveModel(e.target.value)}
+                    className="w-full text-xs p-1.5 rounded bg-secondary/80 border border-border focus:ring-1 focus:ring-primary outline-none font-mono"
+                  >
+                    {getModelsForProvider(activeProviderId).map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {errorMessage && (
+              <div className="p-2.5 rounded-lg bg-destructive/15 border border-destructive/30 text-destructive text-xs">
+                {errorMessage}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">
                 System Instructions
