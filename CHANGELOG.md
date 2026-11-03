@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Conversational DPO Preference Schema:** Native support for Hugging Face TRL multi-turn conversational format (`prompt: [...]`, `chosen: [...]`, `rejected: [...]`).
   - **Fine-Tuning Engineering Navigation:** Grouped sidebar navigation separating Core Studio, Fine-Tuning Engineering, and Dataset Management.
 
+### Fixed
+- **Engineering Workspace Defensive Data Handling:** Resolved uncaught runtime exceptions (`d.target_model.toUpperCase()`) and blank-screen rendering failures across all Engineering views.
+- **Dual-Alias Schema Backward Compatibility:** Introduced dual Serde aliases in Rust engineering models and safe normalization pipelines in `frontend/src/utils/engineeringNormalizers.ts`, ensuring seamless backward compatibility with historical SQLite records.
+- **Fault-Tolerant Workspace Error Boundaries:** Embedded component-level `<ErrorBoundary>` wrappers around all Engineering workspace routes in `App.tsx` with dedicated recovery cards.
+
 ---
 
 ## [1.1.1] - 2026-11-03
