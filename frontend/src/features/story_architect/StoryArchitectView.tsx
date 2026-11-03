@@ -20,7 +20,6 @@ import {
 import { listen } from '@tauri-apps/api/event'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
-import { useResizable } from '../../hooks/useResizable'
 import { ResizeDivider } from '../../components/common/ResizeDivider'
 import type {
   StorySession,
@@ -65,14 +64,15 @@ import {
   normalizePlanningSpec,
   normalizeMilestone
 } from '../../utils/engineeringNormalizers'
-import { StorySessionList } from './StorySessionList'
-import { PlanningEditor } from './PlanningEditor'
-import { StoryTimeline } from './StoryTimeline'
-import { StoryConversationViewer } from './StoryConversationViewer'
-import { PromptWorkbench } from './PromptWorkbench'
-import { NarrativeStateInspector } from './NarrativeStateInspector'
-import { AgentActivityMonitor } from './AgentActivityMonitor'
+import { StoryArchitectToolbar } from './StoryArchitectToolbar'
+import { StoryLeftDock } from './StoryLeftDock'
+import { CentralConversationViewport } from './CentralConversationViewport'
+import { StoryRightDock } from './StoryRightDock'
+import { StoryBottomDock } from './StoryBottomDock'
 import { CommitToSFTModal } from './CommitToSFTModal'
+import { useInspectorStore } from '../../editor/stores/useInspectorStore'
+import { useConsoleStore } from '../../editor/stores/useConsoleStore'
+import { useStoryWorkspaceStore } from './useStoryWorkspaceStore'
 
 export const StoryArchitectView: React.FC = () => {
   const { activeProjectId } = useProjectStore()
@@ -84,6 +84,13 @@ export const StoryArchitectView: React.FC = () => {
     setActiveModel,
     fetchProviders
   } = useProviderStore()
+
+  const {
+    layout,
+    setLeftWidth,
+    setRightWidth,
+    setBottomHeight
+  } = useStoryWorkspaceStore()
 
   // Sessions state
   const [sessions, setSessions] = useState<StorySession[]>([])
@@ -105,8 +112,6 @@ export const StoryArchitectView: React.FC = () => {
   const [executionError, setExecutionError] = useState<string | null>(null)
 
   // UI state
-  const [planExpanded, setPlanExpanded] = useState(true)
-  const [rightTab, setRightTab] = useState<'narrative' | 'agent'>('narrative')
   const [commitModalOpen, setCommitModalOpen] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const [isExecutingTurn, setIsExecutingTurn] = useState(false)
@@ -118,53 +123,99 @@ export const StoryArchitectView: React.FC = () => {
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
 
-  // Resizable Panels Hook
-  const {
-    size: scenarioListWidth,
-    isDragging: isScenarioDragging,
-    handleMouseDown: handleScenarioResize,
-    handleDoubleClick: handleScenarioReset,
-    resetToDefault: resetScenarioWidth
-  } = useResizable({
-    key: 'story_scenario_list_width',
-    initialSize: 288,
-    minSize: 220,
-    maxSize: 420
-  })
+  // Dragging state for splitters
+  const [isDraggingLeft, setIsDraggingLeft] = useState(false)
+  const [isDraggingRight, setIsDraggingRight] = useState(false)
+  const [isDraggingBottom, setIsDraggingBottom] = useState(false)
 
-  const {
-    size: specEditorHeight,
-    isDragging: isSpecDragging,
-    handleMouseDown: handleSpecResize,
-    handleDoubleClick: handleSpecReset,
-    resetToDefault: resetSpecHeight
-  } = useResizable({
-    key: 'story_spec_editor_height',
-    initialSize: 260,
-    minSize: 150,
-    maxSize: 500,
-    direction: 'vertical'
-  })
+  // Left Splitter Resize Handler
+  const handleLeftResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDraggingLeft(true)
 
-  const {
-    size: rightPaneWidth,
-    isDragging: isRightPaneDragging,
-    handleMouseDown: handleRightPaneResize,
-    handleDoubleClick: handleRightPaneReset,
-    resetToDefault: resetRightPaneWidth
-  } = useResizable({
-    key: 'story_right_pane_width',
-    initialSize: 340,
-    minSize: 280,
-    maxSize: 550,
-    reverse: true
-  })
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      setLeftWidth(moveEvent.clientX)
+    }
 
-  const handleResetLayout = () => {
-    resetScenarioWidth()
-    resetSpecHeight()
-    resetRightPaneWidth()
-  }
+    const onMouseUp = () => {
+      setIsDraggingLeft(false)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [setLeftWidth])
+
+  // Right Splitter Resize Handler
+  const handleRightResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDraggingRight(true)
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      setRightWidth(window.innerWidth - moveEvent.clientX)
+    }
+
+    const onMouseUp = () => {
+      setIsDraggingRight(false)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [setRightWidth])
+
+  // Bottom Splitter Resize Handler
+  const handleBottomResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDraggingBottom(true)
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      setBottomHeight(window.innerHeight - moveEvent.clientY)
+    }
+
+    const onMouseUp = () => {
+      setIsDraggingBottom(false)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [setBottomHeight])
+
+  // Synchronize session inference configuration with active provider/model
+  useEffect(() => {
+    if (activeSession && activeProviderId && activeModel) {
+      if (
+        activeSession.inference_provider_id !== activeProviderId ||
+        activeSession.inference_model !== activeModel
+      ) {
+        handleUpdateAgentConfig('inference', activeProviderId, activeModel)
+      }
+    }
+  }, [activeProviderId, activeModel, activeSession?.id])
+
+  // Contextual Inspector synchronization
+  useEffect(() => {
+    if (activeSession) {
+      useInspectorStore.getState().inspect({
+        type: 'story_agent',
+        id: activeSession.id,
+        title: `Story: ${activeSession.title}`,
+        data: {
+          name: activeSession.title,
+          role: activeSession.interaction_type || 'Autonomous Roleplay Architect',
+          provider: activeSession.inference_provider_id || activeProviderId,
+          model: activeSession.inference_model || activeModel,
+          temperature: activeSession.inference_agent_config?.temperature ?? 0.7,
+          max_tokens: activeSession.inference_agent_config?.max_tokens ?? 2048,
+          instructions: activeSession.description || 'Story Architect multi-turn agent'
+        }
+      })
+    }
+  }, [activeSession?.id])
 
   // Fetch all sessions on mount or when activeProjectId changes
   useEffect(() => {
@@ -183,14 +234,13 @@ export const StoryArchitectView: React.FC = () => {
     let unlistenError: (() => void) | undefined
 
     const setupListeners = async () => {
-      unlistenToken = await listen<any>(`story-stream-token-${activeSession.id}`, event => {
+      unlistenToken = await listen<any>(`story-stream-token-${activeSession.id}`, (event) => {
         setIsStreaming(true)
         setStreamingContent(event.payload.accumulated || '')
       })
 
       unlistenDone = await listen<any>(`story-stream-done-${activeSession.id}`, () => {
         setIsStreaming(false)
-        // Keep streamingContent intact until story-turn-completed fires!
       })
 
       unlistenCompleted = await listen<any>(`story-turn-completed-${activeSession.id}`, () => {
@@ -199,7 +249,7 @@ export const StoryArchitectView: React.FC = () => {
         loadSessionDetails(activeSession.id)
       })
 
-      unlistenError = await listen<any>(`story-stream-error-${activeSession.id}`, event => {
+      unlistenError = await listen<any>(`story-stream-error-${activeSession.id}`, (event) => {
         setIsStreaming(false)
         setStreamingContent('')
         setExecutionError(event.payload.error || 'Model execution error')
@@ -259,7 +309,9 @@ export const StoryArchitectView: React.FC = () => {
       setMilestones((Array.isArray(milesRes) ? milesRes : []).map(normalizeMilestone))
       setMessages(Array.isArray(msgsRes) ? msgsRes : [])
 
-      const proposed = (Array.isArray(historyRes) ? historyRes : []).find(h => h.status === 'proposed')
+      const proposed = (Array.isArray(historyRes) ? historyRes : []).find(
+        (h) => h.status === 'proposed'
+      )
       setProposedPrompt(proposed || null)
 
       if (stateRes) setNarrativeState(stateRes)
@@ -293,7 +345,7 @@ export const StoryArchitectView: React.FC = () => {
   const handleDeleteSession = async (sessionId: string) => {
     try {
       await deleteStorySession(sessionId)
-      const remaining = sessions.filter(s => s.id !== sessionId)
+      const remaining = sessions.filter((s) => s.id !== sessionId)
       setSessions(remaining)
       if (activeSession?.id === sessionId) {
         if (remaining.length > 0) {
@@ -343,8 +395,17 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('planning')
     setExecutionError(null)
     try {
-      const planningProvider = activeSession.planning_provider_id || activeSession.planning_agent_config?.provider_id || activeProviderId || undefined
-      const planningModel = activeSession.planning_model || activeSession.planning_agent_config?.model_id || activeSession.planning_agent_config?.model || activeModel || undefined
+      const planningProvider =
+        activeProviderId ||
+        activeSession.planning_provider_id ||
+        activeSession.planning_agent_config?.provider_id ||
+        undefined
+      const planningModel =
+        activeModel ||
+        activeSession.planning_model ||
+        activeSession.planning_agent_config?.model_id ||
+        activeSession.planning_agent_config?.model ||
+        undefined
       const p = await generateNextPrompt(
         activeSession.id,
         feedback,
@@ -363,14 +424,27 @@ export const StoryArchitectView: React.FC = () => {
     }
   }
 
-  const handleApproveAndExecute = async (content: string, promptHistoryId?: string, edited?: boolean) => {
+  const handleApproveAndExecute = async (
+    content: string,
+    promptHistoryId?: string,
+    edited?: boolean
+  ) => {
     if (!activeSession) return
     setIsExecutingTurn(true)
     setStateMachineStage('generating')
     setExecutionError(null)
     try {
-      const inferenceProvider = activeSession.inference_provider_id || activeSession.inference_agent_config?.provider_id || activeProviderId || undefined
-      const inferenceModel = activeSession.inference_model || activeSession.inference_agent_config?.model_id || activeSession.inference_agent_config?.model || activeModel || undefined
+      const inferenceProvider =
+        activeProviderId ||
+        activeSession.inference_provider_id ||
+        activeSession.inference_agent_config?.provider_id ||
+        undefined
+      const inferenceModel =
+        activeModel ||
+        activeSession.inference_model ||
+        activeSession.inference_agent_config?.model_id ||
+        activeSession.inference_agent_config?.model ||
+        undefined
       const result: AutoStepResult = await approveAndExecuteTurn(
         activeSession.id,
         content,
@@ -381,7 +455,8 @@ export const StoryArchitectView: React.FC = () => {
       )
 
       if (result.logs && result.logs.length > 0) {
-        setExecutionLogs(prev => [...result.logs, ...prev].slice(0, 50))
+        setExecutionLogs((prev) => [...result.logs, ...prev].slice(0, 50))
+        result.logs.forEach((l) => useConsoleStore.getState().addLog('info', 'agent', l))
       }
 
       if (result.evaluation) setLatestEvaluation(result.evaluation)
@@ -414,8 +489,17 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('generating')
     setExecutionError(null)
     try {
-      const inferenceProvider = activeSession.inference_provider_id || activeSession.inference_agent_config?.provider_id || activeProviderId || undefined
-      const inferenceModel = activeSession.inference_model || activeSession.inference_agent_config?.model_id || activeSession.inference_agent_config?.model || activeModel || undefined
+      const inferenceProvider =
+        activeProviderId ||
+        activeSession.inference_provider_id ||
+        activeSession.inference_agent_config?.provider_id ||
+        undefined
+      const inferenceModel =
+        activeModel ||
+        activeSession.inference_model ||
+        activeSession.inference_agent_config?.model_id ||
+        activeSession.inference_agent_config?.model ||
+        undefined
       const result: AutoStepResult = await executeAutonomousStep(
         activeSession.id,
         inferenceProvider,
@@ -423,7 +507,8 @@ export const StoryArchitectView: React.FC = () => {
       )
 
       if (result.logs && result.logs.length > 0) {
-        setExecutionLogs(prev => [...result.logs, ...prev].slice(0, 50))
+        setExecutionLogs((prev) => [...result.logs, ...prev].slice(0, 50))
+        result.logs.forEach((l) => useConsoleStore.getState().addLog('info', 'agent', l))
       }
 
       if (result.pause_reason) {
@@ -469,9 +554,10 @@ export const StoryArchitectView: React.FC = () => {
     model: string
   ) => {
     if (!activeSession) return
-    const current = role === 'planning'
-      ? activeSession.planning_agent_config
-      : role === 'inference'
+    const current =
+      role === 'planning'
+        ? activeSession.planning_agent_config
+        : role === 'inference'
         ? activeSession.inference_agent_config
         : activeSession.evaluation_agent_config
 
@@ -510,7 +596,7 @@ export const StoryArchitectView: React.FC = () => {
       const updated = await updateStorySession(payload)
       const norm = normalizeStorySession(updated)
       setActiveSession(norm)
-      setSessions(prev => prev.map(s => s.id === norm.id ? norm : s))
+      setSessions((prev) => prev.map((s) => (s.id === norm.id ? norm : s)))
     } catch (err) {
       console.error('Failed to update agent config:', err)
     }
@@ -590,10 +676,16 @@ export const StoryArchitectView: React.FC = () => {
     }, 600)
 
     return () => clearTimeout(timer)
-  }, [isAutoRunning, activeSession?.status, activeSession?.execution_mode, isExecutingTurn, isGeneratingPrompt])
+  }, [
+    isAutoRunning,
+    activeSession?.status,
+    activeSession?.execution_mode,
+    isExecutingTurn,
+    isGeneratingPrompt
+  ])
 
   const handleToggleAutoRun = () => {
-    setIsAutoRunning(prev => !prev)
+    setIsAutoRunning((prev) => !prev)
     setExecutionError(null)
   }
 
@@ -611,7 +703,11 @@ export const StoryArchitectView: React.FC = () => {
     }
   }
 
-  const handleCommitSFT = async (title?: string, description?: string, includePlanningMetadata?: boolean) => {
+  const handleCommitSFT = async (
+    title?: string,
+    description?: string,
+    includePlanningMetadata?: boolean
+  ) => {
     if (!activeSession) throw new Error('No active session')
     const res = await commitStoryToSFT({
       session_id: activeSession.id,
@@ -625,298 +721,180 @@ export const StoryArchitectView: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
-      {/* Left Pane: Sessions Drawer */}
-      <div
-        style={{ width: `${scenarioListWidth}px` }}
-        className="shrink-0 h-full overflow-hidden"
-      >
-        <StorySessionList
-          sessions={sessions}
-          activeSessionId={activeSession?.id || null}
-          onSelectSession={handleSelectSession}
-          onCreateSession={handleCreateSession}
-          onDeleteSession={handleDeleteSession}
-          loading={loadingSessions}
-        />
-      </div>
-
-      {/* Resizable Divider: Scenario List */}
-      <ResizeDivider
-        direction="horizontal"
-        isDragging={isScenarioDragging}
-        onMouseDown={handleScenarioResize}
-        onDoubleClick={handleScenarioReset}
-        title="Drag to resize scenario list. Double-click to reset."
+    <div className="flex flex-col h-full w-full overflow-hidden bg-background">
+      {/* 1. Global Story Architect Toolbar */}
+      <StoryArchitectToolbar
+        session={activeSession}
+        activeModel={activeModel}
+        activeProviderId={activeProviderId}
+        isAutoRunning={isAutoRunning}
+        isExecutingTurn={isExecutingTurn}
+        isGeneratingPrompt={isGeneratingPrompt}
+        onToggleAutoRun={handleToggleAutoRun}
+        onToggleAutonomy={handleToggleAutonomy}
+        onOpenCommitModal={() => setCommitModalOpen(true)}
+        hasMessages={messages.length > 0}
       />
 
-      {/* Center Pane: Active Session Studio */}
-      {activeSession ? (
-        <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 border-r border-border">
-          {/* Header Bar */}
-          <div className="h-14 px-4 border-b border-border flex items-center justify-between bg-card/40 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-foreground truncate">
-                    {activeSession.title}
-                  </h2>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-secondary/80 text-foreground uppercase">
-                    {activeSession.interaction_type.replace('_', ' ')}
-                  </span>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase ${
-                    activeSession.status === 'completed'
-                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400'
-                      : activeSession.status === 'paused'
-                      ? 'bg-amber-950/40 border-amber-800 text-amber-400'
-                      : 'bg-primary/20 border-primary/40 text-primary'
-                  }`}>
-                    {activeSession.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
-                  <span>Target: {activeSession.target_turns} turns</span>
-                  <span>&bull;</span>
-                  <span>Tokens: {activeSession.tokens_used.toLocaleString()}</span>
-                  <span>&bull;</span>
-                  <span className="capitalize">Mode: {activeSession.execution_mode.replace('_', ' ')}</span>
-                </div>
-              </div>
-            </div>
+      {/* 2. Main Workspace Body with Docked Surrounding Panels */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        {/* Left Dock Panel */}
+        {layout.leftDockVisible && (
+          <>
+            <aside
+              style={{ width: `${layout.leftDockWidth}px` }}
+              className="h-full shrink-0 overflow-hidden flex flex-col"
+            >
+              <StoryLeftDock
+                sessions={sessions}
+                activeSession={activeSession}
+                spec={spec}
+                milestones={milestones}
+                messages={messages}
+                loadingSessions={loadingSessions}
+                onSelectSession={handleSelectSession}
+                onCreateSession={handleCreateSession}
+                onDeleteSession={handleDeleteSession}
+                onSaveMilestones={handleSaveMilestones}
+                savingMilestones={savingMilestones}
+              />
+            </aside>
+            <ResizeDivider
+              direction="horizontal"
+              isDragging={isDraggingLeft}
+              onMouseDown={handleLeftResizeStart}
+              onDoubleClick={() => setLeftWidth(280)}
+              title="Drag to resize Left Explorer Dock. Double-click to reset."
+            />
+          </>
+        )}
 
-            <div className="flex items-center gap-2">
-              {/* Provider & Model Selector */}
-              <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/60 border border-border text-xs">
-                <Cpu className="h-3.5 w-3.5 text-primary ml-1" />
-                <select
-                  value={activeProviderId}
-                  onChange={e => {
-                    const pId = e.target.value
-                    setActiveProviderId(pId)
-                    const targetP = providers.find(p => p.id === pId)
-                    const newModel = targetP?.default_model || (targetP?.models_cache && targetP.models_cache[0]) || 'default'
-                    setActiveModel(newModel)
-                    if (activeSession) {
-                      handleUpdateAgentConfig('inference', pId, newModel)
-                    }
+        {/* Central Workspace: The Dominant Narrative Viewport */}
+        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
+          {activeSession ? (
+            <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+              {/* Central Conversation Viewport (100% Dedicated Narrative Scene) */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <CentralConversationViewport
+                  sessionId={activeSession.id}
+                  sessionTitle={activeSession.title}
+                  messages={messages}
+                  characters={spec?.character_profiles || []}
+                  currentArc={narrativeState?.current_arc}
+                  streamingContent={streamingContent}
+                  isStreaming={isStreaming}
+                  onEditMessage={handleEditMessage}
+                  onRegenerateTurn={handleRegenerateTurn}
+                  onRevisionRestored={handleRevisionRestored}
+                  onFocusComposer={() => {
+                    useStoryWorkspaceStore.getState().setRightTab('workbench')
                   }}
-                  className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer"
-                >
-                  {providers.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-
-                <span className="text-muted-foreground/60">•</span>
-
-                {(() => {
-                  const currentP = providers.find(p => p.id === activeProviderId)
-                  const availableModels = currentP?.models_cache && currentP.models_cache.length > 0
-                    ? currentP.models_cache
-                    : [activeModel || 'default']
-                  const currentModel = availableModels.includes(activeModel)
-                    ? activeModel
-                    : availableModels[0]
-
-                  return (
-                    <select
-                      value={currentModel}
-                      onChange={e => {
-                        const m = e.target.value
-                        setActiveModel(m)
-                        if (activeSession) {
-                          handleUpdateAgentConfig('inference', activeProviderId, m)
-                        }
-                      }}
-                      className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer max-w-[140px] truncate font-mono"
-                    >
-                      {availableModels.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  )
-                })()}
-              </div>
-
-              <button
-                onClick={handleResetLayout}
-                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md border border-border/80 hover:bg-secondary transition-colors"
-                title="Reset all panels to default layout"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span className="hidden sm:inline">Reset Layout</span>
-              </button>
-
-              <button
-                onClick={() => setPlanExpanded(!planExpanded)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-md border border-border hover:bg-secondary transition-colors"
-                title={planExpanded ? 'Collapse Plan Specification' : 'Expand Plan Specification'}
-              >
-                {planExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                <span>Plan Spec</span>
-              </button>
-
-              <button
-                onClick={() => setCommitModalOpen(true)}
-                disabled={messages.length === 0 || Boolean(activeSession.sft_session_id)}
-                className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg shadow-sm transition-colors disabled:opacity-40"
-                title={activeSession.sft_session_id ? 'Already committed to SFT Corpus' : 'Commit conversation turns to Mechon SFT Corpus'}
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>{activeSession.sft_session_id ? 'Committed to SFT' : 'Commit to SFT'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Expandable Planning Spec Editor */}
-          {planExpanded && spec && (
-            <>
-              <div
-                style={{ height: `${specEditorHeight}px` }}
-                className="shrink-0 overflow-hidden"
-              >
-                <PlanningEditor
-                  spec={spec}
-                  onSaveSpec={handleSaveSpec}
-                  saving={savingSpec}
                 />
               </div>
 
-              {/* Resizable Divider: Spec Editor */}
-              <ResizeDivider
-                direction="vertical"
-                isDragging={isSpecDragging}
-                onMouseDown={handleSpecResize}
-                onDoubleClick={handleSpecReset}
-                title="Drag to resize plan specification. Double-click to reset."
-              />
-            </>
+              {/* Bottom Dock Panel (Workbench, Logs, Preview) */}
+              {layout.bottomDockVisible && (
+                <>
+                  <ResizeDivider
+                    direction="vertical"
+                    isDragging={isDraggingBottom}
+                    onMouseDown={handleBottomResizeStart}
+                    onDoubleClick={() => setBottomHeight(220)}
+                    title="Drag to resize Bottom Control Room Dock. Double-click to reset."
+                  />
+                  <div
+                    style={{ height: `${layout.bottomDockHeight}px` }}
+                    className="shrink-0 overflow-hidden flex flex-col"
+                  >
+                    <StoryBottomDock
+                      session={activeSession}
+                      messages={messages}
+                      proposedPrompt={proposedPrompt}
+                      executionMode={activeSession.execution_mode}
+                      onApproveAndExecute={handleApproveAndExecute}
+                      onRegenerate={handleGenerateNextPrompt}
+                      onExecuteAutoStep={handleExecuteAutoStep}
+                      onToggleAutonomy={handleToggleAutonomy}
+                      isGenerating={isGeneratingPrompt}
+                      isExecuting={isExecutingTurn}
+                      pauseReason={pauseReason}
+                      isAutoRunning={isAutoRunning}
+                      onToggleAutoRun={handleToggleAutoRun}
+                      stateMachineStage={stateMachineStage}
+                      errorMessage={executionError}
+                      onRetry={handleExecuteAutoStep}
+                      onDismissError={() => setExecutionError(null)}
+                      executionLogs={executionLogs}
+                      onOpenCommitModal={() => setCommitModalOpen(true)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground select-none">
+              <div className="w-16 h-16 rounded-3xl bg-secondary/80 border border-border flex items-center justify-center text-primary mb-4 shadow-sm">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground mb-1">
+                Mechon Story Architect
+              </h3>
+              <p className="text-xs text-muted-foreground max-w-sm mb-4 leading-relaxed">
+                Engineer high-quality multi-turn interactive narratives. Select an existing scenario from the left panel or create a new story to begin.
+              </p>
+            </div>
           )}
+        </div>
 
-          {/* Timeline Milestones Ribbon */}
-          <StoryTimeline
-            milestones={milestones}
-            onSaveMilestones={handleSaveMilestones}
-            saving={savingMilestones}
-          />
-
-          {/* Conversation Transcript */}
-          <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-            <StoryConversationViewer
-              sessionId={activeSession.id}
-              messages={messages}
-              streamingContent={streamingContent}
-              isStreaming={isStreaming}
-              onEditMessage={handleEditMessage}
-              onRegenerateTurn={handleRegenerateTurn}
-              onRevisionRestored={handleRevisionRestored}
+        {/* Right Dock Panel (Inspector) */}
+        {layout.rightDockVisible && activeSession && (
+          <>
+            <ResizeDivider
+              direction="horizontal"
+              isDragging={isDraggingRight}
+              onMouseDown={handleRightResizeStart}
+              onDoubleClick={() => setRightWidth(320)}
+              title="Drag to resize Property Inspector Dock. Double-click to reset."
             />
-          </div>
-
-          {/* Prompt Workbench & Autonomous Controls */}
-          <PromptWorkbench
-            proposedPrompt={proposedPrompt}
-            executionMode={activeSession.execution_mode}
-            onApproveAndExecute={handleApproveAndExecute}
-            onRegenerate={handleGenerateNextPrompt}
-            onExecuteAutoStep={handleExecuteAutoStep}
-            onToggleAutonomy={handleToggleAutonomy}
-            isGenerating={isGeneratingPrompt}
-            isExecuting={isExecutingTurn}
-            pauseReason={pauseReason}
-            isAutoRunning={isAutoRunning}
-            onToggleAutoRun={handleToggleAutoRun}
-            stateMachineStage={stateMachineStage}
-            errorMessage={executionError}
-            onRetry={handleExecuteAutoStep}
-            onDismissError={() => setExecutionError(null)}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground select-none">
-          <Sparkles className="w-10 h-10 mb-3 text-muted-foreground/60" />
-          <h3 className="text-base font-semibold text-foreground mb-1">
-            Mechon Story Architect
-          </h3>
-          <p className="text-xs text-muted-foreground max-w-sm mb-4">
-            Plan the interaction. Engineer the conversation. Select or create a scenario on the left to begin.
-          </p>
-        </div>
-      )}
-
-      {/* Resizable Divider: Right Pane */}
-      {activeSession && (
-        <ResizeDivider
-          direction="horizontal"
-          isDragging={isRightPaneDragging}
-          onMouseDown={handleRightPaneResize}
-          onDoubleClick={handleRightPaneReset}
-          title="Drag to resize inspector pane. Double-click to reset."
-        />
-      )}
-
-      {/* Right Pane: State & Agent Monitor */}
-      {activeSession && (
-        <div
-          style={{ width: `${rightPaneWidth}px` }}
-          className="shrink-0 h-full flex flex-col bg-card/30 overflow-hidden"
-        >
-          {/* Tabs */}
-          <div className="h-11 px-3 border-b border-border flex items-center gap-1 bg-card/60">
-            <button
-              onClick={() => setRightTab('narrative')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                rightTab === 'narrative'
-                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+            <aside
+              style={{ width: `${layout.rightDockWidth}px` }}
+              className="h-full shrink-0 overflow-hidden flex flex-col"
             >
-              <Activity className="w-3.5 h-3.5 text-primary" />
-              <span>Narrative State</span>
-            </button>
-
-            <button
-              onClick={() => setRightTab('agent')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                rightTab === 'agent'
-                  ? 'bg-secondary text-foreground font-semibold shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Bot className="w-3.5 h-3.5 text-sky-400" />
-              <span>Agent Monitor</span>
-            </button>
-          </div>
-
-          {/* Right Pane Content */}
-          <div className="flex-1 overflow-y-auto">
-            {rightTab === 'narrative' ? (
-              <NarrativeStateInspector state={narrativeState} />
-            ) : (
-              <AgentActivityMonitor
-                evaluation={latestEvaluation}
+              <StoryRightDock
                 session={activeSession}
-                logs={executionLogs}
+                spec={spec}
+                narrativeState={narrativeState}
+                latestEvaluation={latestEvaluation}
+                executionLogs={executionLogs}
                 providers={providers}
+                proposedPrompt={proposedPrompt}
+                executionMode={activeSession.execution_mode}
+                milestones={milestones}
+                activeModel={activeModel}
+                activeProviderId={activeProviderId}
+                isGeneratingPrompt={isGeneratingPrompt}
+                isExecutingTurn={isExecutingTurn}
+                isStreaming={isStreaming}
+                isAutoRunning={isAutoRunning}
+                pauseReason={pauseReason}
+                stateMachineStage={stateMachineStage}
+                errorMessage={executionError}
+                onSaveSpec={handleSaveSpec}
+                savingSpec={savingSpec}
                 onUpdateAgent={handleUpdateAgentConfig}
                 onRefreshProvider={handleRefreshProviderModels}
-                executingAgent={
-                  stateMachineStage === 'planning' || isGeneratingPrompt
-                    ? 'planning'
-                    : stateMachineStage === 'generating' || isExecutingTurn
-                      ? 'inference'
-                      : stateMachineStage === 'evaluating'
-                        ? 'evaluation'
-                        : null
-                }
+                onSendAndExecute={handleApproveAndExecute}
+                onStepAutonomous={handleExecuteAutoStep}
+                onPlanNextPrompt={(f) => handleGenerateNextPrompt(f)}
+                onToggleAutonomy={handleToggleAutonomy}
+                onToggleAutoRun={handleToggleAutoRun}
+                onRetry={handleExecuteAutoStep}
+                onDismissError={() => setExecutionError(null)}
               />
-            )}
-          </div>
-        </div>
-      )}
+            </aside>
+          </>
+        )}
+      </div>
 
       {/* Commit To SFT Modal */}
       {commitModalOpen && activeSession && (

@@ -44,6 +44,8 @@ import {
 import type { SFTRecord, DPOTask } from '../../types'
 import { LanguageFilter, LanguageIdentityBadge } from '../../components/language'
 import { lookupLanguage, isRTL } from '../../types/languages'
+import { useInspectorStore } from '../../editor/stores/useInspectorStore'
+import { useEditorStore } from '../../editor/stores/useEditorStore'
 
 export const DatasetExplorerView: React.FC = () => {
   const navigate = useNavigate()
@@ -263,18 +265,19 @@ export const DatasetExplorerView: React.FC = () => {
     <div className="flex h-full w-full overflow-hidden">
       {/* Left List Pane */}
       <div className="w-96 border-r border-border bg-card/40 flex flex-col shrink-0 select-none">
-        {/* Tab Header */}
-        <div className="p-3 border-b border-border space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mechon Corpus</h2>
-            <div className="flex items-center rounded-lg bg-secondary p-0.5 border border-border">
+        {/* Compact Tab Header */}
+        <div className="p-2.5 border-b border-border space-y-2 bg-secondary/20">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center rounded-md bg-secondary/80 p-0.5 border border-border flex-1">
               <button
                 onClick={() => {
                   setActiveTab('sft')
                   setSelectedSFT(null)
                 }}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
-                  activeTab === 'sft' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
+                className={`flex-1 py-1 rounded text-[11px] font-medium transition-all ${
+                  activeTab === 'sft'
+                    ? 'bg-card text-foreground font-semibold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 SFT Records ({sftRecords.length})
@@ -284,8 +287,10 @@ export const DatasetExplorerView: React.FC = () => {
                   setActiveTab('dpo')
                   setSelectedDPO(null)
                 }}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
-                  activeTab === 'dpo' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
+                className={`flex-1 py-1 rounded text-[11px] font-medium transition-all ${
+                  activeTab === 'dpo'
+                    ? 'bg-card text-foreground font-semibold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 DPO Tasks ({dpoTasks.length})
@@ -294,18 +299,18 @@ export const DatasetExplorerView: React.FC = () => {
           </div>
 
           <div className="relative">
-            <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Search className="h-3 w-3 absolute left-2.5 top-2 text-muted-foreground" />
             <input
               type="text"
-              placeholder={`Search ${activeTab.toUpperCase()} records by content or tag...`}
+              placeholder={`Search ${activeTab.toUpperCase()} records by content...`}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-md bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full pl-7 pr-2.5 py-1 rounded-md bg-background/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
           {activeTab === 'sft' && (
-            <div className="pt-1">
+            <div className="pt-0.5">
               <LanguageFilter
                 projectId={activeProjectId || ''}
                 selectedMode={languageFilter}
@@ -399,7 +404,23 @@ export const DatasetExplorerView: React.FC = () => {
                 return (
                   <div
                     key={r.id}
-                    onClick={() => setSelectedSFT(r)}
+                    onClick={() => {
+                      setSelectedSFT(r)
+                      useInspectorStore.getState().inspect({
+                        type: 'dataset_record',
+                        id: r.id,
+                        title: `SFT #${r.id.slice(0, 6)}`,
+                        data: r
+                      })
+                    }}
+                    onDoubleClick={() => {
+                      useEditorStore.getState().openTab({
+                        type: 'record-editor',
+                        title: `SFT ${r.id.slice(0, 6)}`,
+                        id: `record-sft-${r.id}`,
+                        params: { recordType: 'sft', record: r }
+                      })
+                    }}
                     className={`p-3 rounded-lg text-xs cursor-pointer border transition-all space-y-1.5 ${
                       isCurrent
                         ? 'bg-primary/10 border-primary text-foreground shadow-sm'
@@ -433,6 +454,20 @@ export const DatasetExplorerView: React.FC = () => {
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
                           <span>{r.turn_count || safeMessages.length} turns</span>
                           <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    useEditorStore.getState().openTab({
+                      type: 'dpo',
+                      title: `DPO #${selectedDPO.id.slice(0, 6)}`,
+                      params: { taskId: selectedDPO.id }
+                    })
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-xs font-semibold transition-colors cursor-pointer mr-1"
+                  title="Open and edit pair in DPO Studio"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in Studio</span>
+                </button>
                             {isBilingual && (
                               <LanguageIdentityBadge
                                 primaryLanguage={r.primary_language}
@@ -473,7 +508,23 @@ export const DatasetExplorerView: React.FC = () => {
                 return (
                   <div
                     key={t.id}
-                    onClick={() => setSelectedDPO(t)}
+                    onClick={() => {
+                      setSelectedDPO(t)
+                      useInspectorStore.getState().inspect({
+                        type: 'dataset_record',
+                        id: t.id,
+                        title: `DPO #${t.id.slice(0, 6)}`,
+                        data: t
+                      })
+                    }}
+                    onDoubleClick={() => {
+                      useEditorStore.getState().openTab({
+                        type: 'record-editor',
+                        title: `DPO ${t.id.slice(0, 6)}`,
+                        id: `record-dpo-${t.id}`,
+                        params: { recordType: 'dpo', record: t }
+                      })
+                    }}
                     className={`p-3 rounded-lg text-xs cursor-pointer border transition-all space-y-1.5 ${
                       isCurrent
                         ? 'bg-primary/10 border-primary text-foreground shadow-sm'
@@ -581,7 +632,13 @@ export const DatasetExplorerView: React.FC = () => {
             {activeTab === 'sft' && selectedSFT && (
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => navigate(`/sft?recordId=${selectedSFT.id}`)}
+                  onClick={() => {
+                    useEditorStore.getState().openTab({
+                      type: 'sft',
+                      title: `SFT #${selectedSFT.id.slice(0, 6)}`,
+                      params: { recordId: selectedSFT.id }
+                    })
+                  }}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-xs font-semibold transition-colors cursor-pointer"
                   title="Open and edit conversation in Universal Corpus Editor"
                 >
@@ -622,6 +679,20 @@ export const DatasetExplorerView: React.FC = () => {
             {/* Actions for DPO */}
             {activeTab === 'dpo' && selectedDPO && (
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    useEditorStore.getState().openTab({
+                      type: 'dpo',
+                      title: `DPO #${selectedDPO.id.slice(0, 6)}`,
+                      params: { taskId: selectedDPO.id }
+                    })
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-xs font-semibold transition-colors cursor-pointer mr-1"
+                  title="Open and edit pair in DPO Studio"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in Studio</span>
+                </button>
                 <button
                   onClick={() => openEditDPO(selectedDPO)}
                   className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"

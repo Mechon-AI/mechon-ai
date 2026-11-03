@@ -34,6 +34,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
+import { useInspectorStore } from '../../editor/stores/useInspectorStore'
 import {
   getSFTSessions,
   getSFTSession,
@@ -117,6 +118,17 @@ export const SFTStudioView: React.FC = () => {
     fetchProviders()
     initView()
   }, [activeProjectId])
+
+  useEffect(() => {
+    if (activeSession) {
+      useInspectorStore.getState().inspect({
+        type: 'sft_session',
+        id: activeSession.id,
+        title: activeSession.title,
+        data: activeSession
+      })
+    }
+  }, [activeSession?.id])
 
   // Handle URL query parameter `recordId` to auto-load from Corpus
   useEffect(() => {
@@ -743,9 +755,9 @@ export const SFTStudioView: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-background">
         {activeSession ? (
           <>
-            {/* Top Bar: Title, Workspace Mode Switcher, Provider & Commit */}
-            <div className="h-14 border-b border-border px-6 flex items-center justify-between bg-card/40 backdrop-blur-sm shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
+            {/* Top Bar: Title, Workspace Mode Switcher & Commit */}
+            <div className="h-10 border-b border-border px-4 flex items-center justify-between bg-card/60 backdrop-blur-sm shrink-0 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <input
                   type="text"
                   value={activeSession.title}
@@ -754,134 +766,84 @@ export const SFTStudioView: React.FC = () => {
                     setActiveSession(updated)
                     updateSFTSession(activeSession.id, { title: e.target.value })
                   }}
-                  className="font-bold text-sm bg-transparent hover:bg-secondary/50 px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all truncate max-w-xs text-foreground"
+                  className="font-semibold text-xs bg-transparent hover:bg-secondary/50 px-1.5 py-0.5 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all truncate max-w-xs text-foreground"
                 />
 
                 {/* Workspace Mode Switcher */}
-                <div className="flex items-center rounded-lg bg-secondary p-0.5 border border-border shrink-0">
+                <div className="flex items-center rounded-md bg-secondary/80 p-0.5 border border-border shrink-0">
                   <button
                     onClick={() => setStudioMode('chat')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
                       studioMode === 'chat'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        ? 'bg-card text-foreground font-semibold shadow-xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <MessageSquareCode className="h-3.5 w-3.5" />
-                    <span>Chat & Direct Edit</span>
+                    <MessageSquareCode className="h-3 w-3" />
+                    <span>Chat</span>
                   </button>
                   <button
                     onClick={() => setStudioMode('multilingual')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
                       studioMode === 'multilingual'
-                        ? 'bg-sky-600 text-white shadow-sm'
+                        ? 'bg-sky-600/30 text-sky-400 font-semibold'
                         : 'text-muted-foreground hover:text-sky-400'
                     }`}
                   >
-                    <Languages className="h-3.5 w-3.5" />
-                    <span>Multilingual Review</span>
+                    <Languages className="h-3 w-3" />
+                    <span>Multilingual</span>
                   </button>
                 </div>
 
                 {activeSession.committed_record_id && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
-                    <CheckCircle className="h-3 w-3" /> LINKED TO CORPUS
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                    <CheckCircle className="h-2.5 w-2.5" /> LINKED
                   </span>
                 )}
               </div>
 
               {/* Top Controls */}
-              <div className="flex items-center gap-2">
-                {/* Provider & Model Selectors */}
-                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/60 border border-border text-xs">
-                  <Cpu className="h-3.5 w-3.5 text-primary ml-1" />
-                  <select
-                    value={activeSession.provider_id || activeProviderId}
-                    onChange={e => {
-                      const pId = e.target.value
-                      setActiveProviderId(pId)
-                      const targetP = providers.find(p => p.id === pId)
-                      const newModel = (targetP?.default_model && targetP.models_cache?.includes(targetP.default_model))
-                        ? targetP.default_model
-                        : (targetP?.models_cache && targetP.models_cache[0]) || targetP?.default_model || 'default'
-                      setActiveModel(newModel)
-                      setActiveSession(prev => prev ? { ...prev, provider_id: pId, model: newModel } : null)
-                      setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, provider_id: pId, model: newModel } : s))
-                      updateSFTSession(activeSession.id, { provider_id: pId, model: newModel })
-                    }}
-                    className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer"
-                  >
-                    {providers.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-
-                  <span className="text-muted-foreground/60">•</span>
-
-                  {(() => {
-                    const currentP = providers.find(p => p.id === (activeSession.provider_id || activeProviderId))
-                    const availableModels = currentP?.models_cache && currentP.models_cache.length > 0
-                      ? currentP.models_cache
-                      : [activeSession.model || activeModel || 'default']
-                    const currentModel = availableModels.includes(activeSession.model)
-                      ? activeSession.model
-                      : ((currentP?.default_model && availableModels.includes(currentP.default_model)) ? currentP.default_model : availableModels[0])
-
-                    return (
-                      <select
-                        value={currentModel}
-                        onChange={e => {
-                          const m = e.target.value
-                          setActiveModel(m)
-                          setActiveSession(prev => prev ? { ...prev, model: m } : null)
-                          setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, model: m } : s))
-                          updateSFTSession(activeSession.id, { model: m })
-                        }}
-                        className="bg-transparent text-foreground font-mono text-[11px] border-none focus:outline-none cursor-pointer max-w-[140px] truncate"
-                      >
-                        {availableModels.map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    )
-                  })()}
+              <div className="flex items-center gap-1.5">
+                {/* Active Model Indicator Badge */}
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary/80 border border-border text-[11px] font-mono text-muted-foreground">
+                  <Cpu className="h-3 w-3 text-primary shrink-0" />
+                  <span className="truncate max-w-[130px]">{activeSession.model || activeModel || 'default'}</span>
                 </div>
 
                 <button
                   onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                  className={`px-2 py-1 rounded text-xs font-medium border transition-colors cursor-pointer ${
                     showSystemPrompt
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-secondary hover:bg-accent border-border text-muted-foreground hover:text-foreground'
                   }`}
                   title="Edit System Instructions"
                 >
-                  System Prompt
+                  Prompt
                 </button>
 
-                {/* Live Inspector Drawer Toggle */}
                 <button
                   onClick={() => setShowLivePreviewDrawer(!showLivePreviewDrawer)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  className={`p-1.5 rounded text-xs font-medium border transition-colors flex items-center gap-1 cursor-pointer ${
                     showLivePreviewDrawer
-                      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                      : 'bg-secondary hover:bg-secondary/80 border-border text-muted-foreground hover:text-foreground'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary hover:bg-accent border-border text-muted-foreground hover:text-foreground'
                   }`}
                   title="Toggle Live Dataset JSON/JSONL preview & statistics"
                 >
                   <Code2 className="h-3.5 w-3.5" />
-                  <span>Live Preview</span>
+                  <span>Preview</span>
                 </button>
 
-                {/* Commit to Corpus Button */}
                 <button
                   onClick={() => {
                     setCommitTitle(activeSession.title)
                     setCommitSaveAsNew(false)
                     setShowCommitModal(true)
                   }}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Save changes or commit new record to Mechon Corpus"
+                  disabled={activeSession.messages.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs shadow-xs transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Commit to Mechon Corpus"
                 >
                   <BookmarkPlus className="h-3.5 w-3.5" />
                   <span>Save to Corpus</span>

@@ -1,29 +1,9 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AppLayout } from './components/layout/AppLayout'
-
-import { DashboardView } from './features/dashboard/DashboardView'
-import { ProjectsView } from './features/projects/ProjectsView'
-import { SFTStudioView } from './features/sft/SFTStudioView'
-import { DPOStudioView } from './features/dpo/DPOStudioView'
-import { DatasetExplorerView } from './features/datasets/DatasetExplorerView'
-import { PlaygroundView } from './features/playground/PlaygroundView'
-import { QualityControlView } from './features/quality/QualityControlView'
-import { AnalyticsView } from './features/analytics/AnalyticsView'
-import { VersionHistoryView } from './features/versions/VersionHistoryView'
-import { ExportCenterView } from './features/export/ExportCenterView'
-import { ProviderManagerView } from './features/providers/ProviderManagerView'
-import { SettingsView } from './features/settings/SettingsView'
-import { StoryArchitectView } from './features/story_architect/StoryArchitectView'
-
-import { TemplateValidationView } from './features/engineering/TemplateValidationView'
-import { SequenceAnalyticsView } from './features/engineering/SequenceAnalyticsView'
-import { DeduplicationView } from './features/engineering/DeduplicationView'
-import { PersonaAuditView } from './features/engineering/PersonaAuditView'
-import { SplitManagerView } from './features/engineering/SplitManagerView'
-import { TrainingReadinessView } from './features/readiness/TrainingReadinessView'
-import { ErrorBoundary } from './components/common/ErrorBoundary'
+import { EditorShell } from './editor/shell/EditorShell'
+import { useEditorStore } from './editor/stores/useEditorStore'
+import type { EditorTabType } from './editor/types'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,34 +14,50 @@ const queryClient = new QueryClient({
   },
 })
 
+/** Syncs browser URL route into active editor tab if deep-linked */
+const RouteSync: React.FC = () => {
+  const location = useLocation()
+  const { openTab } = useEditorStore()
+
+  useEffect(() => {
+    const path = location.pathname.replace(/^\//, '')
+    if (!path) return
+
+    const routeMap: Record<string, { type: EditorTabType; title: string }> = {
+      'story-architect': { type: 'story-architect', title: 'Story Architect' },
+      sft: { type: 'sft', title: 'SFT Studio' },
+      dpo: { type: 'dpo', title: 'DPO Studio' },
+      datasets: { type: 'datasets', title: 'Mechon Corpus' },
+      forge: { type: 'forge', title: 'Dataset Forge' },
+      playground: { type: 'playground', title: 'Model Playground' },
+      projects: { type: 'projects', title: 'Projects' },
+      quality: { type: 'quality', title: 'Quality Control' },
+      analytics: { type: 'analytics', title: 'Analytics' },
+      versions: { type: 'versions', title: 'Dataset Snapshots' },
+      export: { type: 'export', title: 'Export Center' },
+      providers: { type: 'providers', title: 'Providers' },
+      settings: { type: 'settings', title: 'Settings' },
+      readiness: { type: 'readiness', title: 'Training Readiness' },
+      'engineering/templates': { type: 'engineering/templates', title: 'Chat Templates' },
+      'engineering/sequence': { type: 'engineering/sequence', title: 'Sequence Analytics' },
+      'engineering/dedup': { type: 'engineering/dedup', title: 'Deduplication' },
+      'engineering/persona': { type: 'engineering/persona', title: 'Persona Audit' },
+      'engineering/splits': { type: 'engineering/splits', title: 'Partition Splits' },
+    }
+
+    if (routeMap[path]) {
+      openTab(routeMap[path])
+    }
+  }, [location.pathname])
+
+  return <EditorShell />
+}
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<DashboardView />} />
-            <Route path="projects" element={<ProjectsView />} />
-            <Route path="story-architect" element={<ErrorBoundary fallbackTitle="Story Architect Error"><StoryArchitectView /></ErrorBoundary>} />
-            <Route path="sft" element={<SFTStudioView />} />
-            <Route path="dpo" element={<DPOStudioView />} />
-            <Route path="datasets" element={<DatasetExplorerView />} />
-            <Route path="playground" element={<PlaygroundView />} />
-            <Route path="quality" element={<QualityControlView />} />
-            <Route path="analytics" element={<AnalyticsView />} />
-            <Route path="versions" element={<VersionHistoryView />} />
-            <Route path="export" element={<ExportCenterView />} />
-            <Route path="engineering/templates" element={<ErrorBoundary fallbackTitle="Template Validation Error"><TemplateValidationView /></ErrorBoundary>} />
-            <Route path="engineering/sequence" element={<ErrorBoundary fallbackTitle="Sequence Analytics Error"><SequenceAnalyticsView /></ErrorBoundary>} />
-            <Route path="engineering/dedup" element={<ErrorBoundary fallbackTitle="Deduplication Error"><DeduplicationView /></ErrorBoundary>} />
-            <Route path="engineering/persona" element={<ErrorBoundary fallbackTitle="Persona Audit Error"><PersonaAuditView /></ErrorBoundary>} />
-            <Route path="engineering/splits" element={<ErrorBoundary fallbackTitle="Partition Manager Error"><SplitManagerView /></ErrorBoundary>} />
-            <Route path="readiness" element={<ErrorBoundary fallbackTitle="Training Readiness Error"><TrainingReadinessView /></ErrorBoundary>} />
-            <Route path="providers" element={<ProviderManagerView />} />
-            <Route path="settings" element={<SettingsView />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
+        <RouteSync />
       </BrowserRouter>
     </QueryClientProvider>
   )

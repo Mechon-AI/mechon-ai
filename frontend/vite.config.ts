@@ -13,15 +13,20 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:18420',
-        changeOrigin: true,
-      },
-    },
   },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-query': ['@tanstack/react-query', 'zustand'],
+          'vendor-ui': ['recharts', 'react-markdown', 'clsx', 'tailwind-merge']
+        }
+      }
+    }
   },
 })

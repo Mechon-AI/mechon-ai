@@ -24,6 +24,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
+import { useInspectorStore } from '../../editor/stores/useInspectorStore'
 import {
   getDPOTasks,
   createDPOTask,
@@ -136,6 +137,17 @@ export const DPOStudioView: React.FC = () => {
       }
     }
   }, [providers, activeProviderId, activeModel])
+
+  useEffect(() => {
+    if (activeTask) {
+      useInspectorStore.getState().inspect({
+        type: 'dataset_record',
+        id: activeTask.id,
+        title: `DPO Task #${activeTask.id.slice(0, 8)}`,
+        data: activeTask
+      })
+    }
+  }, [activeTask?.id])
 
   const initView = async () => {
     let pId = activeProjectId

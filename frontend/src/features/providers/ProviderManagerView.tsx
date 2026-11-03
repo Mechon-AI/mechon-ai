@@ -25,6 +25,7 @@ import {
   Activity
 } from 'lucide-react'
 import { useProviderStore } from '../../stores/useProviderStore'
+import { useInspectorStore } from '../../editor/stores/useInspectorStore'
 import {
   getProviderDefinitions,
   createProvider,
@@ -80,6 +81,18 @@ export const ProviderManagerView: React.FC = () => {
     loadDefinitions()
     loadDiagnostics()
   }, [])
+
+  useEffect(() => {
+    const activeP = providers.find((p) => p.id === activeProviderId)
+    if (activeP) {
+      useInspectorStore.getState().inspect({
+        type: 'provider',
+        id: activeP.id,
+        title: activeP.name,
+        data: activeP
+      })
+    }
+  }, [activeProviderId, providers])
 
   const loadDiagnostics = async () => {
     try {

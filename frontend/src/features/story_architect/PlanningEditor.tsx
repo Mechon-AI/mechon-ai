@@ -98,54 +98,54 @@ export const PlanningEditor: React.FC<PlanningEditorProps> = ({ spec, onSaveSpec
   return (
     <div className="flex flex-col h-full bg-card/20 border-b border-border">
       {/* Tab Navigation & Save Bar */}
-      <div className="px-4 py-2 border-b border-border flex items-center justify-between bg-card/40">
+      <div className="px-3 py-1 border-b border-border flex items-center justify-between bg-card/60 text-xs">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('narrative')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
               activeTab === 'narrative'
                 ? 'bg-secondary text-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Compass className="w-3.5 h-3.5" />
+            <Compass className="w-3 h-3 text-primary" />
             <span>Premise & Setting</span>
           </button>
 
           <button
             onClick={() => setActiveTab('characters')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
               activeTab === 'characters'
                 ? 'bg-secondary text-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
+            <Users className="w-3 h-3 text-primary" />
             <span>Characters ({characters.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('objectives')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
               activeTab === 'objectives'
                 ? 'bg-secondary text-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Target className="w-3.5 h-3.5" />
-            <span>Objectives & Conflicts</span>
+            <Target className="w-3 h-3 text-primary" />
+            <span>Objectives</span>
           </button>
 
           <button
             onClick={() => setActiveTab('behavior')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
               activeTab === 'behavior'
                 ? 'bg-secondary text-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Bot className="w-3.5 h-3.5" />
-            <span>Persona & Constraints</span>
+            <Bot className="w-3 h-3 text-primary" />
+            <span>Persona & Rules</span>
           </button>
         </div>
 

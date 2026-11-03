@@ -352,3 +352,59 @@ Mechon AI strictly follows the **XDG Base Directory Specification**:
 ~/.cache/mechon-ai/
 └── exports/                   # Temporary export staging
 ```
+
+
+---
+
+## 6. Modular Editor UI Architecture (v1.2.0)
+
+Mechon AI v1.2.0 transforms from a traditional dashboard into a high-density, modular **Integrated Development Environment (IDE) for AI Dataset Engineering**.
+
+### A. The 5-Region Editor Shell
+
+```text
++---------------------------------------------------------------------------------------------------------+
+| Main Menu Bar: File  Edit  View  Project  Tools  Window  Help                                           |
++---------------------------------------------------------------------------------------------------------+
+| Toolbar: [Project: default] [Layout: Preset ▼] [Quick Save] [Undo/Redo] [Ctrl+Shift+P] [Agent: Ready]    |
++-------------------+---------------------------------------------------------------+---------------------+
+| PROJECT EXPLORER  | CENTRAL WORKSPACE (Multi-Tab Docking)                         | PROPERTY INSPECTOR  |
+|                   | [Corpus] [Story Architect] [SFT Studio] [Forge] [+]           |                     |
+| - Active Project  |---------------------------------------------------------------+ Context-aware:      |
+|   - SFT Drafts    |                                                               | - Dataset Records   |
+|   - DPO Tasks     |                                                               | - Conversations     |
+|   - Corpus Recs   | (Active tab content with persistent keep-alive state)          | - Agent Configs     |
+| - Studios & Tools |                                                               | - Providers         |
+|   - Story Arch    |                                                               | - Project Metadata  |
+|   - SFT Studio    |                                                               |                     |
+|   - DPO Studio    +---------------------------------------------------------------+                     |
+|   - Dataset Forge | BOTTOM PANEL (Collapsible, Resizable Splitter)               |                     |
+|   - Engineering   | [Console] [Agent Logs] [Diagnostics] [Tasks] [Preview] [QC]   |                     |
++-------------------+---------------------------------------------------------------+---------------------+
+```
+
+### B. Workspace Layout Presets & Persistence
+
+1. **Dataset Engineering**: Explorer (Left), Corpus / Dataset Editor (Center), Inspector (Right), Dataset Preview (Bottom).
+2. **Agent Engineering**: Explorer (Left), Story Architect (Center), Agent Inspector (Right), Agent Logs (Bottom).
+3. **SFT Engineering**: Explorer (Left), SFT Studio (Center), Conversation Inspector (Right), Dataset Preview (Bottom).
+4. **DPO Evaluation**: Explorer (Left), DPO Studio (Center), Candidate Config Inspector (Right), Inference Logs (Bottom).
+5. **Quality Assurance**: Explorer / Corpus (Left), Quality Control (Center), Validation Inspector (Right), Diagnostics (Bottom).
+6. **Provider Engineering**: Provider Explorer (Left), Model Playground (Center), Provider Inspector (Right), Diagnostics (Bottom).
+7. **Custom User Presets**: Users can resize splitters, dock/collapse panels, and save custom named workspace layouts to versioned local storage.
+
+### C. Centralized Command Registry & Keyboard Engine
+
+- **Command Palette (`Ctrl+Shift+P`)**: Searchable global command palette executing commands across all 7 categories without navigating away from the active editor.
+- **Keyboard Shortcut Manager**:
+  - `Ctrl+Shift+P`: Command Palette
+  - `Ctrl+P`: Quick Open
+  - `Ctrl+S` / `Ctrl+Shift+S`: Quick Save / Save All
+  - `Ctrl+W`: Close Active Tab
+  - `Ctrl+Tab` / `Ctrl+Shift+Tab`: Next / Previous Tab
+  - `Ctrl+B`: Toggle Project Explorer
+  - `Ctrl+Shift+I`: Toggle Property Inspector
+  - `Ctrl+J`: Toggle Bottom Console & Logs
+  - `F11`: Fullscreen Toggle
+  - `Ctrl+,`: Preferences / Settings
+  - `Ctrl+/`: Keyboard Shortcuts Reference Modal

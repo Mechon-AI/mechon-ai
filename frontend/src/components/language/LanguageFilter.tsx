@@ -53,9 +53,9 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
   const pairs = Array.isArray(stats?.language_pairs) ? stats.language_pairs : []
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <div className={`flex items-center gap-1.5 flex-wrap ${className}`}>
       {/* Mode pill toggles */}
-      <div className="flex items-center rounded-lg bg-secondary/80 p-0.5 border border-border">
+      <div className="flex items-center rounded-md bg-secondary/60 p-0.5 border border-border/80">
         {['all', 'bilingual', 'monolingual'].map(m => {
           const isActive = selectedMode === m
           return (
@@ -63,13 +63,13 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
               key={m}
               type="button"
               onClick={() => onModeChange(m)}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold capitalize transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  ? 'bg-primary/20 text-primary border border-primary/30 font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {m === 'all' ? 'All Modes' : m}
+              {m === 'all' ? 'All' : m === 'bilingual' ? 'Bilingual' : 'Monolingual'}
             </button>
           )
         })}
@@ -81,9 +81,9 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
           <select
             value={selectedPair}
             onChange={e => onPairChange(e.target.value)}
-            className="pl-2 pr-7 py-1 text-xs rounded-lg bg-secondary/80 border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer appearance-none max-w-[180px] truncate"
+            className="pl-2 pr-6 py-0.5 text-[11px] rounded-md bg-secondary/60 border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer appearance-none max-w-[150px] truncate"
           >
-            <option value="all">All Language Pairs</option>
+            <option value="all">All Pairs</option>
             {pairs.map((item, idx) => {
               const pairValue = typeof item === 'string' ? item : item?.pair || `pair-${idx}`
               const pairLabel = typeof item === 'string'
@@ -96,7 +96,7 @@ export const LanguageFilter: React.FC<LanguageFilterProps> = ({
               )
             })}
           </select>
-          <ChevronDown className="absolute right-2 h-3 w-3 text-muted-foreground pointer-events-none" />
+          <ChevronDown className="absolute right-1.5 h-3 w-3 text-muted-foreground pointer-events-none" />
         </div>
       )}
     </div>

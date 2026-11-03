@@ -91,6 +91,23 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
     - Native support for multi-turn preference schemas: `prompt: [...]`, `chosen: [...]`, and `rejected: [...]`.
     - Direct export to JSON and JSONL formats for seamless consumption by `trl.DPOTrainer`.
 
+- **Modular Desktop Editor Architecture & Narrative Engineering Workstation (v1.2.1)**:
+  - Professional IDE design inspired by modern developer workstations and engineering editors.
+  - **Story Architect Central Viewport**: 100% dedicated conversation authoring workspace ("Scene View") with chronological dialogue turns, in-place prompt editing, downstream revision invalidation, and live token streaming.
+  - **Right-Dock Planning Agent Tab**: Relocated conversation composer, execution autonomy controls (`Manual Review`, `Hybrid Safety`, `Auto-Allow`), planning rationale review, and milestone tracking.
+  - **Global Interactive Provider & Model Selector**: Searchable model selection dropdown supporting dynamic model discovery across Google Gemini, Anthropic, OpenAI, Groq, Ollama, and custom endpoints with authoritative inference synchronization.
+  - **5-Region Global Editor Shell**:
+    - **Main Menu Bar**: Native-grade application menus across `File`, `Edit`, `View`, `Project`, `Tools`, `Window`, and `Help`.
+    - **Command & Status Toolbar**: Active project switcher, workspace layout presets, quick save with dirty state tracking, undo/redo, agent monitor, inference model selector, and panel toggles.
+    - **Project Explorer (Left Panel)**: Hierarchical tree navigation across active project datasets, core authoring studios, engineering tools, search filter, and pinned favorites.
+    - **Multi-Tab Central Workspace**: Multi-tab editing with dirty indicators, context menus, reopen closed tabs, independent editor state, and keep-alive memory management.
+    - **Context-Aware Property Inspector (Right Panel)**: Contextual metadata and property editor adapting to selected corpus records, conversations, agent prompts, and provider endpoints.
+    - **Collapsible Bottom Panel**: 7-tab diagnostic & monitoring hub (`Console`, `Agent Logs`, `Diagnostics`, `Task Manager`, `Dataset Preview`, `Validation Results`, `Inference Logs`).
+  - **Workspace Layout Presets**: Instant switching between *Dataset Engineering*, *Agent Engineering*, *SFT Engineering*, *DPO Evaluation*, *Quality Assurance*, and *Provider Engineering*, plus custom layout saving to local storage.
+  - **Global Command Palette (`Ctrl+Shift+P`)**: Search and execute commands via centralized command registry.
+  - **Keyboard Shortcuts Engine**: Productivity shortcuts (`Ctrl+S`, `Ctrl+W`, `Ctrl+Tab`, `Ctrl+B`, `Ctrl+J`, `Ctrl+Shift+I`, `F11`, etc.) with input protection.
+  - **Dataset Forge**: Document ingestion, semantic chunking, and LLM-assisted dataset synthesis.
+
 - **Mechon Story Architect & Autonomous Conversation Engine ("Plan the Interaction. Engineer the Conversation.")**:
   - **Structured Interaction Planning**: Define comprehensive scenarios, multi-step conversation objectives, user/assistant personas, and phase transitions.
   - **Dual-Agent Autonomous Loop**:
