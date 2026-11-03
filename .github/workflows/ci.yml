@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  rust-backend-tests:
+  test-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,16 +19,6 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Run Native Rust Tests
-        run: |
-          cd src-tauri
-          cargo test --verbose
-
-  frontend-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -42,7 +32,12 @@ jobs:
           cd frontend
           npm ci || npm install
 
-      - name: Verify TypeScript & Build Frontend
+      - name: Build Frontend Dist
         run: |
           cd frontend
           npm run build
+
+      - name: Run Native Rust Tests
+        run: |
+          cd src-tauri
+          cargo test --verbose
