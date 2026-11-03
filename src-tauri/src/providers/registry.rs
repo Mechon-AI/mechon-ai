@@ -89,11 +89,11 @@ impl ProviderRegistry {
                 provider_type: ProviderType::Gemini,
                 default_host: "https://generativelanguage.googleapis.com".to_string(),
                 default_path: "/v1beta".to_string(),
-                default_model: "gemini-2.0-flash".to_string(),
+                default_model: "gemini-2.5-flash".to_string(),
                 curated_models: vec![
-                    "gemini-2.0-flash".to_string(),
-                    "gemini-1.5-pro".to_string(),
-                    "gemini-1.5-flash".to_string(),
+                    "gemini-2.5-flash".to_string(),
+                    "gemini-2.5-flash-lite".to_string(),
+                    "gemini-2.5-pro".to_string(),
                 ],
                 capabilities: ModelCapabilities {
                     vision: true,

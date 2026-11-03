@@ -196,7 +196,7 @@ async fn test_application_restart_persistence_with_encrypted_vault() {
                 provider_type: "gemini".to_string(),
                 base_url: Some("https://generativelanguage.googleapis.com".to_string()),
                 api_key: Some(secret.to_string()),
-                default_model: Some("gemini-2.0-flash".to_string()),
+                default_model: Some("gemini-2.5-flash".to_string()),
                 timeout_seconds: Some(60),
                 settings: None,
             },

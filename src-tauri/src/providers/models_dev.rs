@@ -103,8 +103,8 @@ impl ModelsDevRegistry {
                 provider: Some("anthropic".to_string()),
             },
             ModelMetadataEntry {
-                id: "gemini-2.0-flash".to_string(),
-                name: Some("Gemini 2.0 Flash".to_string()),
+                id: "gemini-2.5-flash".to_string(),
+                name: Some("Gemini 2.5 Flash".to_string()),
                 context_window: Some(1048576),
                 max_output_tokens: Some(8192),
                 capabilities: Some(ModelCapabilities::all()),

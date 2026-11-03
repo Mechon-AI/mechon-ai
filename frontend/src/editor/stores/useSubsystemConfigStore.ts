@@ -28,7 +28,7 @@ interface SubsystemConfigState {
   syncWithProviders: (providers: Provider[]) => void
 }
 
-const STORAGE_KEY = 'mechon_ai_subsystem_model_configs_v1'
+const STORAGE_KEY = 'mechon_ai_subsystem_model_configs_v2'
 
 const DEFAULT_CONFIGS: SubsystemConfigurations = {
   main_inference: {
@@ -51,7 +51,7 @@ const DEFAULT_CONFIGS: SubsystemConfigurations = {
     id: 'translation',
     name: 'Multilingual Translation Engine',
     label: 'Translation Agent',
-    description: 'Handles cross-lingual turn localization, dialogue alignment, and terminology preservation.',
+    description: 'Handles cross-lingual turn localization using the authoritative main inference model.',
     provider_id: '',
     model_id: ''
   },
@@ -70,10 +70,16 @@ function loadPersistedConfigs(): SubsystemConfigurations {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_CONFIGS
     const parsed = JSON.parse(raw)
+    const mainInf = { ...DEFAULT_CONFIGS.main_inference, ...(parsed.main_inference || {}) }
     return {
-      main_inference: { ...DEFAULT_CONFIGS.main_inference, ...(parsed.main_inference || {}) },
+      main_inference: mainInf,
       planning: { ...DEFAULT_CONFIGS.planning, ...(parsed.planning || {}) },
-      translation: { ...DEFAULT_CONFIGS.translation, ...(parsed.translation || {}) },
+      // Translation Agent automatically mirrors the Main Inference Engine
+      translation: {
+        ...DEFAULT_CONFIGS.translation,
+        provider_id: mainInf.provider_id,
+        model_id: mainInf.model_id
+      },
       evaluation: { ...DEFAULT_CONFIGS.evaluation, ...(parsed.evaluation || {}) }
     }
   } catch (err) {
@@ -108,11 +114,32 @@ export const useSubsystemConfigStore = create<SubsystemConfigState>((set, get) =
         model_id: modelId
       }
     }
+    // Translation Agent is kept strictly in sync with Main Inference
+    if (subsystem === 'main_inference' || subsystem === 'translation') {
+      updated.main_inference = {
+        ...updated.main_inference,
+        provider_id: providerId,
+        model_id: modelId
+      }
+      updated.translation = {
+        ...updated.translation,
+        provider_id: providerId,
+        model_id: modelId
+      }
+    }
     set({ configs: updated })
     persistConfigs(updated)
   },
 
   getSubsystemConfig: (subsystem: SubsystemId) => {
+    // Translation Agent always uses the Main Inference configuration
+    if (subsystem === 'translation') {
+      const mainInf = get().configs.main_inference
+      return {
+        provider_id: mainInf?.provider_id || '',
+        model_id: mainInf?.model_id || ''
+      }
+    }
     const item = get().configs[subsystem]
     return {
       provider_id: item?.provider_id || '',
@@ -135,7 +162,6 @@ export const useSubsystemConfigStore = create<SubsystemConfigState>((set, get) =
       const provMatch = providers.find(p => p.id === existing.provider_id)
       
       if (!existing.provider_id || !provMatch) {
-        // Try to match preferred provider (e.g. Anthropic for planning, Gemini for translation)
         const preferred = preferredProviderName 
           ? providers.find(p => p.name.toLowerCase().includes(preferredProviderName.toLowerCase()) || p.provider_type.toLowerCase().includes(preferredProviderName.toLowerCase()))
           : null
@@ -160,7 +186,13 @@ export const useSubsystemConfigStore = create<SubsystemConfigState>((set, get) =
 
     resolveForSubsystem('main_inference')
     resolveForSubsystem('planning', 'anthropic')
-    resolveForSubsystem('translation', 'gemini')
+    
+    // Translation Agent mirrors Main Inference
+    updated.translation = {
+      ...updated.translation,
+      provider_id: updated.main_inference.provider_id,
+      model_id: updated.main_inference.model_id
+    }
     resolveForSubsystem('evaluation')
 
     if (changed) {

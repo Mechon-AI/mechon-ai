@@ -523,14 +523,19 @@ export const SFTStudioView: React.FC = () => {
     showFeedback('success', `Removed language ${lookupLanguage(langToRemove).name}.`)
   }
 
+  const resolveTranslationModel = () => {
+    const mainInf = useSubsystemConfigStore.getState().configs.main_inference
+    const pId = mainInf?.provider_id || activeProviderId || activeSession?.provider_id
+    const targetModel = mainInf?.model_id || activeModel || activeSession?.model
+    return { pId, targetModel }
+  }
+
   const handleTranslateAll = async (forceRegenerate = false) => {
     if (!activeSession) return
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
-    const transConfig = useSubsystemConfigStore.getState().configs.translation
-    const pId = transConfig?.provider_id || activeProviderId
-    const targetModel = transConfig?.model_id || activeModel
+    const { pId, targetModel } = resolveTranslationModel()
 
     setIsTranslatingAll(true)
     try {
@@ -557,9 +562,7 @@ export const SFTStudioView: React.FC = () => {
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
-    const transConfig = useSubsystemConfigStore.getState().configs.translation
-    const pId = transConfig?.provider_id || activeProviderId
-    const targetModel = transConfig?.model_id || activeModel
+    const { pId, targetModel } = resolveTranslationModel()
 
     setIsTranslatingAll(true)
     try {
@@ -587,9 +590,7 @@ export const SFTStudioView: React.FC = () => {
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
-    const transConfig = useSubsystemConfigStore.getState().configs.translation
-    const pId = transConfig?.provider_id || activeProviderId
-    const targetModel = transConfig?.model_id || activeModel
+    const { pId, targetModel } = resolveTranslationModel()
 
     setIsTranslatingAll(true)
     try {
@@ -613,9 +614,7 @@ export const SFTStudioView: React.FC = () => {
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
-    const transConfig = useSubsystemConfigStore.getState().configs.translation
-    const pId = transConfig?.provider_id || activeProviderId
-    const targetModel = transConfig?.model_id || activeModel
+    const { pId, targetModel } = resolveTranslationModel()
 
     setIsRegeneratingTurnId(messageId)
     try {
@@ -1231,9 +1230,9 @@ export const SFTStudioView: React.FC = () => {
                     <div className="max-w-5xl mx-auto space-y-4">
                       {/* Translation Agent Control Bar */}
                       {(() => {
-                        const transConfig = useSubsystemConfigStore.getState().configs.translation
-                        const transProvider = providers.find(p => p.id === transConfig?.provider_id) || providers[0]
-                        const transModel = transConfig?.model_id || transProvider?.default_model || 'default'
+                        const { pId, targetModel } = resolveTranslationModel()
+                        const transProvider = providers.find(p => p.id === pId) || providers[0]
+                        const transModel = targetModel || transProvider?.default_model || 'default'
                         const targetInfo = lookupLanguage(activeTargetLanguage)
                         
                         const untranslatedCount = activeSession.messages.filter(m => {
@@ -1255,7 +1254,7 @@ export const SFTStudioView: React.FC = () => {
                               <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/80 border border-border font-mono text-[11px] text-foreground">
                                 <Cpu className="w-3.5 h-3.5 text-primary shrink-0" />
                                 <span className="font-semibold">{transProvider?.name || 'Default'}:</span>
-                                <span className="text-muted-foreground">{transModel}</span>
+                                <span className="text-primary font-bold">{transModel}</span>
                               </div>
                             </div>
 
