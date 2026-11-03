@@ -163,7 +163,7 @@ export const SettingsView: React.FC = () => {
               <span className="text-[11px] text-primary ml-2 font-medium">Engineer the Data. Shape the Intelligence.</span>
             </div>
           </div>
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-secondary border border-border">v1.1.0</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-secondary border border-border">v1.1.1</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-muted-foreground">

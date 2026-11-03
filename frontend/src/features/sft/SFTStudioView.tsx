@@ -49,19 +49,8 @@ import {
 } from '../../services/api'
 import type { SFTSession, SFTMessage } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
-
-export const AVAILABLE_LANGUAGES = [
-  { code: 'id', name: 'Indonesian (ID)' },
-  { code: 'en', name: 'English (EN)' },
-  { code: 'es', name: 'Spanish (ES)' },
-  { code: 'fr', name: 'French (FR)' },
-  { code: 'de', name: 'German (DE)' },
-  { code: 'zh', name: 'Chinese (ZH)' },
-  { code: 'ja', name: 'Japanese (JA)' },
-  { code: 'ar', name: 'Arabic (AR)' },
-  { code: 'pt', name: 'Portuguese (PT)' },
-  { code: 'ru', name: 'Russian (RU)' }
-]
+import { LanguagePairSelector, LanguageIdentityBadge } from '../../components/language'
+import { lookupLanguage, isRTL } from '../../types/languages'
 
 export const SFTStudioView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -668,37 +657,25 @@ export const SFTStudioView: React.FC = () => {
                 <Languages className="h-4 w-4 text-cyan-400" />
                 <span className="font-semibold text-muted-foreground text-[11px]">Bilingual Workflow:</span>
 
-                <select
-                  value={activeSession.primary_language || 'id'}
-                  onChange={e => {
-                    const l = e.target.value
-                    setActiveSession(prev => prev ? { ...prev, primary_language: l } : null)
-                    updateSFTSession(activeSession.id, { primary_language: l })
+                <LanguagePairSelector
+                  primaryLanguage={activeSession.primary_language || 'id'}
+                  secondaryLanguage={activeSession.secondary_language || 'en'}
+                  onPrimaryChange={(code) => {
+                    setActiveSession(prev => prev ? { ...prev, primary_language: code } : null)
+                    updateSFTSession(activeSession.id, { primary_language: code })
                   }}
-                  className="px-2 py-1 rounded bg-secondary border border-border text-[11px] text-foreground focus:outline-none cursor-pointer"
-                  title="Source / Primary Language (default: Indonesian)"
-                >
-                  {AVAILABLE_LANGUAGES.map(lang => (
-                    <option key={lang.code} value={lang.code}>{lang.name}</option>
-                  ))}
-                </select>
-
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-
-                <select
-                  value={activeSession.secondary_language || 'en'}
-                  onChange={e => {
-                    const l = e.target.value
-                    setActiveSession(prev => prev ? { ...prev, secondary_language: l } : null)
-                    updateSFTSession(activeSession.id, { secondary_language: l })
+                  onSecondaryChange={(code) => {
+                    setActiveSession(prev => prev ? { ...prev, secondary_language: code } : null)
+                    updateSFTSession(activeSession.id, { secondary_language: code })
                   }}
-                  className="px-2 py-1 rounded bg-secondary border border-border text-[11px] text-foreground focus:outline-none cursor-pointer"
-                  title="Target / Secondary Language (default: English)"
-                >
-                  {AVAILABLE_LANGUAGES.map(lang => (
-                    <option key={lang.code} value={lang.code}>{lang.name}</option>
-                  ))}
-                </select>
+                  onSwap={() => {
+                    const curP = activeSession.primary_language || 'id'
+                    const curS = activeSession.secondary_language || 'en'
+                    setActiveSession(prev => prev ? { ...prev, primary_language: curS, secondary_language: curP } : null)
+                    updateSFTSession(activeSession.id, { primary_language: curS, secondary_language: curP })
+                  }}
+                  compact
+                />
 
                 <button
                   onClick={handleTranslateSession}
@@ -965,14 +942,22 @@ export const SFTStudioView: React.FC = () => {
               /* Side-by-Side Bilingual Review Interface */
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 <div className="max-w-5xl mx-auto space-y-4">
-                  <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
-                    <span className="text-primary flex items-center gap-1.5">
-                      Original Primary Language ({(activeSession.primary_language || 'id').toUpperCase()})
-                    </span>
-                    <span className="text-cyan-400 flex items-center gap-1.5">
-                      Translated Secondary Language ({(activeSession.secondary_language || 'en').toUpperCase()})
-                    </span>
-                  </div>
+                  {(() => {
+                    const pLang = lookupLanguage(activeSession.primary_language || 'id')
+                    const sLang = lookupLanguage(activeSession.secondary_language || 'en')
+                    return (
+                      <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
+                        <span className="text-primary flex items-center gap-1.5">
+                          Primary ({pLang.name} - {pLang.code.toUpperCase()})
+                          {pLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                        </span>
+                        <span className="text-cyan-400 flex items-center gap-1.5">
+                          Translation ({sLang.name} - {sLang.code.toUpperCase()})
+                          {sLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                   {activeSession.messages && activeSession.messages.length > 0 ? (
                     activeSession.messages.map((m, index) => {
@@ -981,6 +966,8 @@ export const SFTStudioView: React.FC = () => {
                       const status = (m.translation_status?.[secLang] || 'pending').toLowerCase()
                       const isEditing = editingTranslationId === m.id
                       const isRegenerating = isRegeneratingTurnId === m.id
+                      const pInfo = lookupLanguage(activeSession.primary_language || 'id')
+                      const sInfo = lookupLanguage(secLang)
 
                       return (
                         <div key={m.id || index} className="grid grid-cols-2 gap-4 items-start">
@@ -990,7 +977,12 @@ export const SFTStudioView: React.FC = () => {
                               <span className="font-bold text-foreground">{m.role}</span>
                               <span>Turn {index + 1}</span>
                             </div>
-                            <div className="prose prose-invert prose-xs max-w-none break-words">
+                            <div
+                              dir={pInfo.rtl ? 'rtl' : 'ltr'}
+                              className={`prose prose-invert prose-xs max-w-none break-words ${
+                                pInfo.rtl ? 'text-right' : 'text-left'
+                              }`}
+                            >
                               <ReactMarkdown>{m.content}</ReactMarkdown>
                             </div>
                           </div>
@@ -998,7 +990,7 @@ export const SFTStudioView: React.FC = () => {
                           {/* Right: Aligned Translation Card */}
                           <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-3 text-xs shadow-sm">
                             <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                              <span className="font-bold text-cyan-400">{m.role} (Translation)</span>
+                              <span className="font-bold text-cyan-400">{m.role} ({sInfo.code.toUpperCase()})</span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
                                   status === 'approved'
@@ -1020,7 +1012,10 @@ export const SFTStudioView: React.FC = () => {
                                   rows={4}
                                   value={translationEditText}
                                   onChange={e => setTranslationEditText(e.target.value)}
-                                  className="w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                  dir={sInfo.rtl ? 'rtl' : 'ltr'}
+                                  className={`w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
+                                    sInfo.rtl ? 'text-right' : 'text-left'
+                                  }`}
                                 />
                                 <div className="flex items-center justify-end gap-2">
                                   <button
@@ -1041,7 +1036,12 @@ export const SFTStudioView: React.FC = () => {
                                 </div>
                               </div>
                             ) : (
-                              <div className="prose prose-invert prose-xs max-w-none break-words min-h-[40px]">
+                              <div
+                                dir={sInfo.rtl ? 'rtl' : 'ltr'}
+                                className={`prose prose-invert prose-xs max-w-none break-words min-h-[40px] ${
+                                  sInfo.rtl ? 'text-right' : 'text-left'
+                                }`}
+                              >
                                 {transText ? (
                                   <ReactMarkdown>{transText}</ReactMarkdown>
                                 ) : (
@@ -1158,11 +1158,13 @@ export const SFTStudioView: React.FC = () => {
               <div className="p-3 rounded-lg bg-secondary/40 border border-border/80 text-[11px] space-y-1 font-mono text-muted-foreground">
                 <div>Model: {activeSession.model || activeModel}</div>
                 <div>Turns: {activeSession.messages.length} messages (Canonical ChatML Schema)</div>
-                <div>
-                  Language Alignment:{' '}
-                  <span className="text-cyan-400 font-bold">
-                    {(activeSession.primary_language || 'id').toUpperCase()} ↔ {(activeSession.secondary_language || 'en').toUpperCase()}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <span>Language Alignment:</span>
+                  <LanguageIdentityBadge
+                    primaryLanguage={activeSession.primary_language || 'id'}
+                    secondaryLanguage={activeSession.secondary_language || 'en'}
+                    mode={activeSession.language_mode || 'bilingual'}
+                  />
                 </div>
                 <div>Commit Destination: Project SFT Corpus (1 Atomic Record)</div>
               </div>

@@ -57,12 +57,71 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
     let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'id'").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN secondary_language TEXT NOT NULL DEFAULT 'en'").execute(&pool).await;
 
+    // Ensure dynamic multilingual language metadata columns exist
+    let _ = sqlx::query("ALTER TABLE sft_sessions ADD COLUMN language_metadata_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE sft_records ADD COLUMN language_metadata_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+
+    // Migrate any legacy records to Canonical Schema v2.0 language structure
+    migrate_legacy_language_metadata(&pool).await?;
+
     info!("Migrations completed successfully.");
 
     // Seed default data if needed
     seed_defaults(&pool).await?;
 
     Ok(pool)
+}
+
+pub async fn migrate_legacy_language_metadata(pool: &SqlitePool) -> Result<(), AppError> {
+    // 1. Migrate SFT records
+    let records: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, language_mode, primary_language, secondary_language, language_metadata_json FROM sft_records"
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for (id, mode, p_lang, s_lang, meta_str) in records {
+        if meta_str.trim().is_empty() || meta_str == "{}" {
+            let canon = crate::languages::LanguageRegistry::build_canonical_language_object(
+                &mode,
+                &p_lang,
+                if mode == "bilingual" || mode == "multilingual" { Some(&s_lang) } else { None },
+            );
+            let s = serde_json::to_string(&canon).unwrap_or_else(|_| "{}".to_string());
+            let _ = sqlx::query("UPDATE sft_records SET language_metadata_json = ? WHERE id = ?")
+                .bind(&s)
+                .bind(&id)
+                .execute(pool)
+                .await;
+        }
+    }
+
+    // 2. Migrate SFT sessions
+    let sessions: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, language_mode, primary_language, secondary_language, language_metadata_json FROM sft_sessions"
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for (id, mode, p_lang, s_lang, meta_str) in sessions {
+        if meta_str.trim().is_empty() || meta_str == "{}" {
+            let canon = crate::languages::LanguageRegistry::build_canonical_language_object(
+                &mode,
+                &p_lang,
+                if mode == "bilingual" || mode == "multilingual" { Some(&s_lang) } else { None },
+            );
+            let s = serde_json::to_string(&canon).unwrap_or_else(|_| "{}".to_string());
+            let _ = sqlx::query("UPDATE sft_sessions SET language_metadata_json = ? WHERE id = ?")
+                .bind(&s)
+                .bind(&id)
+                .execute(pool)
+                .await;
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn seed_defaults(pool: &SqlitePool) -> Result<(), AppError> {

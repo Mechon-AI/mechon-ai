@@ -2,6 +2,7 @@ pub mod commands;
 pub mod credentials;
 pub mod database;
 pub mod errors;
+pub mod languages;
 pub mod models;
 pub mod providers;
 pub mod services;
@@ -78,6 +79,7 @@ pub fn run() {
             commands::sft::update_sft_record,
             commands::sft::delete_sft_record,
             commands::sft::duplicate_sft_record,
+            commands::sft::get_corpus_languages,
 
             // DPO Studio
             commands::dpo::get_dpo_tasks,
@@ -111,6 +113,8 @@ pub fn run() {
             commands::translation::translate_sft_message,
             commands::translation::update_sft_message_translation,
             commands::translation::batch_update_translation_status,
+            commands::translation::get_supported_languages,
+            commands::translation::lookup_language_info,
 
             // Quality Control & Validation
             commands::validation::validate_dataset,

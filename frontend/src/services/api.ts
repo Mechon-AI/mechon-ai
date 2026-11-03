@@ -378,6 +378,15 @@ export const getDashboardAnalytics = (projectId?: string): Promise<any> =>
 // -------------------------------------------------------------
 // Translation & Bilingual API
 // -------------------------------------------------------------
+export const getSupportedLanguages = (): Promise<import('../types').LanguageInfo[]> =>
+  invoke<import('../types').LanguageInfo[]>('get_supported_languages')
+
+export const lookupLanguageInfo = (code: string): Promise<import('../types').LanguageInfo> =>
+  invoke<import('../types').LanguageInfo>('lookup_language_info', { code })
+
+export const getCorpusLanguages = (projectId: string): Promise<import('../types').CorpusLanguageStats> =>
+  invoke<import('../types').CorpusLanguageStats>('get_corpus_languages', { projectId })
+
 export const translateSFTSession = (data: {
   session_id: string
   target_language: string

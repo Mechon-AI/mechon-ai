@@ -1,5 +1,5 @@
 Name:           mechon-ai
-Version:        1.1.0
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        Native desktop workstation for SFT and DPO dataset engineering
 

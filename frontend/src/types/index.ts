@@ -1,3 +1,5 @@
+export * from './languages'
+
 export interface Project {
   id: string
   name: string
@@ -38,6 +40,7 @@ export interface SFTSession {
   language_mode?: 'monolingual' | 'bilingual'
   primary_language?: string
   secondary_language?: string
+  language_metadata?: Record<string, any>
   committed_record_id?: string
   messages: SFTMessage[]
   created_at: string
@@ -61,6 +64,7 @@ export interface SFTRecord {
   language_mode?: 'monolingual' | 'bilingual'
   primary_language?: string
   secondary_language?: string
+  language_metadata?: Record<string, any>
   metadata: {
     tags?: string[]
     source?: string

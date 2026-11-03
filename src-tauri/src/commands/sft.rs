@@ -162,3 +162,11 @@ pub async fn duplicate_sft_record(
 ) -> Result<SFTRecord, AppError> {
     DatasetService::duplicate_sft_record(&pool, &record_id).await
 }
+
+#[tauri::command]
+pub async fn get_corpus_languages(
+    pool: State<'_, SqlitePool>,
+    project_id: String,
+) -> Result<serde_json::Value, AppError> {
+    DatasetService::get_corpus_languages(&pool, &project_id).await
+}

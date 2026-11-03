@@ -100,14 +100,28 @@ impl ExportService {
                         &r.secondary_language,
                     );
                     if include_metadata {
+                        let primary_info = crate::languages::LanguageRegistry::lookup(&r.primary_language);
+                        let secondary_info = crate::languages::LanguageRegistry::lookup(&r.secondary_language);
                         json!({
+                            "schema_version": "2.0",
                             "id": r.id,
+                            "type": "sft",
+                            "language": {
+                                "mode": r.language_mode,
+                                "primary": {
+                                    "code": primary_info.code,
+                                    "name": primary_info.name,
+                                    "native_name": primary_info.native_name
+                                },
+                                "secondary": {
+                                    "code": secondary_info.code,
+                                    "name": secondary_info.name,
+                                    "native_name": secondary_info.native_name
+                                }
+                            },
                             "messages": final_messages,
                             "turn_count": r.turn_count,
                             "character_count": r.character_count,
-                            "language_mode": r.language_mode,
-                            "primary_language": r.primary_language,
-                            "secondary_language": r.secondary_language,
                             "metadata": r.metadata,
                             "created_at": r.created_at
                         })
@@ -166,7 +180,12 @@ impl ExportService {
                         &r.primary_language,
                         &r.secondary_language,
                     );
-                    let mut conv = String::new();
+                    let primary_info = crate::languages::LanguageRegistry::lookup(&r.primary_language);
+                    let secondary_info = crate::languages::LanguageRegistry::lookup(&r.secondary_language);
+                    let mut conv = format!(
+                        "RECORD ID: {}\nLANGUAGE: {} ({}) -> {} ({}) [Mode: {}]\n----------------------------------------\n",
+                        r.id, primary_info.name, primary_info.code, secondary_info.name, secondary_info.code, r.language_mode
+                    );
                     if let Some(msgs) = final_messages.as_array() {
                         for m in msgs {
                             let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
@@ -174,7 +193,7 @@ impl ExportService {
                             conv.push_str(&format!("{}: {}\n\n", role.to_uppercase(), content));
                         }
                     }
-                    conv.push_str("----------------------------------------\n\n");
+                    conv.push_str("========================================\n\n");
                     texts.push(conv);
                 }
                 Ok(texts.concat())
@@ -190,14 +209,28 @@ impl ExportService {
                         &r.secondary_language,
                     );
                     let obj = if include_metadata {
+                        let primary_info = crate::languages::LanguageRegistry::lookup(&r.primary_language);
+                        let secondary_info = crate::languages::LanguageRegistry::lookup(&r.secondary_language);
                         json!({
+                            "schema_version": "2.0",
                             "id": r.id,
+                            "type": "sft",
+                            "language": {
+                                "mode": r.language_mode,
+                                "primary": {
+                                    "code": primary_info.code,
+                                    "name": primary_info.name,
+                                    "native_name": primary_info.native_name
+                                },
+                                "secondary": {
+                                    "code": secondary_info.code,
+                                    "name": secondary_info.name,
+                                    "native_name": secondary_info.native_name
+                                }
+                            },
                             "messages": final_messages,
                             "turn_count": r.turn_count,
                             "character_count": r.character_count,
-                            "language_mode": r.language_mode,
-                            "primary_language": r.primary_language,
-                            "secondary_language": r.secondary_language,
                             "metadata": r.metadata,
                             "created_at": r.created_at
                         })
@@ -331,22 +364,66 @@ impl ExportService {
         let mut imported_dpo = 0;
         let now = Utc::now().to_rfc3339();
 
+        let parse_sft_item = |it: &Value| -> Option<(String, String, String, Value, Value, Value)> {
+            let messages = it.get("messages")?;
+
+            // Extract language info
+            let (mode, primary, secondary, lang_obj) = if let Some(l_obj) = it.get("language").and_then(|v| v.as_object()) {
+                let m = l_obj.get("mode").and_then(|v| v.as_str()).unwrap_or("bilingual").to_string();
+                let p = l_obj.get("primary").and_then(|p| p.get("code").or_else(|| p.get("name"))).and_then(|v| v.as_str()).unwrap_or("en").to_string();
+                let s = l_obj.get("secondary").and_then(|s| s.get("code").or_else(|| s.get("name"))).and_then(|v| v.as_str()).unwrap_or("id").to_string();
+                let canon = crate::languages::LanguageRegistry::build_canonical_language_object(&m, &p, Some(&s));
+                (m, p, s, canon)
+            } else {
+                // Legacy fields
+                let p = it.get("primary_language").and_then(|v| v.as_str()).unwrap_or("id").to_string();
+                let s = it.get("secondary_language").and_then(|v| v.as_str()).unwrap_or("en").to_string();
+                let mut m = it.get("language_mode").and_then(|v| v.as_str()).unwrap_or("monolingual").to_string();
+
+                if m == "monolingual" {
+                    if let Some(arr) = messages.as_array() {
+                        if arr.iter().any(|msg| msg.get("translations").and_then(|t| t.as_object()).map(|o| !o.is_empty()).unwrap_or(false)) {
+                            m = "bilingual".to_string();
+                        }
+                    }
+                }
+                let canon = crate::languages::LanguageRegistry::build_canonical_language_object(&m, &p, Some(&s));
+                (m, p, s, canon)
+            };
+
+            let metadata = it.get("metadata").cloned().unwrap_or(json!({}));
+            Some((mode, primary, secondary, lang_obj, messages.clone(), metadata))
+        };
+
         // Check if content is array JSON
         if let Ok(Value::Array(items)) = serde_json::from_str::<Value>(content) {
             for it in items {
-                if let Some(messages) = it.get("messages") {
-                    let id = Uuid::new_v4().to_string();
+                if let Some((mode, p_lang, s_lang, lang_meta, messages, metadata)) = parse_sft_item(&it) {
+                    let raw_id = it.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
+                    let id = if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sft_records WHERE id = ?").bind(&raw_id).fetch_one(pool).await.unwrap_or(0) > 0 {
+                        Uuid::new_v4().to_string()
+                    } else {
+                        raw_id
+                    };
                     let turns = messages.as_array().map(|a| a.len() as i64).unwrap_or(0);
                     let char_count = messages.to_string().len() as i64;
+                    let lang_meta_str = serde_json::to_string(&lang_meta).unwrap_or_else(|_| "{}".to_string());
+                    let meta_str = serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_string());
+
                     sqlx::query(
-                        "INSERT INTO sft_records (id, project_id, messages_json, turn_count, character_count, metadata_json, revision, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, '{}', 1, ?, ?)"
+                        "INSERT INTO sft_records (id, project_id, messages_json, turn_count, character_count, language_mode, primary_language, secondary_language, language_metadata_json, metadata_json, revision, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
                     )
                     .bind(&id)
                     .bind(project_id)
                     .bind(&messages.to_string())
                     .bind(turns)
                     .bind(char_count)
+                    .bind(&mode)
+                    .bind(&p_lang)
+                    .bind(&s_lang)
+                    .bind(&lang_meta_str)
+                    .bind(&meta_str)
                     .bind(&now)
                     .bind(&now)
                     .execute(pool)
@@ -356,7 +433,7 @@ impl ExportService {
                     let resp_a = it.get("chosen").or_else(|| it.get("response_a")).and_then(|v| v.as_str()).unwrap_or("");
                     let resp_b = it.get("rejected").or_else(|| it.get("response_b")).and_then(|v| v.as_str()).unwrap_or("");
                     let pref = it.get("preference").and_then(|v| v.as_str()).unwrap_or("a");
-                    let id = Uuid::new_v4().to_string();
+                    let id = it.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
                     sqlx::query(
                         "INSERT INTO dpo_tasks (id, project_id, prompt, response_a, response_b, preference, status, metadata_json, created_at, updated_at)
                          VALUES (?, ?, ?, ?, ?, ?, 'completed', '{}', ?, ?)"
@@ -380,19 +457,32 @@ impl ExportService {
                 let trimmed = line.trim();
                 if trimmed.is_empty() { continue; }
                 if let Ok(it) = serde_json::from_str::<Value>(trimmed) {
-                    if let Some(messages) = it.get("messages") {
-                        let id = Uuid::new_v4().to_string();
+                    if let Some((mode, p_lang, s_lang, lang_meta, messages, metadata)) = parse_sft_item(&it) {
+                        let raw_id = it.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
+                        let id = if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sft_records WHERE id = ?").bind(&raw_id).fetch_one(pool).await.unwrap_or(0) > 0 {
+                            Uuid::new_v4().to_string()
+                        } else {
+                            raw_id
+                        };
                         let turns = messages.as_array().map(|a| a.len() as i64).unwrap_or(0);
                         let char_count = messages.to_string().len() as i64;
+                        let lang_meta_str = serde_json::to_string(&lang_meta).unwrap_or_else(|_| "{}".to_string());
+                        let meta_str = serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_string());
+
                         sqlx::query(
-                            "INSERT INTO sft_records (id, project_id, messages_json, turn_count, character_count, metadata_json, revision, created_at, updated_at)
-                             VALUES (?, ?, ?, ?, ?, '{}', 1, ?, ?)"
+                            "INSERT INTO sft_records (id, project_id, messages_json, turn_count, character_count, language_mode, primary_language, secondary_language, language_metadata_json, metadata_json, revision, created_at, updated_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
                         )
                         .bind(&id)
                         .bind(project_id)
                         .bind(&messages.to_string())
                         .bind(turns)
                         .bind(char_count)
+                        .bind(&mode)
+                        .bind(&p_lang)
+                        .bind(&s_lang)
+                        .bind(&lang_meta_str)
+                        .bind(&meta_str)
                         .bind(&now)
                         .bind(&now)
                         .execute(pool)
@@ -402,7 +492,7 @@ impl ExportService {
                         let resp_a = it.get("chosen").or_else(|| it.get("response_a")).and_then(|v| v.as_str()).unwrap_or("");
                         let resp_b = it.get("rejected").or_else(|| it.get("response_b")).and_then(|v| v.as_str()).unwrap_or("");
                         let pref = it.get("preference").and_then(|v| v.as_str()).unwrap_or("a");
-                        let id = Uuid::new_v4().to_string();
+                        let id = it.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
                         sqlx::query(
                             "INSERT INTO dpo_tasks (id, project_id, prompt, response_a, response_b, preference, status, metadata_json, created_at, updated_at)
                              VALUES (?, ?, ?, ?, ?, ?, 'completed', '{}', ?, ?)"

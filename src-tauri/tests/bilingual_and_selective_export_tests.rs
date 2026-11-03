@@ -66,6 +66,7 @@ async fn test_selective_sft_and_dpo_export() {
             language_mode: None,
             primary_language: None,
             secondary_language: None,
+            language_metadata: None,
         }).await.unwrap();
 
         SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
@@ -87,6 +88,7 @@ async fn test_selective_sft_and_dpo_export() {
             language_mode: None,
             primary_language: None,
             secondary_language: None,
+            language_metadata: None,
         }).await.unwrap();
 
         sft_record_ids.push(record.id);
@@ -180,6 +182,7 @@ async fn test_bilingual_sft_workflow_and_commit() {
         language_mode: Some("bilingual".to_string()),
         primary_language: Some("id".to_string()),
         secondary_language: Some("en".to_string()),
+        language_metadata: None,
     }).await.unwrap();
 
     assert_eq!(session.language_mode, "bilingual");
@@ -254,6 +257,7 @@ async fn test_bilingual_sft_workflow_and_commit() {
         language_mode: Some("bilingual".to_string()),
         primary_language: Some("id".to_string()),
         secondary_language: Some("en".to_string()),
+        language_metadata: None,
     }).await.unwrap();
 
     assert_eq!(record.language_mode, "bilingual");

@@ -273,9 +273,9 @@ export const ExportCenterView: React.FC = () => {
                 </span>
                 <div className="space-y-1.5">
                   {[
-                    { id: 'canonical_aligned', label: 'Aligned Bilingual (Canonical)', desc: 'Full turns with translations map' },
-                    { id: 'primary_only', label: 'Primary Language Only (ID)', desc: 'Only Indonesian / source content' },
-                    { id: 'secondary_only', label: 'Secondary Language Only (EN)', desc: 'Only translated target content' }
+                    { id: 'canonical_aligned', label: 'Aligned Bilingual (Canonical v2.0)', desc: 'Canonical multilingual schema with full language metadata & translations map' },
+                    { id: 'primary_only', label: 'Primary Language Only', desc: 'Export source language conversations only' },
+                    { id: 'secondary_only', label: 'Secondary Language Only', desc: 'Export target translated conversations only' }
                   ].map(m => (
                     <label key={m.id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary cursor-pointer">
                       <input

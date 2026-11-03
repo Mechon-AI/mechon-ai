@@ -97,3 +97,13 @@ pub async fn batch_update_translation_status(
         &data.status,
     ).await
 }
+
+#[tauri::command]
+pub async fn get_supported_languages() -> Result<Vec<crate::languages::LanguageInfo>, AppError> {
+    Ok(crate::languages::LanguageRegistry::all_languages())
+}
+
+#[tauri::command]
+pub async fn lookup_language_info(code: String) -> Result<crate::languages::LanguageInfo, AppError> {
+    Ok(crate::languages::LanguageRegistry::lookup(&code))
+}

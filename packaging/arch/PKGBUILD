@@ -1,6 +1,6 @@
 # Maintainer: Mechon AI Team <cemetery394@gmail.com>
 pkgname=mechon-ai
-pkgver=1.1.0
+pkgver=1.1.1
 pkgrel=1
 pkgdesc="Local-first desktop workstation for SFT and DPO dataset engineering"
 arch=('x86_64')
@@ -33,7 +33,7 @@ source=(
     "mechon-ai.desktop"
 )
 sha256sums=(
-    '39d93f7d30e34ed78b47916e208bf4a814d1e82e0370d104cb9df9580ada2745'
+    '4afbdfcc537f876df14b0ebc8b45fbc27dabba5815eac475a70c70661d335561'
     'c958bfc8aa215ff6589ba48f78b5958ae45d19dc6aec3d45c0ebad7b9e2089b5'
 )
 

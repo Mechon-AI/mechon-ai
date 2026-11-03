@@ -69,16 +69,18 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
   - Streaming LLM completions for assistant turns with configurable sampling parameters.
   - Live turn editing, branching, and downstream turn truncation.
   - **Atomic Record Commitment**: Guarantees an entire multi-turn conversation commits into Mechon Corpus as **exactly one record** with a canonical `messages: [...]` array.
-- **Bilingual Dataset Engineering**:
-  - Dual-mode workspace: **Chat Mode** and **Bilingual Review Mode**.
-  - Default pair: Indonesian primary (`id`) and English secondary (`en`), extensible to any language pair.
+- **Dynamic Multilingual Dataset Engineering**:
+  - Dual-mode workspace: **Chat Mode** and **Bilingual / Multilingual Review Mode**.
+  - Arbitrary BCP-47 language pairs (e.g. `ja` → `ar`, `id` → `en`, `de` → `fr`, `es` → `ko`, `pt-BR` → `ja`).
+  - Searchable `LanguagePicker` with native names, common language prioritization, and custom tag fallback.
+  - Native Right-to-Left (RTL) script detection and directionality rendering (`dir="rtl"`) for Arabic, Hebrew, Urdu, Persian, etc.
   - Context-aware LLM translation of all conversation turns.
-  - Side-by-side bilingual review cards (source on left, translation on right).
+  - Side-by-side parallel review cards (source on left, translation on right).
   - Turn-level approval lifecycle (`pending` → `generated` → `edited` → `approved` / `failed`).
   - Per-turn editable translations, single-turn context regeneration, and bulk "Approve All Turns".
-  - Atomic single-record commit preserving turn alignments in `translations` and `translation_status`.
-  - Corpus bilingual filtering (`All`, `Bilingual`, `Monolingual`) and badges (`ID ↔ EN`).
-  - 3 Bilingual export modes: `canonical_aligned`, `primary_only`, and `secondary_only`.
+  - Canonical Schema v2.0 atomic single-record commit preserving full language identity metadata and alignments.
+  - Corpus multilingual filtering by active language pairs and badges (`JA → AR`, `ID → EN`).
+  - 3 Multilingual export modes: `canonical_aligned`, `primary_only`, and `secondary_only`.
 - **Mechon DPO Studio**:
   - Prompt and system prompt input workbench.
   - Concurrent dual candidate generation: Response A and Response B generated in parallel via `tokio::join!`.
@@ -261,8 +263,8 @@ makepkg -si
 
 *Or install from the latest release asset:*
 ```bash
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/PKGBUILD
-curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/mechon-ai.desktop
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.1/PKGBUILD
+curl -LO https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.1/mechon-ai.desktop
 makepkg -si
 ```
 
@@ -271,9 +273,9 @@ makepkg -si
 Download the official standalone release from [GitHub Releases](https://github.com/Mechon-AI/mechon-ai/releases):
 
 ```bash
-wget https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.0/mechon-ai-v1.1.0-linux-x86_64.tar.gz
-tar -xzvf mechon-ai-v1.1.0-linux-x86_64.tar.gz
-cd mechon-ai-v1.1.0-linux-x86_64
+wget https://github.com/Mechon-AI/mechon-ai/releases/download/v1.1.1/mechon-ai-v1.1.1-linux-x86_64.tar.gz
+tar -xzvf mechon-ai-v1.1.1-linux-x86_64.tar.gz
+cd mechon-ai-v1.1.1-linux-x86_64
 ./mechon-ai
 ```
 
@@ -529,7 +531,7 @@ mechon-ai/
 - [x] SFT Multi-Turn Studio with atomic conversation commitment.
 - [x] DPO Pairwise Evaluation Studio with dual-model parallel synthesis.
 - [x] Selective Dataset Export with empty-selection validation.
-- [x] Complete Bilingual Dataset Engineering workflow (ID ↔ EN, turn review, 3 export modes).
+- [x] Dynamic Multilingual Dataset Architecture (arbitrary BCP-47 pairs, RTL script support, Canonical Schema v2.0).
 - [x] Official Arch Linux packaging (`PKGBUILD`) in compilation mode.
 - [x] Automated GitHub Actions CI/CD release workflow.
 - [ ] **Mechon Train**: On-device LoRA / QLoRA fine-tuning engine using local GPUs. *(Planned)*

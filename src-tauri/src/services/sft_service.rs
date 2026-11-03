@@ -1,4 +1,4 @@
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -18,14 +18,14 @@ impl SFTService {
     ) -> Result<Vec<SFTSession>, AppError> {
         let (sql, bind_status) = match status {
             Some(s) if !s.is_empty() => (
-                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
+                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, language_metadata_json, committed_record_id, created_at, updated_at
                  FROM sft_sessions
                  WHERE project_id = ? AND status = ?
                  ORDER BY updated_at DESC",
                 Some(s),
             ),
             _ => (
-                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
+                "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, language_metadata_json, committed_record_id, created_at, updated_at
                  FROM sft_sessions
                  WHERE project_id = ?
                  ORDER BY updated_at DESC",
@@ -34,13 +34,13 @@ impl SFTService {
         };
 
         let rows = if let Some(s) = bind_status {
-            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(sql)
+            sqlx::query(sql)
                 .bind(project_id)
                 .bind(s)
                 .fetch_all(pool)
                 .await?
         } else {
-            sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(sql)
+            sqlx::query(sql)
                 .bind(project_id)
                 .fetch_all(pool)
                 .await?
@@ -48,25 +48,40 @@ impl SFTService {
 
         let mut sessions = Vec::new();
         for r in rows {
-            let messages = Self::get_messages(pool, &r.0).await?;
+            let session_id: String = r.get("id");
+            let messages = Self::get_messages(pool, &session_id).await?;
+            let lang_mode_str: String = r.get("language_mode");
+            let primary_lang: String = r.get("primary_language");
+            let secondary_lang: String = r.get("secondary_language");
+            let meta_raw: String = r.get("language_metadata_json");
+
+            let mut lang_meta: Value = serde_json::from_str(&meta_raw).unwrap_or_else(|_| json!({}));
+            if !lang_meta.is_object() || lang_meta.as_object().map(|m| m.is_empty()).unwrap_or(true) {
+                lang_meta = crate::languages::LanguageRegistry::build_canonical_language_object(
+                    &lang_mode_str,
+                    &primary_lang,
+                    if lang_mode_str == "bilingual" || lang_mode_str == "multilingual" { Some(&secondary_lang) } else { None },
+                );
+            }
             sessions.push(SFTSession {
-                id: r.0,
-                project_id: r.1,
-                title: r.2,
-                system_prompt: r.3,
-                status: r.4,
-                provider_id: r.5,
-                model: r.6,
-                temperature: r.7,
-                top_p: r.8,
-                max_tokens: r.9,
-                language_mode: r.10,
-                primary_language: r.11,
-                secondary_language: r.12,
-                committed_record_id: r.13,
+                id: session_id,
+                project_id: r.get("project_id"),
+                title: r.get("title"),
+                system_prompt: r.get("system_prompt"),
+                status: r.get("status"),
+                provider_id: r.get("provider_id"),
+                model: r.get("model"),
+                temperature: r.get("temperature"),
+                top_p: r.get("top_p"),
+                max_tokens: r.get("max_tokens"),
+                language_mode: lang_mode_str,
+                primary_language: primary_lang,
+                secondary_language: secondary_lang,
+                language_metadata: lang_meta,
+                committed_record_id: r.get("committed_record_id"),
                 messages,
-                created_at: r.14,
-                updated_at: r.15,
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
             });
         }
 
@@ -74,8 +89,8 @@ impl SFTService {
     }
 
     pub async fn get_session(pool: &SqlitePool, session_id: &str) -> Result<SFTSession, AppError> {
-        let row = sqlx::query_as::<_, (String, String, String, String, String, Option<String>, Option<String>, f64, f64, i64, String, String, String, Option<String>, String, String)>(
-            "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, committed_record_id, created_at, updated_at
+        let row = sqlx::query(
+            "SELECT id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, language_metadata_json, committed_record_id, created_at, updated_at
              FROM sft_sessions
              WHERE id = ?"
         )
@@ -85,25 +100,39 @@ impl SFTService {
         .ok_or_else(|| AppError::NotFound(format!("SFT session {} not found", session_id)))?;
 
         let messages = Self::get_messages(pool, session_id).await?;
+        let lang_mode_str: String = row.get("language_mode");
+        let primary_lang: String = row.get("primary_language");
+        let secondary_lang: String = row.get("secondary_language");
+        let meta_raw: String = row.get("language_metadata_json");
+
+        let mut lang_meta: Value = serde_json::from_str(&meta_raw).unwrap_or_else(|_| json!({}));
+        if !lang_meta.is_object() || lang_meta.as_object().map(|m| m.is_empty()).unwrap_or(true) {
+            lang_meta = crate::languages::LanguageRegistry::build_canonical_language_object(
+                &lang_mode_str,
+                &primary_lang,
+                if lang_mode_str == "bilingual" || lang_mode_str == "multilingual" { Some(&secondary_lang) } else { None },
+            );
+        }
 
         Ok(SFTSession {
-            id: row.0,
-            project_id: row.1,
-            title: row.2,
-            system_prompt: row.3,
-            status: row.4,
-            provider_id: row.5,
-            model: row.6,
-            temperature: row.7,
-            top_p: row.8,
-            max_tokens: row.9,
-            language_mode: row.10,
-            primary_language: row.11,
-            secondary_language: row.12,
-            committed_record_id: row.13,
+            id: row.get("id"),
+            project_id: row.get("project_id"),
+            title: row.get("title"),
+            system_prompt: row.get("system_prompt"),
+            status: row.get("status"),
+            provider_id: row.get("provider_id"),
+            model: row.get("model"),
+            temperature: row.get("temperature"),
+            top_p: row.get("top_p"),
+            max_tokens: row.get("max_tokens"),
+            language_mode: lang_mode_str,
+            primary_language: primary_lang,
+            secondary_language: secondary_lang,
+            language_metadata: lang_meta,
+            committed_record_id: row.get("committed_record_id"),
             messages,
-            created_at: row.14,
-            updated_at: row.15,
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
         })
     }
 
@@ -147,12 +176,20 @@ impl SFTService {
         let top_p = input.top_p.unwrap_or(0.9);
         let max_tokens = input.max_tokens.unwrap_or(2048);
         let language_mode = input.language_mode.unwrap_or_else(|| "monolingual".to_string());
-        let primary_language = input.primary_language.unwrap_or_else(|| "id".to_string());
-        let secondary_language = input.secondary_language.unwrap_or_else(|| "en".to_string());
+        let primary_language = input.primary_language.unwrap_or_else(|| "en".to_string());
+        let secondary_language = input.secondary_language.unwrap_or_else(|| "id".to_string());
+        let language_metadata = input.language_metadata.unwrap_or_else(|| {
+            crate::languages::LanguageRegistry::build_canonical_language_object(
+                &language_mode,
+                &primary_language,
+                if language_mode == "bilingual" || language_mode == "multilingual" { Some(&secondary_language) } else { None },
+            )
+        });
+        let language_metadata_json = serde_json::to_string(&language_metadata).unwrap_or_else(|_| "{}".to_string());
 
         sqlx::query(
-            "INSERT INTO sft_sessions (id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO sft_sessions (id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, language_metadata_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
         .bind(&input.project_id)
@@ -166,6 +203,7 @@ impl SFTService {
         .bind(&language_mode)
         .bind(&primary_language)
         .bind(&secondary_language)
+        .bind(&language_metadata_json)
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -189,9 +227,17 @@ impl SFTService {
         let language_mode = input.language_mode.unwrap_or(existing.language_mode);
         let primary_language = input.primary_language.unwrap_or(existing.primary_language);
         let secondary_language = input.secondary_language.unwrap_or(existing.secondary_language);
+        let language_metadata = input.language_metadata.unwrap_or_else(|| {
+            crate::languages::LanguageRegistry::build_canonical_language_object(
+                &language_mode,
+                &primary_language,
+                if language_mode == "bilingual" || language_mode == "multilingual" { Some(&secondary_language) } else { None },
+            )
+        });
+        let language_metadata_json = serde_json::to_string(&language_metadata).unwrap_or_else(|_| "{}".to_string());
 
         sqlx::query(
-            "UPDATE sft_sessions SET title = ?, system_prompt = ?, status = ?, provider_id = ?, model = ?, temperature = ?, top_p = ?, max_tokens = ?, language_mode = ?, primary_language = ?, secondary_language = ?, updated_at = ?
+            "UPDATE sft_sessions SET title = ?, system_prompt = ?, status = ?, provider_id = ?, model = ?, temperature = ?, top_p = ?, max_tokens = ?, language_mode = ?, primary_language = ?, secondary_language = ?, language_metadata_json = ?, updated_at = ?
              WHERE id = ?"
         )
         .bind(&title)
@@ -205,6 +251,7 @@ impl SFTService {
         .bind(&language_mode)
         .bind(&primary_language)
         .bind(&secondary_language)
+        .bind(&language_metadata_json)
         .bind(&now)
         .bind(session_id)
         .execute(pool)
@@ -235,6 +282,7 @@ impl SFTService {
             language_mode: Some(original.language_mode),
             primary_language: Some(original.primary_language),
             secondary_language: Some(original.secondary_language),
+            language_metadata: Some(original.language_metadata),
         }).await?;
 
         // Clone messages
@@ -403,6 +451,14 @@ impl SFTService {
         let final_lang_mode = input.language_mode.unwrap_or(session.language_mode);
         let final_primary_lang = input.primary_language.unwrap_or(session.primary_language);
         let final_secondary_lang = input.secondary_language.unwrap_or(session.secondary_language);
+        let final_lang_meta = input.language_metadata.unwrap_or_else(|| {
+            crate::languages::LanguageRegistry::build_canonical_language_object(
+                &final_lang_mode,
+                &final_primary_lang,
+                if final_lang_mode == "bilingual" || final_lang_mode == "multilingual" { Some(&final_secondary_lang) } else { None },
+            )
+        });
+        let language_metadata_json = serde_json::to_string(&final_lang_meta).unwrap_or_else(|_| "{}".to_string());
 
         let mut metadata_obj = match input.metadata {
             Some(Value::Object(map)) => map,
@@ -432,7 +488,7 @@ impl SFTService {
             // Update existing record
             sqlx::query(
                 "UPDATE sft_records
-                 SET messages_json = ?, turn_count = ?, character_count = ?, language_mode = ?, primary_language = ?, secondary_language = ?, metadata_json = ?, revision = revision + 1, updated_at = ?
+                 SET messages_json = ?, turn_count = ?, character_count = ?, language_mode = ?, primary_language = ?, secondary_language = ?, language_metadata_json = ?, metadata_json = ?, revision = revision + 1, updated_at = ?
                  WHERE id = ?"
             )
             .bind(&messages_json)
@@ -441,6 +497,7 @@ impl SFTService {
             .bind(&final_lang_mode)
             .bind(&final_primary_lang)
             .bind(&final_secondary_lang)
+            .bind(&language_metadata_json)
             .bind(&metadata_json)
             .bind(&now)
             .bind(existing_record_id)
@@ -452,8 +509,8 @@ impl SFTService {
             // Insert brand new single SFT record
             let new_id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO sft_records (id, project_id, session_id, messages_json, turn_count, character_count, language_mode, primary_language, secondary_language, metadata_json, revision, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+                "INSERT INTO sft_records (id, project_id, session_id, messages_json, turn_count, character_count, language_mode, primary_language, secondary_language, language_metadata_json, metadata_json, revision, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
             )
             .bind(&new_id)
             .bind(&session.project_id)
@@ -464,6 +521,7 @@ impl SFTService {
             .bind(&final_lang_mode)
             .bind(&final_primary_lang)
             .bind(&final_secondary_lang)
+            .bind(&language_metadata_json)
             .bind(&metadata_json)
             .bind(&now)
             .bind(&now)

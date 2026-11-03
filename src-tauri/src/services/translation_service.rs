@@ -45,16 +45,22 @@ impl TranslationService {
             })
         }).collect();
 
+        let source_info = crate::languages::LanguageRegistry::lookup(&session.primary_language);
+        let target_info = crate::languages::LanguageRegistry::lookup(target_language);
+
         let prompt = format!(
-            "You are an expert bilingual AI dataset localization engineer.\n\
-             Your task is to translate the following conversation turns into target language: '{}'.\n\n\
+            "You are an expert multilingual AI dataset localization engineer.\n\
+             Your task is to translate the following conversation turns from source language '{source_name} ({source_code})' into target language '{target_name} ({target_code})'.\n\n\
              Instructions:\n\
-             1. Faithfully preserve nuance, formatting, code snippets, markdown, and conversational voice.\n\
+             1. Faithfully preserve conversational nuance, voice, markdown formatting, code snippets, and technical terminology.\n\
              2. Respond ONLY with a valid JSON object mapping each message ID to its translated text in this exact schema:\n\
              {{\n  \"translations\": {{\n    \"<message_id>\": \"<translated_text>\"\n  }}\n}}\n\n\
              Conversation turns to translate:\n{}",
-            target_language,
-            serde_json::to_string_pretty(&conversation_payload).unwrap_or_default()
+            serde_json::to_string_pretty(&conversation_payload).unwrap_or_default(),
+            source_name = source_info.name,
+            source_code = source_info.code,
+            target_name = target_info.name,
+            target_code = target_info.code,
         );
 
         let chat_req = ChatRequest {
@@ -113,12 +119,20 @@ impl TranslationService {
             .await?;
         }
 
-        // Update session mode
+        // Update session mode and dynamic canonical language metadata
         let now = chrono::Utc::now().to_rfc3339();
+        let canon_lang = crate::languages::LanguageRegistry::build_canonical_language_object(
+            "bilingual",
+            &session.primary_language,
+            Some(target_language),
+        );
+        let canon_str = serde_json::to_string(&canon_lang)?;
+
         sqlx::query(
-            "UPDATE sft_sessions SET language_mode = 'bilingual', secondary_language = ?, updated_at = ? WHERE id = ?"
+            "UPDATE sft_sessions SET language_mode = 'bilingual', secondary_language = ?, language_metadata_json = ?, updated_at = ? WHERE id = ?"
         )
         .bind(target_language)
+        .bind(&canon_str)
         .bind(&now)
         .bind(session_id)
         .execute(pool)
@@ -163,16 +177,22 @@ impl TranslationService {
             preceding.join("\n")
         };
 
+        let source_info = crate::languages::LanguageRegistry::lookup(&session.primary_language);
+        let target_info = crate::languages::LanguageRegistry::lookup(target_language);
+
         let prompt = format!(
-            "You are an expert bilingual AI dataset translator.\n\
-             Translate the following dialogue turn into target language: '{}'.\n\
+            "You are an expert multilingual AI dataset localization engineer.\n\
+             Translate the following dialogue turn from source language '{source_name} ({source_code})' into target language '{target_name} ({target_code})'.\n\
              Maintain original tone, formatting, and technical terms. Provide ONLY the translated turn without prefixes, markdown formatting, or quotes.\n\n\
              Preceding conversation context:\n{}\n\n\
              Turn to translate:\n[{}] {}",
-            target_language,
             context_str,
             target_msg.role,
-            target_msg.content
+            target_msg.content,
+            source_name = source_info.name,
+            source_code = source_info.code,
+            target_name = target_info.name,
+            target_code = target_info.code,
         );
 
         let chat_req = ChatRequest {

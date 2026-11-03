@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2026-11-03
+
+### Added
+- **Dynamic Multilingual Architecture:** Replaced hardcoded Indonesian/English constraints with a universal BCP-47 language identity system supporting arbitrary language pairs (e.g., `ja` → `ar`, `id` → `en`, `de` → `fr`, `es` → `ko`, `pt-BR` → `ja`).
+- **Canonical Schema v2.0:** Standardized multilingual dataset representation featuring structured language metadata (`mode`, `primary`, `secondary`), turn-level translation mapping, and full round-trip import/export compatibility.
+- **RTL Script Support:** Built-in Right-to-Left script detection and directionality rendering (`dir="rtl"`) for Arabic (`ar`), Hebrew (`he`), Urdu (`ur`), Persian (`fa`), and other RTL languages.
+- **Interactive Multilingual UI Components:** Added `LanguagePicker` with BCP-47 search, `LanguagePairSelector` with one-click swap (`⇄`), `LanguageIdentityBadge`, `LanguageFilter`, and `MultilingualMessageViewer`.
+- **Corpus Dynamic Language Discovery:** Implemented `get_corpus_languages` Tauri IPC command to inspect and aggregate all active language pairs, primary languages, and modes from project records.
+
+### Changed
+- SFT Studio bilingual review and translation workflows now adapt dynamically to any configured BCP-47 language pair.
+- Mechon Corpus explorer now filters dynamically by active corpus language pairs with RTL-aware parallel inspection.
+- Export Center now generates canonical v2.0 datasets with dynamic language descriptors instead of static labels.
+
+---
+
 ## [1.1.0] - 2026-11-03
 
 ### Changed

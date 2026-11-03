@@ -39,6 +39,8 @@ import {
   updateDPOTask
 } from '../../services/api'
 import type { SFTRecord, DPOTask } from '../../types'
+import { LanguageFilter, LanguageIdentityBadge } from '../../components/language'
+import { lookupLanguage, isRTL } from '../../types/languages'
 
 export const DatasetExplorerView: React.FC = () => {
   const navigate = useNavigate()
@@ -59,6 +61,7 @@ export const DatasetExplorerView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'sft' | 'dpo'>('sft')
   const [search, setSearch] = useState('')
   const [languageFilter, setLanguageFilter] = useState<'all' | 'bilingual' | 'monolingual'>('all')
+  const [selectedPair, setSelectedPair] = useState<string>('all')
   const [sftRecords, setSftRecords] = useState<SFTRecord[]>([])
   const [dpoTasks, setDpoTasks] = useState<DPOTask[]>([])
   const [selectedSFT, setSelectedSFT] = useState<SFTRecord | null>(null)
@@ -85,7 +88,7 @@ export const DatasetExplorerView: React.FC = () => {
 
   useEffect(() => {
     initView()
-  }, [activeProjectId, activeTab, search, languageFilter])
+  }, [activeProjectId, activeTab, search, languageFilter, selectedPair])
 
   const initView = async () => {
     let pId = activeProjectId
@@ -104,9 +107,18 @@ export const DatasetExplorerView: React.FC = () => {
       if (activeTab === 'sft') {
         const langMode = languageFilter !== 'all' ? languageFilter : undefined
         const res = await getSFTRecords(targetProject, search || undefined, undefined, langMode)
-        setSftRecords(res.records)
-        if (res.records.length > 0 && !selectedSFT) {
-          setSelectedSFT(res.records[0])
+        let filtered = res.records
+        if (selectedPair !== 'all') {
+          const [p, s] = selectedPair.split('-')
+          filtered = filtered.filter(r => {
+            const rP = (r.primary_language || '').toLowerCase()
+            const rS = (r.secondary_language || '').toLowerCase()
+            return rP === p.toLowerCase() && rS === s.toLowerCase()
+          })
+        }
+        setSftRecords(filtered)
+        if (filtered.length > 0 && !selectedSFT) {
+          setSelectedSFT(filtered[0])
         }
       } else {
         const res = await getDPOTasks(targetProject, undefined, search || undefined)
@@ -270,23 +282,15 @@ export const DatasetExplorerView: React.FC = () => {
           </div>
 
           {activeTab === 'sft' && (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
-                <Languages className="h-3 w-3" /> Language Mode:
-              </span>
-              <div className="flex rounded bg-secondary p-0.5 border border-border">
-                {(['all', 'bilingual', 'monolingual'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setLanguageFilter(mode)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors ${
-                      languageFilter === mode ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {mode === 'bilingual' ? 'Bilingual' : mode}
-                  </button>
-                ))}
-              </div>
+            <div className="pt-1">
+              <LanguageFilter
+                projectId={activeProjectId || ''}
+                selectedMode={languageFilter}
+                selectedPair={selectedPair}
+                onModeChange={(m) => setLanguageFilter(m as any)}
+                onPairChange={(p) => setSelectedPair(p)}
+                className="w-full justify-between"
+              />
             </div>
           )}
         </div>
@@ -399,9 +403,12 @@ export const DatasetExplorerView: React.FC = () => {
                           <span>{r.turn_count} turns</span>
                           <div className="flex items-center gap-1">
                             {isBilingual && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                                {(r.primary_language || 'id').toUpperCase()} ↔ {(r.secondary_language || 'en').toUpperCase()}
-                              </span>
+                              <LanguageIdentityBadge
+                                primaryLanguage={r.primary_language}
+                                secondaryLanguage={r.secondary_language}
+                                mode="bilingual"
+                                compact
+                              />
                             )}
                             {r.metadata?.tags && r.metadata.tags.length > 0 && (
                               <span className="text-primary truncate max-w-[70px]">
@@ -687,74 +694,96 @@ export const DatasetExplorerView: React.FC = () => {
                 </div>
               ) : viewMode === 'bilingual' ? (
                 <div className="max-w-5xl mx-auto space-y-4">
-                  {/* Bilingual Header Banner */}
-                  <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Languages className="h-5 w-5 text-cyan-400" />
-                      <div>
-                        <h4 className="font-bold text-foreground">Bilingual Parallel Dataset View</h4>
-                        <p className="text-[11px] text-muted-foreground">
-                          Aligned turn-by-turn between {(selectedSFT.primary_language || 'id').toUpperCase()} and {(selectedSFT.secondary_language || 'en').toUpperCase()}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                      {(selectedSFT.primary_language || 'id').toUpperCase()} ↔ {(selectedSFT.secondary_language || 'en').toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Side-by-Side Column Headers */}
-                  <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
-                    <span className="text-primary flex items-center gap-1.5">
-                      Primary Language ({(selectedSFT.primary_language || 'id').toUpperCase()})
-                    </span>
-                    <span className="text-cyan-400 flex items-center gap-1.5">
-                      Secondary Translation ({(selectedSFT.secondary_language || 'en').toUpperCase()})
-                    </span>
-                  </div>
-
-                  {/* Aligned Turns */}
-                  <div className="space-y-4">
-                    {selectedSFT.messages?.map((m: any, idx: number) => {
-                      const secLang = selectedSFT.secondary_language || 'en'
-                      const trans = m.translations?.[secLang] || (m.translations ? Object.values(m.translations)[0] : null)
-                      const status = m.translation_status?.[secLang] || (m.translation_status ? Object.values(m.translation_status)[0] : 'approved')
-
-                      return (
-                        <div key={idx} className="grid grid-cols-2 gap-4">
-                          {/* Left: Primary Turn */}
-                          <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs">
-                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                              <span className="font-bold text-foreground">{m.role}</span>
-                              <span>Turn {idx + 1}</span>
-                            </div>
-                            <div className="prose prose-invert prose-xs max-w-none break-words">
-                              <ReactMarkdown>{m.content}</ReactMarkdown>
+                  {(() => {
+                    const pInfo = lookupLanguage(selectedSFT.primary_language || 'id')
+                    const sInfo = lookupLanguage(selectedSFT.secondary_language || 'en')
+                    return (
+                      <>
+                        {/* Bilingual Header Banner */}
+                        <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <Languages className="h-5 w-5 text-cyan-400" />
+                            <div>
+                              <h4 className="font-bold text-foreground">Bilingual Parallel Dataset View</h4>
+                              <p className="text-[11px] text-muted-foreground">
+                                Aligned turn-by-turn between {pInfo.name} ({pInfo.code.toUpperCase()}) and {sInfo.name} ({sInfo.code.toUpperCase()})
+                              </p>
                             </div>
                           </div>
-
-                          {/* Right: Translated Turn */}
-                          <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-2 text-xs">
-                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                              <span className="font-bold text-cyan-400">{m.role} (Translated)</span>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-primary/20 text-primary'
-                              }`}>
-                                {status as string}
-                              </span>
-                            </div>
-                            <div className="prose prose-invert prose-xs max-w-none break-words">
-                              {trans ? (
-                                <ReactMarkdown>{trans as string}</ReactMarkdown>
-                              ) : (
-                                <span className="text-muted-foreground italic">No translation available for this turn</span>
-                              )}
-                            </div>
-                          </div>
+                          <LanguageIdentityBadge
+                            primaryLanguage={selectedSFT.primary_language}
+                            secondaryLanguage={selectedSFT.secondary_language}
+                            mode="bilingual"
+                          />
                         </div>
-                      )
-                    })}
-                  </div>
+
+                        {/* Side-by-Side Column Headers */}
+                        <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
+                          <span className="text-primary flex items-center gap-1.5">
+                            Primary Language ({pInfo.name} - {pInfo.code.toUpperCase()})
+                            {pInfo.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                          </span>
+                          <span className="text-cyan-400 flex items-center gap-1.5">
+                            Target Translation ({sInfo.name} - {sInfo.code.toUpperCase()})
+                            {sInfo.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                          </span>
+                        </div>
+
+                        {/* Aligned Turns */}
+                        <div className="space-y-4">
+                          {selectedSFT.messages?.map((m: any, idx: number) => {
+                            const secLang = selectedSFT.secondary_language || 'en'
+                            const trans = m.translations?.[secLang] || (m.translations ? Object.values(m.translations)[0] : null)
+                            const status = m.translation_status?.[secLang] || (m.translation_status ? Object.values(m.translation_status)[0] : 'approved')
+
+                            return (
+                              <div key={idx} className="grid grid-cols-2 gap-4">
+                                {/* Left: Primary Turn */}
+                                <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs">
+                                  <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                                    <span className="font-bold text-foreground">{m.role}</span>
+                                    <span>Turn {idx + 1}</span>
+                                  </div>
+                                  <div
+                                    dir={pInfo.rtl ? 'rtl' : 'ltr'}
+                                    className={`prose prose-invert prose-xs max-w-none break-words ${
+                                      pInfo.rtl ? 'text-right' : 'text-left'
+                                    }`}
+                                  >
+                                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                                  </div>
+                                </div>
+
+                                {/* Right: Translated Turn */}
+                                <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-2 text-xs">
+                                  <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                                    <span className="font-bold text-cyan-400">{m.role} ({sInfo.code.toUpperCase()})</span>
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                      status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-primary/20 text-primary'
+                                    }`}>
+                                      {status as string}
+                                    </span>
+                                  </div>
+                                  <div
+                                    dir={sInfo.rtl ? 'rtl' : 'ltr'}
+                                    className={`prose prose-invert prose-xs max-w-none break-words ${
+                                      sInfo.rtl ? 'text-right' : 'text-left'
+                                    }`}
+                                  >
+                                    {trans ? (
+                                      <ReactMarkdown>{trans as string}</ReactMarkdown>
+                                    ) : (
+                                      <span className="text-muted-foreground italic">No translation available for this turn</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
               ) : (
                 <div className="max-w-4xl mx-auto">

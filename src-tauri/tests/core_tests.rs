@@ -86,6 +86,7 @@ async fn test_sft_conversation_to_single_record_commit() {
         language_mode: None,
         primary_language: None,
         secondary_language: None,
+        language_metadata: None,
     }).await.unwrap();
 
     assert_eq!(session.status, "draft");
@@ -124,6 +125,7 @@ async fn test_sft_conversation_to_single_record_commit() {
         language_mode: None,
         primary_language: None,
         secondary_language: None,
+        language_metadata: None,
     }).await.unwrap();
 
     assert_eq!(record.turn_count, 4);
@@ -151,6 +153,7 @@ async fn test_sft_conversation_to_single_record_commit() {
         language_mode: None,
         primary_language: None,
         secondary_language: None,
+        language_metadata: None,
     }).await.unwrap();
 
     assert_eq!(record_retry.id, record.id);
@@ -232,6 +235,7 @@ async fn test_dataset_validation_engine() {
         language_mode: None,
         primary_language: None,
         secondary_language: None,
+        language_metadata: None,
     }).await.unwrap();
 
     SFTService::add_message(&pool, &session.id, SFTMessageCreateInput {
@@ -253,6 +257,7 @@ async fn test_dataset_validation_engine() {
         language_mode: None,
         primary_language: None,
         secondary_language: None,
+        language_metadata: None,
     }).await.unwrap();
 
     let report_valid = ValidationService::validate_dataset(&pool, &project.id, "sft").await.unwrap();

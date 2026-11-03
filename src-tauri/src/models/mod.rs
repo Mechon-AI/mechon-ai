@@ -87,13 +87,15 @@ pub struct SFTSession {
     pub primary_language: String,
     #[serde(default = "default_en_lang")]
     pub secondary_language: String,
+    #[serde(default = "default_empty_json_object")]
+    pub language_metadata: Value,
     pub committed_record_id: Option<String>,
     pub messages: Vec<SFTMessage>,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SFTSessionCreateInput {
     pub project_id: String,
     pub title: Option<String>,
@@ -106,9 +108,10 @@ pub struct SFTSessionCreateInput {
     pub language_mode: Option<String>,
     pub primary_language: Option<String>,
     pub secondary_language: Option<String>,
+    pub language_metadata: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SFTSessionUpdateInput {
     pub title: Option<String>,
     pub system_prompt: Option<String>,
@@ -121,9 +124,10 @@ pub struct SFTSessionUpdateInput {
     pub language_mode: Option<String>,
     pub primary_language: Option<String>,
     pub secondary_language: Option<String>,
+    pub language_metadata: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SFTCommitInput {
     pub title_override: Option<String>,
     pub tags: Option<Vec<String>>,
@@ -131,6 +135,7 @@ pub struct SFTCommitInput {
     pub language_mode: Option<String>,
     pub primary_language: Option<String>,
     pub secondary_language: Option<String>,
+    pub language_metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,19 +152,22 @@ pub struct SFTRecord {
     pub primary_language: String,
     #[serde(default = "default_en_lang")]
     pub secondary_language: String,
+    #[serde(default = "default_empty_json_object")]
+    pub language_metadata: Value,
     pub metadata: Value,
     pub revision: i64,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SFTRecordUpdateInput {
     pub messages: Option<Value>,
     pub metadata: Option<Value>,
     pub language_mode: Option<String>,
     pub primary_language: Option<String>,
     pub secondary_language: Option<String>,
+    pub language_metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
