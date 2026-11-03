@@ -22,6 +22,7 @@ import { DeduplicationView } from './features/engineering/DeduplicationView'
 import { PersonaAuditView } from './features/engineering/PersonaAuditView'
 import { SplitManagerView } from './features/engineering/SplitManagerView'
 import { TrainingReadinessView } from './features/readiness/TrainingReadinessView'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,12 +49,12 @@ export const App: React.FC = () => {
             <Route path="analytics" element={<AnalyticsView />} />
             <Route path="versions" element={<VersionHistoryView />} />
             <Route path="export" element={<ExportCenterView />} />
-            <Route path="engineering/templates" element={<TemplateValidationView />} />
-            <Route path="engineering/sequence" element={<SequenceAnalyticsView />} />
-            <Route path="engineering/dedup" element={<DeduplicationView />} />
-            <Route path="engineering/persona" element={<PersonaAuditView />} />
-            <Route path="engineering/splits" element={<SplitManagerView />} />
-            <Route path="readiness" element={<TrainingReadinessView />} />
+            <Route path="engineering/templates" element={<ErrorBoundary fallbackTitle="Template Validation Error"><TemplateValidationView /></ErrorBoundary>} />
+            <Route path="engineering/sequence" element={<ErrorBoundary fallbackTitle="Sequence Analytics Error"><SequenceAnalyticsView /></ErrorBoundary>} />
+            <Route path="engineering/dedup" element={<ErrorBoundary fallbackTitle="Deduplication Error"><DeduplicationView /></ErrorBoundary>} />
+            <Route path="engineering/persona" element={<ErrorBoundary fallbackTitle="Persona Audit Error"><PersonaAuditView /></ErrorBoundary>} />
+            <Route path="engineering/splits" element={<ErrorBoundary fallbackTitle="Partition Manager Error"><SplitManagerView /></ErrorBoundary>} />
+            <Route path="readiness" element={<ErrorBoundary fallbackTitle="Training Readiness Error"><TrainingReadinessView /></ErrorBoundary>} />
             <Route path="providers" element={<ProviderManagerView />} />
             <Route path="settings" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />

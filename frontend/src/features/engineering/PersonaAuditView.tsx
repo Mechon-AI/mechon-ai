@@ -37,7 +37,7 @@ export const PersonaAuditView: React.FC = () => {
     try {
       const res = await runPersonaAudit(pId, policy)
       setReport(res)
-      if (res.clusters.length > 0) {
+      if (res?.clusters && res.clusters.length > 0) {
         setSelectedCluster(res.clusters[0])
       } else {
         setSelectedCluster(null)
@@ -125,30 +125,30 @@ export const PersonaAuditView: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="p-3.5 rounded-xl border border-border bg-card">
             <div className="text-[11px] text-muted-foreground font-medium">Total Records</div>
-            <div className="text-xl font-bold mt-0.5">{report.total_records}</div>
+            <div className="text-xl font-bold mt-0.5">{report.total_records ?? 0}</div>
           </div>
           <div className="p-3.5 rounded-xl border border-border bg-card">
             <div className="text-[11px] text-muted-foreground font-medium">With System Prompt</div>
             <div className="text-xl font-bold mt-0.5 text-emerald-500">
-              {report.records_with_system_prompt}
+              {report.records_with_system_prompt ?? 0}
             </div>
           </div>
           <div className="p-3.5 rounded-xl border border-border bg-card">
             <div className="text-[11px] text-muted-foreground font-medium">Missing System</div>
             <div className="text-xl font-bold mt-0.5 text-amber-500">
-              {report.records_missing_system_prompt}
+              {report.records_missing_system_prompt ?? 0}
             </div>
           </div>
           <div className="p-3.5 rounded-xl border border-border bg-card">
             <div className="text-[11px] text-muted-foreground font-medium">Unique Personas</div>
             <div className="text-xl font-bold mt-0.5 text-purple-500">
-              {report.unique_system_prompts}
+              {report.unique_system_prompts ?? 0}
             </div>
           </div>
           <div className="p-3.5 rounded-xl border border-border bg-card">
             <div className="text-[11px] text-muted-foreground font-medium">Dominant Persona</div>
             <div className="text-xl font-bold mt-0.5 text-blue-500">
-              {report.dominant_persona_share.toFixed(1)}%
+              {(report.dominant_persona_share ?? 0).toFixed(1)}%
             </div>
           </div>
           <div className="p-3.5 rounded-xl border border-border bg-card">
@@ -174,9 +174,9 @@ export const PersonaAuditView: React.FC = () => {
         <div className="lg:col-span-5 space-y-4">
           <h3 className="text-sm font-semibold">Persona Warnings & Policy Violations</h3>
 
-          {report && report.warnings.length > 0 ? (
+          {report && (report.warnings || []).length > 0 ? (
             <div className="space-y-2.5">
-              {report.warnings.map((w, idx) => (
+              {(report.warnings || []).map((w, idx) => (
                 <div
                   key={idx}
                   className={`p-3.5 rounded-xl border space-y-1 ${
@@ -194,10 +194,10 @@ export const PersonaAuditView: React.FC = () => {
                       <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                     )}
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      {w.warning_type.replace(/_/g, ' ')}
+                      {(w.warning_type || 'warning').replace(/_/g, ' ')}
                     </span>
                     <span className="text-[11px] ml-auto font-mono text-muted-foreground">
-                      {w.affected_records_count} records
+                      {w.affected_records_count ?? 1} records
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed pl-6">{w.message}</p>
@@ -217,12 +217,12 @@ export const PersonaAuditView: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">System Prompt Clusters</h3>
             <span className="text-xs text-muted-foreground">
-              {report?.clusters.length || 0} unique personas identified
+              {(report?.clusters || []).length} unique personas identified
             </span>
           </div>
 
           <div className="border border-border rounded-xl bg-card overflow-hidden divide-y divide-border/60 max-h-[560px] overflow-y-auto">
-            {report?.clusters.map(cluster => {
+            {(report?.clusters || []).map(cluster => {
               const isSelected = selectedCluster?.cluster_id === cluster.cluster_id
               return (
                 <div
@@ -238,7 +238,7 @@ export const PersonaAuditView: React.FC = () => {
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-primary font-bold">
-                        {cluster.count} records ({cluster.percentage.toFixed(1)}%)
+                        {cluster.count ?? 0} records ({(cluster.percentage ?? 0).toFixed(1)}%)
                       </span>
                     </div>
                   </div>
@@ -251,9 +251,9 @@ export const PersonaAuditView: React.FC = () => {
                     )}
                   </div>
 
-                  {cluster.sample_record_ids.length > 0 && (
+                  {(cluster.sample_record_ids || []).length > 0 && (
                     <div className="mt-2 text-[11px] text-muted-foreground font-mono truncate">
-                      Sample records: {cluster.sample_record_ids.join(', ')}
+                      Sample records: {(cluster.sample_record_ids || []).join(', ')}
                     </div>
                   )}
                 </div>

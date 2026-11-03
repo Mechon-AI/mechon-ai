@@ -79,11 +79,11 @@ export const TrainingReadinessView: React.FC = () => {
 
   const downloadMarkdown = () => {
     if (!currentReport) return
-    const blob = new Blob([currentReport.markdown_summary], { type: 'text/markdown' })
+    const blob = new Blob([currentReport.markdown_summary || ''], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `readiness-report-${currentReport.report_id.slice(0, 8)}.md`
+    a.download = `readiness-report-${(currentReport.report_id || 'audit').slice(0, 8)}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -94,7 +94,7 @@ export const TrainingReadinessView: React.FC = () => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `readiness-report-${currentReport.report_id.slice(0, 8)}.json`
+    a.download = `readiness-report-${(currentReport.report_id || 'audit').slice(0, 8)}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -241,14 +241,14 @@ export const TrainingReadinessView: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Evaluated {currentReport.total_records} records against {currentReport.target_model.toUpperCase()} at {currentReport.max_seq_len} token limit.
+                  Evaluated {currentReport.total_records ?? 0} records against {(currentReport.target_model || 'Model').toUpperCase()} at {currentReport.max_seq_len ?? 4096} token limit.
                 </p>
               </div>
             </div>
 
             <div className="text-right text-xs text-muted-foreground font-mono">
-              <div>Report ID: {currentReport.report_id.slice(0, 12)}</div>
-              <div>Generated: {new Date(currentReport.generated_at).toLocaleString()}</div>
+              <div>Report ID: {(currentReport.report_id || '').slice(0, 12)}</div>
+              <div>Generated: {currentReport.generated_at ? new Date(currentReport.generated_at).toLocaleString() : 'N/A'}</div>
             </div>
           </div>
         </div>
@@ -260,12 +260,12 @@ export const TrainingReadinessView: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold tracking-tight">Readiness Dimensions Checklist</h3>
             <span className="text-xs text-muted-foreground">
-              {currentReport.checks.filter(c => c.status === 'pass').length} / {currentReport.checks.length} Passed
+              {(currentReport.checks || []).filter(c => c.status === 'pass').length} / {(currentReport.checks || []).length} Passed
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {currentReport.checks.map(item => (
+            {(currentReport.checks || []).map(item => (
               <div
                 key={item.dimension}
                 className={`p-5 rounded-xl border bg-card transition-all space-y-2.5 ${

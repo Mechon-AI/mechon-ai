@@ -3,12 +3,15 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadinessCheckItem {
+    #[serde(alias = "dimension")]
     pub category: String,
+    #[serde(alias = "title")]
     pub name: String,
     pub passed: bool,
     pub is_mandatory: bool,
     pub severity: String, // "critical", "warning", "info"
     pub message: String,
+    #[serde(alias = "recommendation")]
     pub details: Option<String>,
 }
 
@@ -17,7 +20,9 @@ pub struct TrainingReadinessReport {
     pub report_id: String,
     pub project_id: String,
     pub title: String,
+    #[serde(alias = "overall_status")]
     pub status: String, // "READY", "READY_WITH_WARNINGS", "BLOCKED"
+    #[serde(alias = "target_model")]
     pub model_family: String,
     pub max_seq_len: usize,
     pub generated_at: String,

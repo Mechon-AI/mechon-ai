@@ -40,7 +40,7 @@ export const DeduplicationView: React.FC = () => {
     try {
       const res = await runDeduplication(pId, overrideThreshold ?? threshold)
       setReport(res)
-      if (res.groups.length > 0) {
+      if (res?.groups && res.groups.length > 0) {
         setSelectedGroup(res.groups[0])
       } else {
         setSelectedGroup(null)
@@ -63,9 +63,9 @@ export const DeduplicationView: React.FC = () => {
       await saveDuplicateDecision(activeProjectId, groupId, recordId, decision, note)
       // Update local state
       if (report) {
-        const updatedGroups = report.groups.map(g => {
+        const updatedGroups = (report.groups || []).map(g => {
           if (g.group_id === groupId) {
-            const updatedRecords = g.records.map(r => {
+            const updatedRecords = (g.records || []).map(r => {
               if (r.record_id === recordId) {
                 return { ...r, decision, note }
               }
@@ -77,7 +77,7 @@ export const DeduplicationView: React.FC = () => {
         })
         setReport({ ...report, groups: updatedGroups })
         if (selectedGroup && selectedGroup.group_id === groupId) {
-          const updatedSelectedRecords = selectedGroup.records.map(r => {
+          const updatedSelectedRecords = (selectedGroup.records || []).map(r => {
             if (r.record_id === recordId) {
               return { ...r, decision, note }
             }
@@ -93,7 +93,7 @@ export const DeduplicationView: React.FC = () => {
 
   const filteredGroups = (report?.groups || []).filter(g => {
     if (activeTab === 'all') return true
-    return g.match_type === activeTab
+    return (g.match_type || 'near') === activeTab
   })
 
   return (
@@ -205,7 +205,7 @@ export const DeduplicationView: React.FC = () => {
                   activeTab === 'all' ? 'bg-secondary font-medium' : 'text-muted-foreground'
                 }`}
               >
-                All ({report?.groups.length || 0})
+                All ({(report?.groups || []).length})
               </button>
               <button
                 onClick={() => setActiveTab('exact')}
@@ -229,14 +229,14 @@ export const DeduplicationView: React.FC = () => {
           <div className="border border-border rounded-xl bg-card overflow-hidden divide-y divide-border/60 max-h-[560px] overflow-y-auto">
             {filteredGroups.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {report && report.duplicate_groups_count === 0
+                {report && (report.duplicate_groups_count ?? 0) === 0
                   ? 'No duplicate records detected in active project dataset.'
                   : 'No duplicate groups match active filter.'}
               </div>
             ) : (
               filteredGroups.map(grp => {
                 const isSelected = selectedGroup?.group_id === grp.group_id
-                const primary = grp.records[0]
+                const primary = (grp.records || [])[0]
                 return (
                   <button
                     key={grp.group_id}
@@ -256,7 +256,7 @@ export const DeduplicationView: React.FC = () => {
                               : 'bg-purple-500/10 text-purple-500'
                           }`}
                         >
-                          {grp.match_type}
+                          {grp.match_type || 'near'}
                         </span>
                         <span className="text-xs font-semibold truncate text-foreground">
                           {primary?.title || 'Conversation Cluster'}
@@ -266,7 +266,7 @@ export const DeduplicationView: React.FC = () => {
                         {primary?.preview || 'No preview available'}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        {grp.records.length} records in cluster
+                        {(grp.records || []).length} records in cluster
                       </div>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-2" />
@@ -283,14 +283,14 @@ export const DeduplicationView: React.FC = () => {
             <h3 className="text-sm font-semibold">Cluster Comparison & Engineer Action</h3>
             {selectedGroup && (
               <span className="text-xs font-mono text-muted-foreground">
-                Cluster ID: {selectedGroup.group_id.slice(0, 10)}...
+                Cluster ID: {(selectedGroup.group_id || '').slice(0, 10)}...
               </span>
             )}
           </div>
 
           {selectedGroup ? (
             <div className="space-y-4 max-h-[560px] overflow-y-auto pr-1">
-              {selectedGroup.records.map((rec, idx) => {
+              {(selectedGroup.records || []).map((rec, idx) => {
                 const isPrimary = idx === 0
                 return (
                   <div

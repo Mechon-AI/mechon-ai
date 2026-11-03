@@ -17,6 +17,7 @@ pub struct DuplicateRecordEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DuplicateGroup {
     pub group_id: String,
+    #[serde(alias = "match_type")]
     pub duplicate_type: String, // "exact", "normalized", "near"
     pub primary_record_id: String,
     pub max_similarity: f64,
@@ -25,11 +26,17 @@ pub struct DuplicateGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeduplicationReport {
+    #[serde(alias = "total_scanned")]
     pub total_records_analyzed: usize,
+    #[serde(alias = "unique_records")]
     pub total_unique_records: usize,
+    #[serde(alias = "exact_duplicates")]
     pub exact_duplicate_groups_count: usize,
+    #[serde(alias = "normalized_duplicates")]
     pub normalized_duplicate_groups_count: usize,
+    #[serde(alias = "near_duplicates")]
     pub near_duplicate_groups_count: usize,
+    #[serde(alias = "total_duplicate_records")]
     pub total_duplicate_records_flagged: usize,
     pub duplicate_rate_pct: f64,
     pub groups: Vec<DuplicateGroup>,

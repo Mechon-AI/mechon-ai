@@ -337,29 +337,35 @@ export const SplitManagerView: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                   <span>Record Split Assignments (First 20 records)</span>
-                  <span>{selectedSplit.assignments.length} total assignments</span>
+                  <span>{(selectedSplit.assignments || []).length} total assignments</span>
                 </div>
 
                 <div className="border border-border/80 rounded-lg overflow-hidden divide-y divide-border/60 max-h-64 overflow-y-auto font-mono text-xs">
-                  {selectedSplit.assignments.slice(0, 20).map(item => (
-                    <div key={item.record_id} className="p-2.5 flex items-center justify-between hover:bg-secondary/40">
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                          item.split_name === 'train'
-                            ? 'bg-emerald-500/10 text-emerald-500'
-                            : item.split_name === 'val'
-                            ? 'bg-blue-500/10 text-blue-500'
-                            : 'bg-purple-500/10 text-purple-500'
-                        }`}>
-                          {item.split_name}
-                        </span>
-                        <span className="text-foreground">{item.record_id}</span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        {item.group_id ? `Group: ${item.group_id.slice(0, 8)}` : 'Single Turn'}
-                      </span>
+                  {(selectedSplit.assignments || []).length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted-foreground">
+                      No individual assignments listed for this partition summary.
                     </div>
-                  ))}
+                  ) : (
+                    (selectedSplit.assignments || []).slice(0, 20).map(item => (
+                      <div key={item.record_id} className="p-2.5 flex items-center justify-between hover:bg-secondary/40">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                            item.split_name === 'train'
+                              ? 'bg-emerald-500/10 text-emerald-500'
+                              : item.split_name === 'val'
+                              ? 'bg-blue-500/10 text-blue-500'
+                              : 'bg-purple-500/10 text-purple-500'
+                          }`}>
+                            {item.split_name}
+                          </span>
+                          <span className="text-foreground">{item.record_id}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">
+                          {item.group_id ? `Group: ${(item.group_id || '').slice(0, 8)}` : 'Single Turn'}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

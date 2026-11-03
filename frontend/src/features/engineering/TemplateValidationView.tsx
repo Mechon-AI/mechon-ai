@@ -59,7 +59,7 @@ export const TemplateValidationView: React.FC = () => {
     try {
       const res = await validateChatTemplates(pId, selectedModelId, addGenerationPrompt)
       setSummary(res)
-      if (res.results.length > 0) {
+      if (res?.results && res.results.length > 0) {
         setInspectedRecord(res.results[0])
       } else {
         setInspectedRecord(null)
@@ -74,9 +74,12 @@ export const TemplateValidationView: React.FC = () => {
   const selectedModel = models.find(m => m.id === selectedModelId)
 
   const filteredResults = (summary?.results || []).filter(r => {
-    if (activeFilter === 'errors') return !r.is_valid || r.errors.length > 0
-    if (activeFilter === 'warnings') return r.warnings.length > 0
-    if (activeFilter === 'valid') return r.is_valid && r.errors.length === 0
+    if (!r) return false
+    const errCount = r.errors?.length || 0
+    const warnCount = r.warnings?.length || 0
+    if (activeFilter === 'errors') return !r.is_valid || errCount > 0
+    if (activeFilter === 'warnings') return warnCount > 0
+    if (activeFilter === 'valid') return r.is_valid && errCount === 0
     return true
   })
 
@@ -238,7 +241,7 @@ export const TemplateValidationView: React.FC = () => {
                   activeFilter === 'all' ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:bg-secondary/40'
                 }`}
               >
-                All ({summary?.results.length || 0})
+                All ({(summary?.results || []).length})
               </button>
               <button
                 onClick={() => setActiveFilter('errors')}
@@ -246,7 +249,7 @@ export const TemplateValidationView: React.FC = () => {
                   activeFilter === 'errors' ? 'bg-red-500/10 text-red-500 font-medium' : 'text-muted-foreground hover:bg-secondary/40'
                 }`}
               >
-                Errors ({summary?.results.filter(r => !r.is_valid || r.errors.length > 0).length || 0})
+                Errors ({(summary?.results || []).filter(r => !r.is_valid || (r.errors?.length || 0) > 0).length})
               </button>
               <button
                 onClick={() => setActiveFilter('warnings')}
@@ -254,7 +257,7 @@ export const TemplateValidationView: React.FC = () => {
                   activeFilter === 'warnings' ? 'bg-amber-500/10 text-amber-500 font-medium' : 'text-muted-foreground hover:bg-secondary/40'
                 }`}
               >
-                Warnings ({summary?.results.filter(r => r.warnings.length > 0).length || 0})
+                Warnings ({(summary?.results || []).filter(r => (r.warnings?.length || 0) > 0).length})
               </button>
             </div>
           </div>
@@ -277,7 +280,7 @@ export const TemplateValidationView: React.FC = () => {
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
-                        {res.is_valid && res.errors.length === 0 ? (
+                        {res.is_valid && (res.errors || []).length === 0 ? (
                           <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
                             <CheckCircle2 className="h-3 w-3" /> Valid
                           </span>
@@ -286,17 +289,17 @@ export const TemplateValidationView: React.FC = () => {
                             <XCircle className="h-3 w-3" /> Incompatible
                           </span>
                         )}
-                        {res.warnings.length > 0 && (
+                        {(res.warnings || []).length > 0 && (
                           <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-                            <AlertTriangle className="h-3 w-3" /> {res.warnings.length}
+                            <AlertTriangle className="h-3 w-3" /> {(res.warnings || []).length}
                           </span>
                         )}
                         <span className="text-xs font-mono text-muted-foreground truncate">
-                          {res.record_id.slice(0, 8)}...
+                          {(res.record_id || '').slice(0, 8)}...
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Estimated tokens: <span className="font-mono text-foreground">{res.token_estimate}</span>
+                        Estimated tokens: <span className="font-mono text-foreground">{res.token_estimate ?? 0}</span>
                       </div>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-2" />
@@ -316,25 +319,25 @@ export const TemplateValidationView: React.FC = () => {
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div>
                   <div className="text-xs text-muted-foreground font-mono">Record ID</div>
-                  <div className="text-sm font-mono font-medium">{inspectedRecord.record_id}</div>
+                  <div className="text-sm font-mono font-medium">{inspectedRecord.record_id || 'N/A'}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-muted-foreground">Token Estimate</div>
                   <div className="text-sm font-mono font-semibold text-primary">
-                    {inspectedRecord.token_estimate} tokens
+                    {inspectedRecord.token_estimate ?? 0} tokens
                   </div>
                 </div>
               </div>
 
               {/* Errors */}
-              {inspectedRecord.errors.length > 0 && (
+              {(inspectedRecord.errors || []).length > 0 && (
                 <div className="p-3.5 rounded-lg border border-red-500/30 bg-red-500/10 space-y-2">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
                     <XCircle className="h-4 w-4" />
-                    Validation Failures ({inspectedRecord.errors.length})
+                    Validation Failures ({(inspectedRecord.errors || []).length})
                   </div>
                   <ul className="text-xs text-red-600 dark:text-red-400 space-y-1 list-disc list-inside">
-                    {inspectedRecord.errors.map((err, i) => (
+                    {(inspectedRecord.errors || []).map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
                   </ul>
@@ -342,14 +345,14 @@ export const TemplateValidationView: React.FC = () => {
               )}
 
               {/* Warnings */}
-              {inspectedRecord.warnings.length > 0 && (
+              {(inspectedRecord.warnings || []).length > 0 && (
                 <div className="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-2">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-500">
                     <AlertTriangle className="h-4 w-4" />
-                    Template Warnings ({inspectedRecord.warnings.length})
+                    Template Warnings ({(inspectedRecord.warnings || []).length})
                   </div>
                   <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-1 list-disc list-inside">
-                    {inspectedRecord.warnings.map((warn, i) => (
+                    {(inspectedRecord.warnings || []).map((warn, i) => (
                       <li key={i}>{warn}</li>
                     ))}
                   </ul>

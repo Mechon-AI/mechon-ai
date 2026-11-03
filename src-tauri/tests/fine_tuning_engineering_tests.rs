@@ -269,3 +269,187 @@ fn test_conversational_dpo_serialization() {
     assert!(json_arr.starts_with('['));
     assert!(json_arr.ends_with(']'));
 }
+
+#[test]
+fn test_schema_backward_and_dual_alias_compatibility() {
+    use mechon_ai::engineering::readiness_engine::TrainingReadinessReport;
+    use mechon_ai::engineering::sequence_analytics::SequenceAnalyticsReport;
+    use mechon_ai::engineering::deduplication::DeduplicationReport;
+    use mechon_ai::engineering::persona_audit::PersonaAuditReport;
+    use mechon_ai::engineering::split_engine::SplitSummary;
+
+    // 1. Training Readiness Report with legacy/modern dual aliases
+    let legacy_readiness_json = json!({
+        "report_id": "rep-test-01",
+        "project_id": "proj-01",
+        "title": "Legacy Audit",
+        "status": "READY",
+        "model_family": "llama",
+        "max_seq_len": 4096,
+        "generated_at": "2026-11-03T00:00:00Z",
+        "total_records": 10,
+        "sft_count": 5,
+        "dpo_count": 5,
+        "total_estimated_tokens": 12000,
+        "checks": [
+            {
+                "category": "Dataset Overview",
+                "name": "Dataset Non-Empty",
+                "passed": true,
+                "is_mandatory": true,
+                "severity": "info",
+                "message": "Dataset contains 10 records",
+                "details": null
+            }
+        ],
+        "summary": {},
+        "markdown_summary": "# Report"
+    });
+
+    let report: TrainingReadinessReport = serde_json::from_value(legacy_readiness_json)
+        .expect("Should deserialize legacy readiness json");
+    assert_eq!(report.model_family, "llama");
+    assert_eq!(report.status, "READY");
+    assert_eq!(report.checks[0].category, "Dataset Overview");
+
+    // Modern aliases deserialization
+    let modern_readiness_json = json!({
+        "report_id": "rep-test-02",
+        "project_id": "proj-01",
+        "title": "Modern Audit",
+        "overall_status": "READY_WITH_WARNINGS",
+        "target_model": "qwen",
+        "max_seq_len": 8192,
+        "generated_at": "2026-11-03T00:00:00Z",
+        "total_records": 25,
+        "sft_count": 20,
+        "dpo_count": 5,
+        "total_estimated_tokens": 50000,
+        "checks": [
+            {
+                "dimension": "Format Compliance",
+                "title": "Jinja Validation",
+                "passed": true,
+                "is_mandatory": true,
+                "severity": "info",
+                "message": "Passed",
+                "recommendation": "None needed"
+            }
+        ],
+        "summary": {},
+        "markdown_summary": "# Report"
+    });
+
+    let modern_report: TrainingReadinessReport = serde_json::from_value(modern_readiness_json)
+        .expect("Should deserialize modern readiness json");
+    assert_eq!(modern_report.model_family, "qwen");
+    assert_eq!(modern_report.status, "READY_WITH_WARNINGS");
+    assert_eq!(modern_report.checks[0].category, "Format Compliance");
+
+    // 2. Split Summary with alias
+    let split_json = json!({
+        "split_id": "sp-01",
+        "name": "Partition A",
+        "seed": 42,
+        "train_count": 80,
+        "val_count": 10,
+        "eval_count": 10,
+        "total_count": 100,
+        "train_pct": 0.8,
+        "val_pct": 0.1,
+        "eval_pct": 0.1,
+        "zero_leakage_verified": true,
+        "leakage_violations": []
+    });
+
+    let split: SplitSummary = serde_json::from_value(split_json)
+        .expect("Should deserialize split summary with zero_leakage_verified");
+    assert!(split.leakage_free);
+
+    // 3. Deduplication Report with match_type alias
+    let dedup_json = json!({
+        "total_scanned": 100,
+        "unique_records": 90,
+        "exact_duplicates": 2,
+        "normalized_duplicates": 3,
+        "near_duplicates": 5,
+        "total_duplicate_records": 10,
+        "duplicate_rate_pct": 10.0,
+        "groups": [
+            {
+                "group_id": "grp-01",
+                "match_type": "exact",
+                "primary_record_id": "rec-1",
+                "max_similarity": 1.0,
+                "records": []
+            }
+        ]
+    });
+
+    let dedup: DeduplicationReport = serde_json::from_value(dedup_json)
+        .expect("Should deserialize dedup report with aliases");
+    assert_eq!(dedup.total_records_analyzed, 100);
+    assert_eq!(dedup.groups[0].duplicate_type, "exact");
+
+    // 4. Persona Report with aliases
+    let persona_json = json!({
+        "policy_applied": "single_consistent_persona",
+        "total_records": 50,
+        "records_with_system_prompt": 45,
+        "records_missing_system_prompt": 5,
+        "unique_system_prompts": 2,
+        "dominant_persona": "Helpful AI",
+        "dominant_persona_share": 90.0,
+        "clusters": [],
+        "warnings": [],
+        "is_policy_compliant": true
+    });
+
+    let persona: PersonaAuditReport = serde_json::from_value(persona_json)
+        .expect("Should deserialize persona report with aliases");
+    assert_eq!(persona.policy, "single_consistent_persona");
+    assert_eq!(persona.total_conversations, 50);
+    assert!(persona.policy_compliance);
+
+    // 5. Sequence Analytics Report with aliases
+    let seq_json = json!({
+        "model_family": "llama",
+        "max_seq_len": 4096,
+        "truncation_strategy": "tail",
+        "include_special_tokens": true,
+        "total_records": 100,
+        "total_estimated_tokens": 125000,
+        "min_len": 120,
+        "max_len": 4200,
+        "mean_len": 1250.0,
+        "median_len": 1100.0,
+        "p90_len": 2800,
+        "p95_len": 3500,
+        "p99_len": 4100,
+        "histogram": [
+            { "min_len": 0, "max_len": 500, "count": 20, "percentage": 20.0 }
+        ],
+        "truncated_records_count": 2,
+        "exceeding_percentage": 2.0,
+        "truncated_tokens_count": 250,
+        "estimated_retained_tokens": 124750,
+        "comparison_matrix": [
+            {
+                "limit": 4096,
+                "records_within_limit": 98,
+                "records_exceeding_limit": 2,
+                "pct_within_limit": 98.0,
+                "tokens_truncated": 250,
+                "total_tokens_at_limit": 124750
+            }
+        ],
+        "outlier_example_ids": []
+    });
+
+    let seq: SequenceAnalyticsReport = serde_json::from_value(seq_json)
+        .expect("Should deserialize sequence report with aliases");
+    assert_eq!(seq.total_examples, 100);
+    assert_eq!(seq.configured_max_seq_len, 4096);
+    assert_eq!(seq.histogram[0].min_range, 0);
+    assert_eq!(seq.multi_limit_comparison[0].max_seq_len, 4096);
+}

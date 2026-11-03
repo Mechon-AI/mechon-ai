@@ -21,15 +21,22 @@ pub struct PersonaWarning {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonaAuditReport {
+    #[serde(alias = "policy_applied")]
     pub policy: String, // "single_consistent_persona", "multiple_intentional_personas", "mixed_instruction", "custom"
+    #[serde(alias = "total_records")]
     pub total_conversations: usize,
+    #[serde(alias = "records_with_system_prompt")]
     pub conversations_with_system: usize,
+    #[serde(alias = "records_missing_system_prompt")]
     pub conversations_missing_system: usize,
+    #[serde(alias = "unique_system_prompts")]
     pub unique_system_prompts_count: usize,
     pub dominant_persona: Option<String>,
+    #[serde(alias = "dominant_persona_share")]
     pub dominant_persona_pct: f64,
     pub clusters: Vec<SystemPromptCluster>,
     pub warnings: Vec<PersonaWarning>,
+    #[serde(alias = "is_policy_compliant")]
     pub policy_compliance: bool,
 }
 

@@ -24,6 +24,16 @@ import type {
   TrainingReadinessReport
 } from '../types'
 
+import {
+  normalizeReadinessReport,
+  normalizeTemplateSummary,
+  normalizeModelTemplate,
+  normalizeSequenceReport,
+  normalizeDedupReport,
+  normalizePersonaReport,
+  normalizeSplitSummary
+} from '../utils/engineeringNormalizers'
+
 export function isTauriEnvironment(): boolean {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__)
 }
@@ -513,43 +523,51 @@ export const openDataFolder = (): Promise<void> =>
 // Fine-Tuning Engineering Expansion API
 // -------------------------------------------------------------
 
-export const getSupportedTemplateModels = (): Promise<ModelTemplateDef[]> =>
-  invoke<ModelTemplateDef[]>('get_supported_template_models')
+export const getSupportedTemplateModels = async (): Promise<ModelTemplateDef[]> => {
+  const res = await invoke<any[]>('get_supported_template_models')
+  return (Array.isArray(res) ? res : []).map(normalizeModelTemplate)
+}
 
-export const validateChatTemplates = (
+export const validateChatTemplates = async (
   projectId: string,
   modelId: string,
   addGenerationPrompt = false
-): Promise<TemplateCompatibilitySummary> =>
-  invoke<TemplateCompatibilitySummary>('validate_chat_templates', {
+): Promise<TemplateCompatibilitySummary> => {
+  const res = await invoke<any>('validate_chat_templates', {
     projectId,
     modelId,
     addGenerationPrompt
   })
+  return normalizeTemplateSummary(res)
+}
 
-export const runSequenceAnalytics = (
+export const runSequenceAnalytics = async (
   projectId: string,
   modelFamily: string,
   maxSeqLen = 4096,
   truncationStrategy = 'tail',
   includeSpecialTokens = true
-): Promise<SequenceAnalyticsReport> =>
-  invoke<SequenceAnalyticsReport>('run_sequence_analytics', {
+): Promise<SequenceAnalyticsReport> => {
+  const res = await invoke<any>('run_sequence_analytics', {
     projectId,
     modelFamily,
     maxSeqLen,
     truncationStrategy,
     includeSpecialTokens
   })
+  return normalizeSequenceReport(res)
+}
 
-export const runDeduplication = (
+export const runDeduplication = async (
   projectId: string,
   nearThreshold = 0.85
-): Promise<DeduplicationReport> =>
-  invoke<DeduplicationReport>('run_deduplication', {
+): Promise<DeduplicationReport> => {
+  const res = await invoke<any>('run_deduplication', {
     projectId,
     nearThreshold
   })
+  return normalizeDedupReport(res)
+}
 
 export const saveDuplicateDecision = (
   projectId: string,
@@ -566,24 +584,26 @@ export const saveDuplicateDecision = (
     note
   })
 
-export const runPersonaAudit = (
+export const runPersonaAudit = async (
   projectId: string,
   policy = 'multiple_intentional_personas'
-): Promise<PersonaAuditReport> =>
-  invoke<PersonaAuditReport>('run_persona_audit', {
+): Promise<PersonaAuditReport> => {
+  const res = await invoke<any>('run_persona_audit', {
     projectId,
     policy
   })
+  return normalizePersonaReport(res)
+}
 
-export const createDatasetSplit = (
+export const createDatasetSplit = async (
   projectId: string,
   name: string,
   seed = 42,
   trainPct = 0.80,
   valPct = 0.10,
   evalPct = 0.10
-): Promise<SplitSummary> =>
-  invoke<SplitSummary>('create_dataset_split', {
+): Promise<SplitSummary> => {
+  const res = await invoke<any>('create_dataset_split', {
     projectId,
     name,
     seed,
@@ -591,25 +611,33 @@ export const createDatasetSplit = (
     valPct,
     evalPct
   })
+  return normalizeSplitSummary(res)
+}
 
-export const listDatasetSplits = (projectId: string): Promise<SplitSummary[]> =>
-  invoke<SplitSummary[]>('list_dataset_splits', { projectId })
+export const listDatasetSplits = async (projectId: string): Promise<SplitSummary[]> => {
+  const res = await invoke<any[]>('list_dataset_splits', { projectId })
+  return (Array.isArray(res) ? res : []).map(normalizeSplitSummary)
+}
 
-export const generateTrainingReadinessReport = (
+export const generateTrainingReadinessReport = async (
   projectId: string,
   title: string,
   modelFamily = 'llama',
   maxSeqLen = 4096
-): Promise<TrainingReadinessReport> =>
-  invoke<TrainingReadinessReport>('generate_training_readiness_report', {
+): Promise<TrainingReadinessReport> => {
+  const res = await invoke<any>('generate_training_readiness_report', {
     projectId,
     title,
     modelFamily,
     maxSeqLen
   })
+  return normalizeReadinessReport(res)
+}
 
-export const listReadinessReports = (projectId: string): Promise<TrainingReadinessReport[]> =>
-  invoke<TrainingReadinessReport[]>('list_readiness_reports', { projectId })
+export const listReadinessReports = async (projectId: string): Promise<TrainingReadinessReport[]> => {
+  const res = await invoke<any[]>('list_readiness_reports', { projectId })
+  return (Array.isArray(res) ? res : []).map(normalizeReadinessReport)
+}
 
 export const exportConversationalDPO = (
   projectId: string,

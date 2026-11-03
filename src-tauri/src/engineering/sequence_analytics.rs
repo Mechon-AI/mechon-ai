@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistogramBucket {
+    #[serde(alias = "min_len")]
     pub min_range: usize,
+    #[serde(alias = "max_len")]
     pub max_range: usize,
     pub count: usize,
     pub percentage: f64,
@@ -10,34 +12,53 @@ pub struct HistogramBucket {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LengthComparisonPoint {
+    #[serde(alias = "limit")]
     pub max_seq_len: usize,
+    #[serde(alias = "records_within_limit")]
     pub within_limit: usize,
+    #[serde(alias = "records_exceeding_limit")]
     pub exceeding_limit: usize,
+    #[serde(alias = "pct_within_limit")]
     pub truncation_risk_pct: f64,
+    #[serde(alias = "tokens_truncated")]
     pub estimated_truncated_tokens: usize,
+    #[serde(alias = "total_tokens_at_limit")]
     pub estimated_retained_tokens: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SequenceAnalyticsReport {
     pub model_family: String,
+    #[serde(alias = "max_seq_len")]
     pub configured_max_seq_len: usize,
     pub truncation_strategy: String,
     pub include_special_tokens: bool,
+    #[serde(alias = "total_records")]
     pub total_examples: usize,
+    #[serde(alias = "total_estimated_tokens")]
     pub total_tokens: usize,
+    #[serde(alias = "min_len")]
     pub min_tokens: usize,
+    #[serde(alias = "max_len")]
     pub max_tokens: usize,
+    #[serde(alias = "mean_len")]
     pub mean_tokens: f64,
+    #[serde(alias = "median_len")]
     pub median_tokens: f64,
+    #[serde(alias = "p90_len")]
     pub p90_tokens: usize,
+    #[serde(alias = "p95_len")]
     pub p95_tokens: usize,
+    #[serde(alias = "p99_len")]
     pub p99_tokens: usize,
     pub histogram: Vec<HistogramBucket>,
+    #[serde(alias = "truncated_records_count")]
     pub exceeding_count: usize,
     pub exceeding_percentage: f64,
+    #[serde(alias = "truncated_tokens_count")]
     pub estimated_truncated_tokens: usize,
     pub estimated_retained_tokens: usize,
+    #[serde(alias = "comparison_matrix")]
     pub multi_limit_comparison: Vec<LengthComparisonPoint>,
     pub outlier_example_ids: Vec<(String, usize)>, // Record ID and token count
 }

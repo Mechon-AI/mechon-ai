@@ -147,48 +147,48 @@ export const SequenceAnalyticsView: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">Total Records</div>
-              <div className="text-xl font-bold mt-0.5">{report.total_records}</div>
+              <div className="text-xl font-bold mt-0.5">{report.total_records ?? 0}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">Mean Tokens</div>
-              <div className="text-xl font-bold mt-0.5">{report.mean_len.toFixed(0)}</div>
+              <div className="text-xl font-bold mt-0.5">{(report.mean_len ?? 0).toFixed(0)}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">Median</div>
-              <div className="text-xl font-bold mt-0.5">{report.median_len}</div>
+              <div className="text-xl font-bold mt-0.5">{report.median_len ?? 0}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">P90 Percentile</div>
-              <div className="text-xl font-bold mt-0.5 text-blue-500">{report.p90_len}</div>
+              <div className="text-xl font-bold mt-0.5 text-blue-500">{report.p90_len ?? 0}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">P95 Percentile</div>
-              <div className="text-xl font-bold mt-0.5 text-indigo-500">{report.p95_len}</div>
+              <div className="text-xl font-bold mt-0.5 text-indigo-500">{report.p95_len ?? 0}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">P99 Percentile</div>
-              <div className="text-xl font-bold mt-0.5 text-purple-500">{report.p99_len}</div>
+              <div className="text-xl font-bold mt-0.5 text-purple-500">{report.p99_len ?? 0}</div>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-card">
               <div className="text-[11px] text-muted-foreground font-medium">Max Tokens</div>
-              <div className="text-xl font-bold mt-0.5 text-amber-500">{report.max_len}</div>
+              <div className="text-xl font-bold mt-0.5 text-amber-500">{report.max_len ?? 0}</div>
             </div>
           </div>
 
           {/* Truncation Alert Callout */}
           <div className="p-4 rounded-xl border border-border bg-card flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`p-2.5 rounded-lg ${report.truncated_records_count > 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                {report.truncated_records_count > 0 ? <Scissors className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
+              <div className={`p-2.5 rounded-lg ${(report.truncated_records_count ?? 0) > 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                {(report.truncated_records_count ?? 0) > 0 ? <Scissors className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
               </div>
               <div>
                 <div className="text-sm font-semibold">
-                  {report.truncated_records_count > 0
-                    ? `${report.truncated_records_count} Records (${((report.truncated_records_count / Math.max(1, report.total_records)) * 100).toFixed(1)}%) Exceed ${maxSeqLen} Limit`
+                  {(report.truncated_records_count ?? 0) > 0
+                    ? `${report.truncated_records_count} Records (${(((report.truncated_records_count ?? 0) / Math.max(1, report.total_records ?? 1)) * 100).toFixed(1)}%) Exceed ${maxSeqLen} Limit`
                     : `100% of Dataset Records Fit Within ${maxSeqLen} Limit`}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Estimated {report.truncated_tokens_count.toLocaleString()} tokens clipped under {truncationStrategy} truncation strategy.
+                  Estimated {(report.truncated_tokens_count ?? 0).toLocaleString()} tokens clipped under {truncationStrategy} truncation strategy.
                 </div>
               </div>
             </div>
@@ -209,19 +209,19 @@ export const SequenceAnalyticsView: React.FC = () => {
             </div>
 
             <div className="space-y-2 pt-2">
-              {report.histogram.map((bucket, idx) => (
+              {(report.histogram || []).map((bucket, idx) => (
                 <div key={idx} className="flex items-center gap-3 text-xs">
                   <div className="w-28 font-mono text-muted-foreground text-right shrink-0">
-                    {bucket.min_len} - {bucket.max_len}
+                    {bucket.min_len ?? 0} - {bucket.max_len ?? 0}
                   </div>
                   <div className="flex-1 bg-secondary h-5 rounded overflow-hidden flex items-center">
                     <div
                       className="bg-primary/80 hover:bg-primary h-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, Math.max(0, bucket.percentage))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(0, bucket.percentage ?? 0))}%` }}
                     />
                   </div>
                   <div className="w-20 font-mono text-foreground text-right shrink-0">
-                    {bucket.count} ({bucket.percentage.toFixed(1)}%)
+                    {bucket.count ?? 0} ({(bucket.percentage ?? 0).toFixed(1)}%)
                   </div>
                 </div>
               ))}
@@ -250,7 +250,7 @@ export const SequenceAnalyticsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {report.comparison_matrix.map(pt => {
+                  {(report.comparison_matrix || []).map(pt => {
                     const isCurrent = pt.limit === maxSeqLen
                     return (
                       <tr
@@ -267,26 +267,26 @@ export const SequenceAnalyticsView: React.FC = () => {
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 font-mono">{pt.records_within_limit} records</td>
+                        <td className="py-2.5 px-3 font-mono">{pt.records_within_limit ?? 0} records</td>
                         <td className="py-2.5 px-3 font-mono text-amber-500">
-                          {pt.records_exceeding_limit} records
+                          {pt.records_exceeding_limit ?? 0} records
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2">
                             <div className="w-16 bg-secondary h-2 rounded-full overflow-hidden">
                               <div
                                 className="bg-emerald-500 h-full"
-                                style={{ width: `${pt.pct_within_limit}%` }}
+                                style={{ width: `${pt.pct_within_limit ?? 0}%` }}
                               />
                             </div>
-                            <span className="font-mono">{pt.pct_within_limit.toFixed(1)}%</span>
+                            <span className="font-mono">{(pt.pct_within_limit ?? 0).toFixed(1)}%</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 font-mono text-muted-foreground">
-                          {pt.total_tokens_at_limit.toLocaleString()}
+                          {(pt.total_tokens_at_limit ?? 0).toLocaleString()}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-red-500">
-                          {pt.tokens_truncated > 0 ? `-${pt.tokens_truncated.toLocaleString()}` : '0'}
+                          {(pt.tokens_truncated ?? 0) > 0 ? `-${(pt.tokens_truncated ?? 0).toLocaleString()}` : '0'}
                         </td>
                       </tr>
                     )

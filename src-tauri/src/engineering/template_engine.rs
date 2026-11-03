@@ -10,6 +10,7 @@ pub struct ModelTemplateDef {
     pub default_hf_repo: String,
     pub bos_token: String,
     pub eos_token: String,
+    #[serde(alias = "supports_system_role")]
     pub supports_system: bool,
     pub required_roles: Vec<String>,
     pub template: String,
@@ -19,6 +20,7 @@ pub struct ModelTemplateDef {
 pub struct ValidationResult {
     pub record_id: String,
     pub is_valid: bool,
+    #[serde(alias = "rendered_template")]
     pub rendered: Option<String>,
     pub token_estimate: usize,
     pub errors: Vec<String>,
@@ -30,11 +32,15 @@ pub struct TemplateCompatibilitySummary {
     pub model_id: String,
     pub model_name: String,
     pub family: String,
+    #[serde(alias = "total_records")]
     pub total_examples: usize,
+    #[serde(alias = "compliant_records")]
     pub compliant_count: usize,
+    #[serde(alias = "non_compliant_records")]
     pub non_compliant_count: usize,
     pub compliance_rate: f64,
     pub common_errors: Vec<(String, usize)>,
+    #[serde(alias = "results")]
     pub sample_results: Vec<ValidationResult>,
 }
 

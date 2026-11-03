@@ -13,6 +13,7 @@ pub struct SplitSummary {
     pub train_pct: f64,
     pub val_pct: f64,
     pub eval_pct: f64,
+    #[serde(alias = "zero_leakage_verified")]
     pub leakage_free: bool,
     pub leakage_violations: Vec<String>,
 }
