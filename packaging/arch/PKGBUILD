@@ -2,38 +2,50 @@
 pkgname=mechon-ai
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="Native cross-platform desktop workstation for SFT and DPO dataset engineering"
+pkgdesc="Local-first desktop workstation for SFT and DPO dataset engineering"
 arch=('x86_64')
 url="https://github.com/Mechon-AI/mechon-ai"
 license=('Apache-2.0')
 depends=(
-    'webkit2gtk-4.1'
+    'cairo'
+    'gdk-pixbuf2'
+    'glib2'
     'gtk3'
-    'sqlite'
+    'hicolor-icon-theme'
     'openssl'
+    'pango'
+    'sqlite'
+    'webkit2gtk-4.1'
 )
 makedepends=(
-    'rust'
     'cargo'
     'nodejs>=18'
     'npm'
+    'pkgconf'
+    'rust'
 )
 optdepends=(
     'ollama: local offline inference runtime'
 )
+options=('!lto')
 source=(
-    "$pkgname-$pkgver.tar.gz::https://github.com/Mechon-AI/mechon-ai/archive/v$pkgver.tar.gz"
+    "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
     "mechon-ai.desktop"
 )
-sha256sums=('SKIP' 'SKIP')
+sha256sums=(
+    '0691dbc6168f32f56d61cde1e93e9a87e3b0b52beb5d1e2ee23e2dfb49a8c019'
+    'c958bfc8aa215ff6589ba48f78b5958ae45d19dc6aec3d45c0ebad7b9e2089b5'
+)
 
 build() {
+    # 1. Compile React frontend
     cd "$srcdir/$pkgname-$pkgver/frontend"
     npm install
     npm run build
 
+    # 2. Compile native Tauri Rust desktop executable
     cd "$srcdir/$pkgname-$pkgver/src-tauri"
-    cargo build --release --locked
+    cargo build --release --locked --bin mechon-ai
 }
 
 package() {
@@ -45,10 +57,14 @@ package() {
     # Install desktop entry
     install -Dm644 "$srcdir/mechon-ai.desktop" "$pkgdir/usr/share/applications/mechon-ai.desktop"
 
-    # Install icons
+    # Install icons into hicolor icon theme
+    install -Dm644 "assets/icon-16.png" "$pkgdir/usr/share/icons/hicolor/16x16/apps/mechon-ai.png"
     install -Dm644 "src-tauri/icons/32x32.png" "$pkgdir/usr/share/icons/hicolor/32x32/apps/mechon-ai.png"
+    install -Dm644 "assets/icon-64.png" "$pkgdir/usr/share/icons/hicolor/64x64/apps/mechon-ai.png"
     install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/mechon-ai.png"
+    install -Dm644 "assets/icon-256.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/mechon-ai.png"
     install -Dm644 "src-tauri/icons/icon.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/mechon-ai.png"
+    install -Dm644 "assets/mechon-icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/mechon-ai.svg"
 
     # Install documentation & license
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
