@@ -140,7 +140,7 @@ impl EvaluationAgentService {
         let eval_json = Self::call_llm_or_fallback(
             pool, vault, provider_id, selected_model,
             &system_prompt, &user_input, assistant_response
-        ).await;
+        ).await?;
 
         let consistency_score = eval_json.get("consistency_score").and_then(|v| v.as_f64()).unwrap_or(0.95);
         let consistency_details = eval_json.get("consistency_details").and_then(|v| v.as_str()).map(String::from);
@@ -239,42 +239,52 @@ impl EvaluationAgentService {
         system_prompt: &str,
         user_input: &str,
         assistant_response: &str,
-    ) -> Value {
-        if let Ok(provider) = ProviderService::get(pool, provider_id, vault).await {
-            let api_key = ProviderService::get_raw_key(pool, provider_id, vault).await.ok().flatten();
-            let selected_model = model
-                .filter(|m| !m.trim().is_empty())
-                .or_else(|| provider.default_model.as_deref())
-                .unwrap_or("default");
-
-            let adapter = ProviderFactory::create(
-                &provider.provider_type,
-                &provider.base_url,
-                api_key,
-                provider.timeout_seconds,
-            );
-
-            let req = ChatRequest {
-                model: selected_model.to_string(),
-                messages: vec![
-                    ChatMessage { role: "system".to_string(), content: system_prompt.to_string() },
-                    ChatMessage { role: "user".to_string(), content: user_input.to_string() },
-                ],
-                temperature: Some(0.2), // Low temperature for evaluative consistency
-                top_p: Some(0.9),
-                max_tokens: Some(1024),
-                stream: false,
-            };
-
-            if let Ok(Ok(resp)) = tokio::time::timeout(std::time::Duration::from_secs(30), adapter.chat(req)).await {
-                if let Some(parsed) = Self::extract_json(&resp.content) {
-                    return parsed;
-                }
-            }
+    ) -> Result<Value, AppError> {
+        let provider = ProviderService::get(pool, provider_id, vault).await?;
+        if provider.provider_type == "mock" || provider.id == "mock" {
+            return Ok(Self::generate_deterministic_evaluation(assistant_response));
         }
 
-        // Deterministic Fallback if offline or mock
-        Self::generate_deterministic_evaluation(assistant_response)
+        let api_key = ProviderService::get_raw_key(pool, provider_id, vault).await.ok().flatten();
+        let selected_model = model
+            .filter(|m| !m.trim().is_empty())
+            .or_else(|| provider.default_model.as_deref())
+            .unwrap_or("default");
+
+        let adapter = ProviderFactory::create(
+            &provider.provider_type,
+            &provider.base_url,
+            api_key,
+            provider.timeout_seconds,
+        );
+
+        let req = ChatRequest {
+            model: selected_model.to_string(),
+            messages: vec![
+                ChatMessage { role: "system".to_string(), content: system_prompt.to_string() },
+                ChatMessage { role: "user".to_string(), content: user_input.to_string() },
+            ],
+            temperature: Some(0.2), // Low temperature for evaluative consistency
+            top_p: Some(0.9),
+            max_tokens: Some(1024),
+            stream: false,
+        };
+
+        match tokio::time::timeout(std::time::Duration::from_secs(provider.timeout_seconds as u64), adapter.chat(req)).await {
+            Ok(Ok(resp)) => {
+                if let Some(parsed) = Self::extract_json(&resp.content) {
+                    Ok(parsed)
+                } else {
+                    Ok(Self::generate_deterministic_evaluation(assistant_response))
+                }
+            }
+            Ok(Err(e)) => {
+                Err(AppError::Provider(format!("[Evaluation Agent] Provider '{}' (model '{}') failed: {}", provider_id, selected_model, e)))
+            }
+            Err(_) => {
+                Err(AppError::Provider(format!("[Evaluation Agent] Request to provider '{}' timed out after {}s", provider_id, provider.timeout_seconds)))
+            }
+        }
     }
 
     fn extract_json(raw: &str) -> Option<Value> {

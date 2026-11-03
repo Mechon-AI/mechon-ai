@@ -11,6 +11,25 @@ pub struct CharacterProfile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeConfig {
+    pub provider_id: String,
+    pub model_id: String,
+    #[serde(default)]
+    pub model_display_name: Option<String>,
+    #[serde(default = "default_agent_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub max_tokens: Option<usize>,
+}
+
+fn default_agent_enabled() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorySession {
     pub id: String,
     pub project_id: String,
@@ -29,6 +48,12 @@ pub struct StorySession {
     pub inference_model: Option<String>,
     pub evaluation_provider_id: Option<String>,
     pub evaluation_model: Option<String>,
+    #[serde(default)]
+    pub planning_agent_config: Option<AgentRuntimeConfig>,
+    #[serde(default)]
+    pub inference_agent_config: Option<AgentRuntimeConfig>,
+    #[serde(default)]
+    pub evaluation_agent_config: Option<AgentRuntimeConfig>,
     pub temperature: f64,
     pub top_p: f64,
     pub max_tokens: usize,
@@ -58,6 +83,9 @@ pub struct CreateStorySessionInput {
     pub inference_model: Option<String>,
     pub evaluation_provider_id: Option<String>,
     pub evaluation_model: Option<String>,
+    pub planning_agent_config: Option<AgentRuntimeConfig>,
+    pub inference_agent_config: Option<AgentRuntimeConfig>,
+    pub evaluation_agent_config: Option<AgentRuntimeConfig>,
     pub template_id: Option<String>,
 }
 
@@ -79,6 +107,9 @@ pub struct UpdateStorySessionInput {
     pub inference_model: Option<String>,
     pub evaluation_provider_id: Option<String>,
     pub evaluation_model: Option<String>,
+    pub planning_agent_config: Option<AgentRuntimeConfig>,
+    pub inference_agent_config: Option<AgentRuntimeConfig>,
+    pub evaluation_agent_config: Option<AgentRuntimeConfig>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_tokens: Option<usize>,

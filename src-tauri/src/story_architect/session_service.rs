@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
 use super::models::{
-    StorySession, CreateStorySessionInput, UpdateStorySessionInput,
+    StorySession, CreateStorySessionInput, UpdateStorySessionInput, AgentRuntimeConfig,
     PlanningSpecification, SavePlanningSpecInput, PlanningMilestone, SaveMilestoneInput,
     StoryMessage, StoryMessageRevision, EditStoryMessageInput, RegenerateAssistantTurnInput,
     RestoreRevisionInput, CommitToSFTInput, CommitToSFTResult,
@@ -40,6 +40,69 @@ impl StorySessionService {
         ]);
         let pause_cond_json = serde_json::to_string(&pause_conditions).unwrap_or_else(|_| "[]".to_string());
 
+        let plan_p = input.planning_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.planning_provider_id.clone());
+        let plan_m = input.planning_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.planning_model.clone());
+        let plan_cfg_json = input.planning_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .unwrap_or_else(|| {
+                plan_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: plan_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: plan_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["prompt_planning".to_string()],
+                        temperature: None,
+                        top_p: None,
+                        max_tokens: None,
+                    }).unwrap_or_else(|_| "{}".to_string())
+                }).unwrap_or_else(|| "{}".to_string())
+            });
+
+        let inf_p = input.inference_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.inference_provider_id.clone());
+        let inf_m = input.inference_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.inference_model.clone());
+        let inf_cfg_json = input.inference_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .unwrap_or_else(|| {
+                inf_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: inf_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: inf_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["conversation_generation".to_string()],
+                        temperature: Some(0.7),
+                        top_p: Some(0.9),
+                        max_tokens: Some(2048),
+                    }).unwrap_or_else(|_| "{}".to_string())
+                }).unwrap_or_else(|| "{}".to_string())
+            });
+
+        let eval_p = input.evaluation_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.evaluation_provider_id.clone());
+        let eval_m = input.evaluation_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.evaluation_model.clone());
+        let eval_cfg_json = input.evaluation_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .unwrap_or_else(|| {
+                eval_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: eval_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: eval_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["evaluation_scoring".to_string()],
+                        temperature: None,
+                        top_p: None,
+                        max_tokens: None,
+                    }).unwrap_or_else(|_| "{}".to_string())
+                }).unwrap_or_else(|| "{}".to_string())
+            });
+
         // 1. Insert Session
         sqlx::query(
             r#"
@@ -47,11 +110,15 @@ impl StorySessionService {
                 id, project_id, title, description, interaction_type, primary_language,
                 secondary_language, target_turns, status, execution_mode,
                 auto_pause_conditions_json, planning_provider_id, planning_model,
-                inference_provider_id, inference_model, evaluation_provider_id,
-                evaluation_model, temperature, top_p, max_tokens, max_turns,
+                planning_agent_config_json,
+                inference_provider_id, inference_model,
+                inference_agent_config_json,
+                evaluation_provider_id, evaluation_model,
+                evaluation_agent_config_json,
+                temperature, top_p, max_tokens, max_turns,
                 max_agent_iterations, token_budget, tokens_used, sft_session_id,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, 0.7, 0.9, 2048, 20, 50, 100000, 0, NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.7, 0.9, 2048, 20, 50, 100000, 0, NULL, ?, ?)
             "#,
         )
         .bind(&session_id)
@@ -64,12 +131,15 @@ impl StorySessionService {
         .bind(target_turns)
         .bind(&exec_mode)
         .bind(&pause_cond_json)
-        .bind(&input.planning_provider_id)
-        .bind(&input.planning_model)
-        .bind(&input.inference_provider_id)
-        .bind(&input.inference_model)
-        .bind(&input.evaluation_provider_id)
-        .bind(&input.evaluation_model)
+        .bind(&plan_p)
+        .bind(&plan_m)
+        .bind(&plan_cfg_json)
+        .bind(&inf_p)
+        .bind(&inf_m)
+        .bind(&inf_cfg_json)
+        .bind(&eval_p)
+        .bind(&eval_m)
+        .bind(&eval_cfg_json)
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -138,29 +208,64 @@ impl StorySessionService {
         Self::get_session(pool, &session_id).await
     }
 
-    pub async fn get_session(pool: &SqlitePool, session_id: &str) -> Result<StorySession, AppError> {
-        let r = sqlx::query(
-            r#"
-            SELECT 
-                id, project_id, title, description, interaction_type, primary_language,
-                secondary_language, target_turns, status, execution_mode,
-                auto_pause_conditions_json, planning_provider_id, planning_model,
-                inference_provider_id, inference_model, evaluation_provider_id,
-                evaluation_model, temperature, top_p, max_tokens, max_turns,
-                max_agent_iterations, token_budget, tokens_used, sft_session_id,
-                created_at, updated_at
-            FROM story_architect_sessions
-            WHERE id = ?
-            "#,
-        )
-        .bind(session_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Story session '{}' not found", session_id)))?;
-
+    pub fn map_row_to_story_session(r: &sqlx::sqlite::SqliteRow) -> StorySession {
         let pause_conditions: Vec<String> = serde_json::from_str(&r.get::<String, _>("auto_pause_conditions_json")).unwrap_or_default();
 
-        Ok(StorySession {
+        let planning_provider_id: Option<String> = r.get("planning_provider_id");
+        let planning_model: Option<String> = r.get("planning_model");
+        let planning_agent_config: Option<AgentRuntimeConfig> = r.try_get::<String, _>("planning_agent_config_json")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .or_else(|| {
+                planning_provider_id.as_ref().map(|p| AgentRuntimeConfig {
+                    provider_id: p.clone(),
+                    model_id: planning_model.clone().unwrap_or_else(|| "default".to_string()),
+                    model_display_name: planning_model.clone(),
+                    enabled: true,
+                    capabilities: vec!["prompt_planning".to_string()],
+                    temperature: None,
+                    top_p: None,
+                    max_tokens: None,
+                })
+            });
+
+        let inference_provider_id: Option<String> = r.get("inference_provider_id");
+        let inference_model: Option<String> = r.get("inference_model");
+        let inference_agent_config: Option<AgentRuntimeConfig> = r.try_get::<String, _>("inference_agent_config_json")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .or_else(|| {
+                inference_provider_id.as_ref().map(|p| AgentRuntimeConfig {
+                    provider_id: p.clone(),
+                    model_id: inference_model.clone().unwrap_or_else(|| "default".to_string()),
+                    model_display_name: inference_model.clone(),
+                    enabled: true,
+                    capabilities: vec!["conversation_generation".to_string()],
+                    temperature: r.get::<Option<f64>, _>("temperature"),
+                    top_p: r.get::<Option<f64>, _>("top_p"),
+                    max_tokens: r.get::<Option<i64>, _>("max_tokens").map(|m| m as usize),
+                })
+            });
+
+        let evaluation_provider_id: Option<String> = r.get("evaluation_provider_id");
+        let evaluation_model: Option<String> = r.get("evaluation_model");
+        let evaluation_agent_config: Option<AgentRuntimeConfig> = r.try_get::<String, _>("evaluation_agent_config_json")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .or_else(|| {
+                evaluation_provider_id.as_ref().map(|p| AgentRuntimeConfig {
+                    provider_id: p.clone(),
+                    model_id: evaluation_model.clone().unwrap_or_else(|| "default".to_string()),
+                    model_display_name: evaluation_model.clone(),
+                    enabled: true,
+                    capabilities: vec!["evaluation_scoring".to_string()],
+                    temperature: None,
+                    top_p: None,
+                    max_tokens: None,
+                })
+            });
+
+        StorySession {
             id: r.get("id"),
             project_id: r.get("project_id"),
             title: r.get("title"),
@@ -172,12 +277,15 @@ impl StorySessionService {
             status: r.get("status"),
             execution_mode: r.get("execution_mode"),
             auto_pause_conditions: pause_conditions,
-            planning_provider_id: r.get("planning_provider_id"),
-            planning_model: r.get("planning_model"),
-            inference_provider_id: r.get("inference_provider_id"),
-            inference_model: r.get("inference_model"),
-            evaluation_provider_id: r.get("evaluation_provider_id"),
-            evaluation_model: r.get("evaluation_model"),
+            planning_provider_id,
+            planning_model,
+            inference_provider_id,
+            inference_model,
+            evaluation_provider_id,
+            evaluation_model,
+            planning_agent_config,
+            inference_agent_config,
+            evaluation_agent_config,
             temperature: r.get::<Option<f64>, _>("temperature").unwrap_or(0.7),
             top_p: r.get::<Option<f64>, _>("top_p").unwrap_or(0.9),
             max_tokens: r.get::<Option<i64>, _>("max_tokens").unwrap_or(2048) as usize,
@@ -188,7 +296,34 @@ impl StorySessionService {
             sft_session_id: r.get("sft_session_id"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
-        })
+        }
+    }
+
+    pub async fn get_session(pool: &SqlitePool, session_id: &str) -> Result<StorySession, AppError> {
+        let r = sqlx::query(
+            r#"
+            SELECT 
+                id, project_id, title, description, interaction_type, primary_language,
+                secondary_language, target_turns, status, execution_mode,
+                auto_pause_conditions_json, planning_provider_id, planning_model,
+                planning_agent_config_json,
+                inference_provider_id, inference_model,
+                inference_agent_config_json,
+                evaluation_provider_id, evaluation_model,
+                evaluation_agent_config_json,
+                temperature, top_p, max_tokens, max_turns,
+                max_agent_iterations, token_budget, tokens_used, sft_session_id,
+                created_at, updated_at
+            FROM story_architect_sessions
+            WHERE id = ?
+            "#,
+        )
+        .bind(session_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Story session '{}' not found", session_id)))?;
+
+        Ok(Self::map_row_to_story_session(&r))
     }
 
     pub async fn list_sessions(pool: &SqlitePool, project_id: &str) -> Result<Vec<StorySession>, AppError> {
@@ -198,8 +333,12 @@ impl StorySessionService {
                 id, project_id, title, description, interaction_type, primary_language,
                 secondary_language, target_turns, status, execution_mode,
                 auto_pause_conditions_json, planning_provider_id, planning_model,
-                inference_provider_id, inference_model, evaluation_provider_id,
-                evaluation_model, temperature, top_p, max_tokens, max_turns,
+                planning_agent_config_json,
+                inference_provider_id, inference_model,
+                inference_agent_config_json,
+                evaluation_provider_id, evaluation_model,
+                evaluation_agent_config_json,
+                temperature, top_p, max_tokens, max_turns,
                 max_agent_iterations, token_budget, tokens_used, sft_session_id,
                 created_at, updated_at
             FROM story_architect_sessions
@@ -211,39 +350,7 @@ impl StorySessionService {
         .fetch_all(pool)
         .await?;
 
-        let list = rows.into_iter().map(|r| {
-            let pause_conditions: Vec<String> = serde_json::from_str(&r.get::<String, _>("auto_pause_conditions_json")).unwrap_or_default();
-            StorySession {
-                id: r.get("id"),
-                project_id: r.get("project_id"),
-                title: r.get("title"),
-                description: r.get("description"),
-                interaction_type: r.get("interaction_type"),
-                primary_language: r.get("primary_language"),
-                secondary_language: r.get("secondary_language"),
-                target_turns: r.get::<i64, _>("target_turns") as usize,
-                status: r.get("status"),
-                execution_mode: r.get("execution_mode"),
-                auto_pause_conditions: pause_conditions,
-                planning_provider_id: r.get("planning_provider_id"),
-                planning_model: r.get("planning_model"),
-                inference_provider_id: r.get("inference_provider_id"),
-                inference_model: r.get("inference_model"),
-                evaluation_provider_id: r.get("evaluation_provider_id"),
-                evaluation_model: r.get("evaluation_model"),
-                temperature: r.get::<Option<f64>, _>("temperature").unwrap_or(0.7),
-                top_p: r.get::<Option<f64>, _>("top_p").unwrap_or(0.9),
-                max_tokens: r.get::<Option<i64>, _>("max_tokens").unwrap_or(2048) as usize,
-                max_turns: r.get::<Option<i64>, _>("max_turns").unwrap_or(20) as usize,
-                max_agent_iterations: r.get::<Option<i64>, _>("max_agent_iterations").unwrap_or(50) as usize,
-                token_budget: r.get::<Option<i64>, _>("token_budget").unwrap_or(100000) as usize,
-                tokens_used: r.get::<Option<i64>, _>("tokens_used").unwrap_or(0) as usize,
-                sft_session_id: r.get("sft_session_id"),
-                created_at: r.get("created_at"),
-                updated_at: r.get("updated_at"),
-            }
-        }).collect();
-
+        let list = rows.into_iter().map(|r| Self::map_row_to_story_session(&r)).collect();
         Ok(list)
     }
 
@@ -251,6 +358,69 @@ impl StorySessionService {
         let now = Utc::now().to_rfc3339();
 
         let pause_cond_str = input.auto_pause_conditions.map(|c| serde_json::to_string(&c).unwrap_or_else(|_| "[]".to_string()));
+
+        let plan_p = input.planning_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.planning_provider_id.clone());
+        let plan_m = input.planning_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.planning_model.clone());
+        let plan_cfg_str = input.planning_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .or_else(|| {
+                plan_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: plan_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: plan_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["prompt_planning".to_string()],
+                        temperature: None,
+                        top_p: None,
+                        max_tokens: None,
+                    }).unwrap_or_else(|_| "{}".to_string())
+                })
+            });
+
+        let inf_p = input.inference_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.inference_provider_id.clone());
+        let inf_m = input.inference_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.inference_model.clone());
+        let inf_cfg_str = input.inference_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .or_else(|| {
+                inf_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: inf_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: inf_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["conversation_generation".to_string()],
+                        temperature: input.temperature,
+                        top_p: input.top_p,
+                        max_tokens: input.max_tokens,
+                    }).unwrap_or_else(|_| "{}".to_string())
+                })
+            });
+
+        let eval_p = input.evaluation_agent_config.as_ref().map(|c| c.provider_id.clone())
+            .or_else(|| input.evaluation_provider_id.clone());
+        let eval_m = input.evaluation_agent_config.as_ref().map(|c| c.model_id.clone())
+            .or_else(|| input.evaluation_model.clone());
+        let eval_cfg_str = input.evaluation_agent_config.as_ref()
+            .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "{}".to_string()))
+            .or_else(|| {
+                eval_p.as_ref().map(|p| {
+                    serde_json::to_string(&AgentRuntimeConfig {
+                        provider_id: p.clone(),
+                        model_id: eval_m.clone().unwrap_or_else(|| "default".to_string()),
+                        model_display_name: eval_m.clone(),
+                        enabled: true,
+                        capabilities: vec!["evaluation_scoring".to_string()],
+                        temperature: None,
+                        top_p: None,
+                        max_tokens: None,
+                    }).unwrap_or_else(|_| "{}".to_string())
+                })
+            });
 
         sqlx::query(
             r#"
@@ -267,10 +437,13 @@ impl StorySessionService {
                 auto_pause_conditions_json = COALESCE(?, auto_pause_conditions_json),
                 planning_provider_id = COALESCE(?, planning_provider_id),
                 planning_model = COALESCE(?, planning_model),
+                planning_agent_config_json = COALESCE(?, planning_agent_config_json),
                 inference_provider_id = COALESCE(?, inference_provider_id),
                 inference_model = COALESCE(?, inference_model),
+                inference_agent_config_json = COALESCE(?, inference_agent_config_json),
                 evaluation_provider_id = COALESCE(?, evaluation_provider_id),
                 evaluation_model = COALESCE(?, evaluation_model),
+                evaluation_agent_config_json = COALESCE(?, evaluation_agent_config_json),
                 temperature = COALESCE(?, temperature),
                 top_p = COALESCE(?, top_p),
                 max_tokens = COALESCE(?, max_tokens),
@@ -289,12 +462,15 @@ impl StorySessionService {
         .bind(&input.status)
         .bind(&input.execution_mode)
         .bind(&pause_cond_str)
-        .bind(&input.planning_provider_id)
-        .bind(&input.planning_model)
-        .bind(&input.inference_provider_id)
-        .bind(&input.inference_model)
-        .bind(&input.evaluation_provider_id)
-        .bind(&input.evaluation_model)
+        .bind(&plan_p)
+        .bind(&plan_m)
+        .bind(&plan_cfg_str)
+        .bind(&inf_p)
+        .bind(&inf_m)
+        .bind(&inf_cfg_str)
+        .bind(&eval_p)
+        .bind(&eval_m)
+        .bind(&eval_cfg_str)
         .bind(input.temperature)
         .bind(input.top_p)
         .bind(input.max_tokens.map(|t| t as i64))
@@ -648,8 +824,14 @@ impl StorySessionService {
         }
 
         // 4. Automatically plan next prompt for upcoming turn so engineer or auto-loop has it ready
-        logs.push("[PLANNING] Planning agent evaluating narrative state to propose next prompt...".to_string());
-        let next_prompt = PlanningAgentService::generate_next_prompt(pool, vault, session_id, None, override_provider_id, override_model).await?;
+        let plan_p = session.planning_provider_id.as_deref().unwrap_or("mock");
+        let plan_m = session.planning_model.as_deref().unwrap_or("default");
+        logs.push(format!("[PLANNING] Planning Agent proposing next prompt using provider='{}', model='{}'...", plan_p, plan_m));
+        let next_prompt = PlanningAgentService::generate_next_prompt(
+            pool, vault, session_id, None,
+            session.planning_provider_id.as_deref(),
+            session.planning_model.as_deref()
+        ).await?;
         logs.push(format!("[NEXT_PROMPT] Next prompt proposed for turn {}: \"{}\"", next_prompt.turn_index, next_prompt.prompt_content));
 
         Ok(AutoStepResult {
@@ -779,15 +961,26 @@ impl StorySessionService {
             }
         }
 
-        // 1. Get or generate proposed prompt
+        // 1. Get or generate proposed prompt using Planning Agent's independent configuration
+        let plan_p = session.planning_provider_id.as_deref().unwrap_or("mock");
+        let plan_m = session.planning_model.as_deref().unwrap_or("default");
+        let inf_p = override_provider_id.or(session.inference_provider_id.as_deref()).unwrap_or("mock");
+        let inf_m = override_model.or(session.inference_model.as_deref()).unwrap_or("default");
+        let eval_p = session.evaluation_provider_id.as_deref().unwrap_or("mock");
+        let eval_m = session.evaluation_model.as_deref().unwrap_or("default");
+
         let prompt_history = match PromptHistoryService::get_latest_proposed(pool, session_id).await? {
             Some(p) => {
                 logs.push(format!("[PLANNING] Using proposed prompt (turn {}): \"{}\"", p.turn_index, p.prompt_content));
                 p
             },
             None => {
-                logs.push("[PLANNING] Planning agent generating prompt for upcoming turn...".to_string());
-                let p = PlanningAgentService::generate_next_prompt(pool, vault, session_id, None, override_provider_id, override_model).await?;
+                logs.push(format!("[PLANNING] Planning Agent generating prompt using provider='{}', model='{}'...", plan_p, plan_m));
+                let p = PlanningAgentService::generate_next_prompt(
+                    pool, vault, session_id, None,
+                    session.planning_provider_id.as_deref(),
+                    session.planning_model.as_deref()
+                ).await?;
                 logs.push(format!("[PLANNING] Generated new prompt (turn {}): \"{}\"", p.turn_index, p.prompt_content));
                 p
             }
@@ -809,8 +1002,8 @@ impl StorySessionService {
             });
         }
 
-        // In Auto-Allow or permitted Hybrid, execute the FULL turn!
-        logs.push(format!("[GENERATING] Submitting prompt to model: \"{}\"", prompt_history.prompt_content));
+        // In Auto-Allow or permitted Hybrid, execute the FULL turn via Inference Agent!
+        logs.push(format!("[GENERATING] Submitting prompt to Inference Agent (provider='{}', model='{}'): \"{}\"", inf_p, inf_m, prompt_history.prompt_content));
         let turn_result = ExecutionService::execute_turn(
             app,
             pool,
@@ -819,18 +1012,18 @@ impl StorySessionService {
             &prompt_history.prompt_content,
             Some(&prompt_history.id),
             false,
-            override_provider_id,
-            override_model,
+            Some(inf_p),
+            Some(inf_m),
         ).await?;
         logs.push(format!("[GENERATED] Assistant turn generated ({} tokens, {}ms). Provider: {}, Model: {}",
             turn_result.assistant_message.token_count,
             turn_result.assistant_message.latency_ms,
-            turn_result.assistant_message.provider_id.as_deref().unwrap_or("default"),
-            turn_result.assistant_message.model.as_deref().unwrap_or("default")
+            turn_result.assistant_message.provider_id.as_deref().unwrap_or(inf_p),
+            turn_result.assistant_message.model.as_deref().unwrap_or(inf_m)
         ));
 
-        // Evaluate Turn
-        logs.push(format!("[EVALUATING] Quality score: {:.2}, Action: {}", turn_result.evaluation.quality_score, turn_result.evaluation.next_recommended_action));
+        // Evaluate Turn via Evaluation Agent
+        logs.push(format!("[EVALUATING] Evaluation Agent (provider='{}', model='{}') quality score: {:.2}, Action: {}", eval_p, eval_m, turn_result.evaluation.quality_score, turn_result.evaluation.next_recommended_action));
 
         // Context updated
         logs.push("[UPDATING_CONTEXT] Narrative state and active milestones updated.".to_string());
@@ -863,9 +1056,13 @@ impl StorySessionService {
             });
         }
 
-        // Autonomous cycle continues: generate the next prompt immediately!
-        logs.push("[NEXT_PROMPT] Planning agent generating next prompt for subsequent turn...".to_string());
-        let next_prompt = PlanningAgentService::generate_next_prompt(pool, vault, session_id, None, override_provider_id, override_model).await?;
+        // Autonomous cycle continues: generate the next prompt immediately via Planning Agent!
+        logs.push(format!("[NEXT_PROMPT] Planning Agent (provider='{}', model='{}') generating next prompt for subsequent turn...", plan_p, plan_m));
+        let next_prompt = PlanningAgentService::generate_next_prompt(
+            pool, vault, session_id, None,
+            session.planning_provider_id.as_deref(),
+            session.planning_model.as_deref()
+        ).await?;
         logs.push(format!("[NEXT_PROMPT] Next prompt prepared: \"{}\"", next_prompt.prompt_content));
 
         Ok(AutoStepResult {

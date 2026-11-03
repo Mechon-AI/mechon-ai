@@ -34,6 +34,9 @@ async fn setup_story_architect_test_db() -> SqlitePool {
     let rev_sql = include_str!("../migrations/20261103200000_story_architect_revisions.sql");
     sqlx::raw_sql(rev_sql).execute(&pool).await.unwrap();
 
+    let tri_sql = include_str!("../migrations/20261103210000_tri_agent_model_selector.sql");
+    sqlx::raw_sql(tri_sql).execute(&pool).await.unwrap();
+
     // Insert mock provider for simulated model execution
     let now = chrono::Utc::now().to_rfc3339();
     sqlx::query(
@@ -98,6 +101,9 @@ async fn test_story_architect_session_lifecycle_and_planning() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -206,6 +212,9 @@ async fn test_autonomous_prompt_generation_execution_and_evaluation() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -327,6 +336,9 @@ async fn test_manual_mode_and_prompt_review_workflow() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -408,6 +420,9 @@ async fn test_consecutive_multi_turn_autonomous_execution() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -487,6 +502,9 @@ async fn test_commit_to_sft_db_constraints_and_duplicate_prevention() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -601,6 +619,9 @@ async fn test_provider_switching_precedence_and_persistence() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -686,6 +707,9 @@ async fn test_story_architect_edit_prompt_and_downstream_invalidation() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -802,6 +826,9 @@ async fn test_story_architect_regenerate_assistant_turn() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )
@@ -887,6 +914,9 @@ async fn test_story_architect_revision_restoration() {
             inference_model: Some("mock-llama-3-8b".to_string()),
             evaluation_provider_id: Some("mock".to_string()),
             evaluation_model: Some("mock-llama-3-8b".to_string()),
+            planning_agent_config: None,
+            inference_agent_config: None,
+            evaluation_agent_config: None,
             template_id: None,
         },
     )

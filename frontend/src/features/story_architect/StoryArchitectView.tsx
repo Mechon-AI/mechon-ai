@@ -31,6 +31,8 @@ import type {
   NarrativeState,
   AgentEvaluation,
   CreateStorySessionInput,
+  UpdateStorySessionInput,
+  AgentRuntimeConfig,
   SavePlanningSpecInput,
   SaveMilestoneInput,
   ExecutionMode,
@@ -55,7 +57,8 @@ import {
   commitStoryToSFT,
   editStoryMessage,
   regenerateStoryTurn,
-  restoreMessageRevision
+  restoreMessageRevision,
+  testProvider
 } from '../../services/api'
 import {
   normalizeStorySession,
@@ -78,7 +81,8 @@ export const StoryArchitectView: React.FC = () => {
     activeProviderId,
     activeModel,
     setActiveProviderId,
-    setActiveModel
+    setActiveModel,
+    fetchProviders
   } = useProviderStore()
 
   // Sessions state
@@ -339,11 +343,13 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('planning')
     setExecutionError(null)
     try {
+      const planningProvider = activeSession.planning_provider_id || activeSession.planning_agent_config?.provider_id || activeProviderId || undefined
+      const planningModel = activeSession.planning_model || activeSession.planning_agent_config?.model_id || activeSession.planning_agent_config?.model || activeModel || undefined
       const p = await generateNextPrompt(
         activeSession.id,
         feedback,
-        activeProviderId || undefined,
-        activeModel || undefined
+        planningProvider,
+        planningModel
       )
       setProposedPrompt(p)
       setPauseReason(null)
@@ -363,13 +369,15 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('generating')
     setExecutionError(null)
     try {
+      const inferenceProvider = activeSession.inference_provider_id || activeSession.inference_agent_config?.provider_id || activeProviderId || undefined
+      const inferenceModel = activeSession.inference_model || activeSession.inference_agent_config?.model_id || activeSession.inference_agent_config?.model || activeModel || undefined
       const result: AutoStepResult = await approveAndExecuteTurn(
         activeSession.id,
         content,
         promptHistoryId,
         edited,
-        activeProviderId || undefined,
-        activeModel || undefined
+        inferenceProvider,
+        inferenceModel
       )
 
       if (result.logs && result.logs.length > 0) {
@@ -406,10 +414,12 @@ export const StoryArchitectView: React.FC = () => {
     setStateMachineStage('generating')
     setExecutionError(null)
     try {
+      const inferenceProvider = activeSession.inference_provider_id || activeSession.inference_agent_config?.provider_id || activeProviderId || undefined
+      const inferenceModel = activeSession.inference_model || activeSession.inference_agent_config?.model_id || activeSession.inference_agent_config?.model || activeModel || undefined
       const result: AutoStepResult = await executeAutonomousStep(
         activeSession.id,
-        activeProviderId || undefined,
-        activeModel || undefined
+        inferenceProvider,
+        inferenceModel
       )
 
       if (result.logs && result.logs.length > 0) {
@@ -450,6 +460,70 @@ export const StoryArchitectView: React.FC = () => {
       setIsExecutingTurn(false)
       setIsStreaming(false)
       setStreamingContent('')
+    }
+  }
+
+  const handleUpdateAgentConfig = async (
+    role: 'planning' | 'inference' | 'evaluation',
+    providerId: string,
+    model: string
+  ) => {
+    if (!activeSession) return
+    const current = role === 'planning'
+      ? activeSession.planning_agent_config
+      : role === 'inference'
+        ? activeSession.inference_agent_config
+        : activeSession.evaluation_agent_config
+
+    const updatedConfig: AgentRuntimeConfig = {
+      ...(current || {
+        provider_id: providerId,
+        model_id: model,
+        model: model,
+        display_name: `${role.charAt(0).toUpperCase() + role.slice(1)} Agent`,
+        enabled: true
+      }),
+      provider_id: providerId,
+      model_id: model,
+      model: model
+    }
+
+    const payload: Partial<UpdateStorySessionInput> & { id: string } = {
+      id: activeSession.id
+    }
+
+    if (role === 'planning') {
+      payload.planning_agent_config = updatedConfig
+      payload.planning_provider_id = providerId
+      payload.planning_model = model
+    } else if (role === 'inference') {
+      payload.inference_agent_config = updatedConfig
+      payload.inference_provider_id = providerId
+      payload.inference_model = model
+    } else {
+      payload.evaluation_agent_config = updatedConfig
+      payload.evaluation_provider_id = providerId
+      payload.evaluation_model = model
+    }
+
+    try {
+      const updated = await updateStorySession(payload)
+      const norm = normalizeStorySession(updated)
+      setActiveSession(norm)
+      setSessions(prev => prev.map(s => s.id === norm.id ? norm : s))
+    } catch (err) {
+      console.error('Failed to update agent config:', err)
+    }
+  }
+
+  const handleRefreshProviderModels = async (providerId: string) => {
+    try {
+      if (providerId) {
+        await testProvider(providerId)
+      }
+      await fetchProviders()
+    } catch (err) {
+      console.error('Failed to refresh provider:', err)
     }
   }
 
@@ -626,15 +700,7 @@ export const StoryArchitectView: React.FC = () => {
                     const newModel = targetP?.default_model || (targetP?.models_cache && targetP.models_cache[0]) || 'default'
                     setActiveModel(newModel)
                     if (activeSession) {
-                      updateStorySession({
-                        id: activeSession.id,
-                        inference_provider_id: pId,
-                        inference_model: newModel,
-                        planning_provider_id: pId,
-                        planning_model: newModel,
-                        evaluation_provider_id: pId,
-                        evaluation_model: newModel
-                      })
+                      handleUpdateAgentConfig('inference', pId, newModel)
                     }
                   }}
                   className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer"
@@ -662,12 +728,7 @@ export const StoryArchitectView: React.FC = () => {
                         const m = e.target.value
                         setActiveModel(m)
                         if (activeSession) {
-                          updateStorySession({
-                            id: activeSession.id,
-                            inference_model: m,
-                            planning_model: m,
-                            evaluation_model: m
-                          })
+                          handleUpdateAgentConfig('inference', activeProviderId, m)
                         }
                       }}
                       className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer max-w-[140px] truncate font-mono"
@@ -839,6 +900,18 @@ export const StoryArchitectView: React.FC = () => {
                 evaluation={latestEvaluation}
                 session={activeSession}
                 logs={executionLogs}
+                providers={providers}
+                onUpdateAgent={handleUpdateAgentConfig}
+                onRefreshProvider={handleRefreshProviderModels}
+                executingAgent={
+                  stateMachineStage === 'planning' || isGeneratingPrompt
+                    ? 'planning'
+                    : stateMachineStage === 'generating' || isExecutingTurn
+                      ? 'inference'
+                      : stateMachineStage === 'evaluating'
+                        ? 'evaluation'
+                        : null
+                }
               />
             )}
           </div>

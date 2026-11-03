@@ -20,6 +20,18 @@ export interface CharacterProfile {
   background?: string;
 }
 
+export interface AgentRuntimeConfig {
+  provider_id: string;
+  model_id: string;
+  model?: string;
+  model_display_name?: string;
+  enabled: boolean;
+  capabilities?: string[];
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+}
+
 export interface StorySession {
   id: string;
   project_id: string;
@@ -38,6 +50,9 @@ export interface StorySession {
   inference_model?: string;
   evaluation_provider_id?: string;
   evaluation_model?: string;
+  planning_agent_config?: AgentRuntimeConfig;
+  inference_agent_config?: AgentRuntimeConfig;
+  evaluation_agent_config?: AgentRuntimeConfig;
   temperature: number;
   top_p: number;
   max_tokens: number;
@@ -213,6 +228,9 @@ export interface CreateStorySessionInput {
   inference_model?: string;
   evaluation_provider_id?: string;
   evaluation_model?: string;
+  planning_agent_config?: AgentRuntimeConfig;
+  inference_agent_config?: AgentRuntimeConfig;
+  evaluation_agent_config?: AgentRuntimeConfig;
   template_id?: string;
 }
 
@@ -233,6 +251,9 @@ export interface UpdateStorySessionInput {
   inference_model?: string;
   evaluation_provider_id?: string;
   evaluation_model?: string;
+  planning_agent_config?: AgentRuntimeConfig;
+  inference_agent_config?: AgentRuntimeConfig;
+  evaluation_agent_config?: AgentRuntimeConfig;
   temperature?: number;
   top_p?: number;
   max_tokens?: number;

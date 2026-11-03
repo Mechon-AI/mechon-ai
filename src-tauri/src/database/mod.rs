@@ -77,6 +77,11 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
     let _ = sqlx::query("ALTER TABLE story_architect_messages ADD COLUMN revision_count INTEGER DEFAULT 0").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE story_architect_messages ADD COLUMN updated_at TEXT").execute(&pool).await;
 
+    // Ensure independent tri-agent runtime config columns exist
+    let _ = sqlx::query("ALTER TABLE story_architect_sessions ADD COLUMN planning_agent_config_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE story_architect_sessions ADD COLUMN inference_agent_config_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE story_architect_sessions ADD COLUMN evaluation_agent_config_json TEXT NOT NULL DEFAULT '{}'").execute(&pool).await;
+
     // Ensure credential_ref column exists on existing databases
     let _ = sqlx::query("ALTER TABLE providers ADD COLUMN credential_ref TEXT")
         .execute(&pool)

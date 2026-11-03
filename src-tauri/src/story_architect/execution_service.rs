@@ -285,12 +285,12 @@ impl ExecutionService {
             created_at: now_asst.clone(),
         };
 
-        // 11. Evaluate Turn via Evaluation Agent
+        // 11. Evaluate Turn via Evaluation Agent (strictly isolated: uses Evaluation Agent's own configured provider & model)
         let eval_result = EvaluationAgentService::evaluate_turn(
             pool, vault, session_id, assistant_turn_index,
             approved_prompt, &assistant_content,
             active_milestone_id.as_deref(), active_milestone_title.as_deref(),
-            Some(provider_id), Some(&model_used)
+            None, None
         ).await?;
 
         // 12. Update Narrative State
@@ -641,12 +641,12 @@ impl ExecutionService {
             created_at: user_created_at,
         };
 
-        // 9. Re-Evaluate Turn
+        // 9. Re-Evaluate Turn (strictly isolated: uses Evaluation Agent's own configured provider & model)
         let eval_result = EvaluationAgentService::evaluate_turn(
             pool, vault, session_id, turn_index,
             &user_content, &new_assistant_content,
             milestone_id.as_deref(), None,
-            Some(provider_id), Some(&model_used)
+            None, None
         ).await?;
 
         // 10. Update Narrative State
