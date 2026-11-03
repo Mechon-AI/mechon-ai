@@ -38,5 +38,5 @@ install -m 644 src-tauri/icons/icon.png %{buildroot}%{_datadir}/icons/hicolor/51
 %{_datadir}/icons/hicolor/512x512/apps/mechon-ai.png
 
 %changelog
-* Sun Nov 02 2026 Mechon AI Team <team@mechon.ai> - 1.0.0-1
+* Sun Nov 02 2026 Mechon AI Team <cemetery394@gmail.com> - 1.0.0-1
 - Official initial release of Mechon AI
