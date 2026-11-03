@@ -1,55 +1,15 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-backend/.venv
-backend/.venv/
-.venv
-.venv/
-env/
-venv/
-ENV/
-build/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Local databases & data directories
+# Local databases & runtime state
 *.db
 *.db-wal
 *.db-shm
 *.sqlite
 *.sqlite3
-data
 data/
-backend/data
-backend/data/
-config
 config/
-backend/config
-backend/config/
 
 # Node / Frontend
-node_modules
 node_modules/
-frontend/node_modules
 frontend/node_modules/
-frontend/dist
 frontend/dist/
 .npm
 npm-debug.log*
@@ -60,7 +20,6 @@ pnpm-debug.log*
 # Rust / Tauri
 src-tauri/target/
 target/
-src-tauri/resources/backend/mechon-backend
 *.pdb
 
 # Environment & Secrets
@@ -69,6 +28,7 @@ src-tauri/resources/backend/mechon-backend
 .env.*.local
 *.pem
 *.key
+vault.enc
 
 # IDE / OS
 .DS_Store
@@ -83,4 +43,3 @@ packaging/arch/pkg/
 packaging/arch/src/
 packaging/arch/*.pkg.tar.*
 packaging/arch/*.tar.gz
-

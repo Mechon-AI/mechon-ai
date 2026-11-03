@@ -24,25 +24,6 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
     let db_path = get_database_path().await;
     info!("Initializing SQLite database at: {}", db_path.display());
 
-    // Safe migration from legacy database locations if target database is fresh
-    if !db_path.exists() {
-        let legacy_candidates = vec![
-            PathBuf::from("backend/data/mechon.db"),
-            PathBuf::from("../backend/data/mechon.db"),
-        ];
-        for legacy in legacy_candidates {
-            if legacy.is_file() {
-                info!("Found legacy user database at {}. Migrating to {}", legacy.display(), db_path.display());
-                if let Err(e) = fs::copy(&legacy, &db_path) {
-                    warn!("Failed to copy legacy database: {}", e);
-                } else {
-                    info!("Successfully migrated legacy user database to XDG data directory.");
-                    break;
-                }
-            }
-        }
-    }
-
     let options = SqliteConnectOptions::new()
         .filename(&db_path)
         .create_if_missing(true)

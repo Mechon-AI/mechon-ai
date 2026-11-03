@@ -327,11 +327,11 @@ export const AppLayout: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Architecture:</span>
-                  <span className="text-foreground">Tauri 2 • React • Python 3.11 • SQLite WAL</span>
+                  <span className="text-foreground">Tauri 2 • Rust • React • SQLite WAL</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Security:</span>
-                  <span className="text-emerald-400">100% Local Loopback (Zero Telemetry)</span>
+                  <span className="text-emerald-400">100% Local-First (Zero Telemetry)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">License:</span>
