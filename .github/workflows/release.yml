@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   release-linux:
     runs-on: ubuntu-latest
@@ -27,21 +30,52 @@ jobs:
       - name: Build Frontend
         run: |
           cd frontend
-          npm install
+          npm ci || npm install
           npm run build
 
-      - name: Build Desktop Release
+      - name: Build Desktop Release Binary
         run: |
           cd src-tauri
-          cargo build --release
+          cargo build --release --locked --bin mechon-ai
 
-      - name: Create Release
+      - name: Prepare Release Packages and Artifacts
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          mkdir -p release-dist/mechon-ai-${TAG_NAME}-linux-x86_64
+          
+          # Copy binary & assets
+          cp src-tauri/target/release/mechon-ai release-dist/mechon-ai-${TAG_NAME}-linux-x86_64/
+          cp packaging/arch/mechon-ai.desktop release-dist/mechon-ai-${TAG_NAME}-linux-x86_64/
+          cp -r assets release-dist/mechon-ai-${TAG_NAME}-linux-x86_64/
+          cp LICENSE README.md release-dist/mechon-ai-${TAG_NAME}-linux-x86_64/
+
+          cd release-dist
+          # 1. Create portable tarball
+          tar -czvf mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-${TAG_NAME}-linux-x86_64/
+          
+          # 2. Standalone binary
+          cp mechon-ai-${TAG_NAME}-linux-x86_64/mechon-ai mechon-ai-linux-x86_64
+          
+          # 3. Packaging manifests
+          cp ../packaging/arch/PKGBUILD .
+          cp ../packaging/arch/mechon-ai.desktop .
+          
+          # 4. Generate SHA-256 Checksums
+          sha256sum mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-linux-x86_64 PKGBUILD mechon-ai.desktop > SHA256SUMS.txt
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          name: Mechon AI ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
           files: |
-            src-tauri/target/release/mechon-ai
-            packaging/arch/PKGBUILD
-            packaging/arch/mechon-ai.desktop
+            release-dist/mechon-ai-*-linux-x86_64.tar.gz
+            release-dist/mechon-ai-linux-x86_64
+            release-dist/PKGBUILD
+            release-dist/mechon-ai.desktop
+            release-dist/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
