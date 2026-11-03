@@ -45,6 +45,38 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
         .execute(&pool)
         .await?;
 
+    let story_schema_sql = include_str!("../../migrations/20261103100000_story_architect.sql");
+    sqlx::raw_sql(story_schema_sql)
+        .execute(&pool)
+        .await?;
+
+    // Story Architect Revision History and Invalidation Tracking
+    let _ = sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS story_architect_message_revisions (
+            id TEXT PRIMARY KEY,
+            message_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            turn_index INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            original_content TEXT NOT NULL,
+            modified_content TEXT NOT NULL,
+            provider_id TEXT,
+            model TEXT,
+            revision_reason TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES story_architect_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(message_id) REFERENCES story_architect_messages(id) ON DELETE CASCADE
+        )
+    "#).execute(&pool).await;
+
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_story_revisions_msg ON story_architect_message_revisions(message_id)").execute(&pool).await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_story_revisions_sess ON story_architect_message_revisions(session_id)").execute(&pool).await;
+
+    let _ = sqlx::query("ALTER TABLE story_architect_messages ADD COLUMN is_outdated INTEGER DEFAULT 0").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE story_architect_messages ADD COLUMN revision_count INTEGER DEFAULT 0").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE story_architect_messages ADD COLUMN updated_at TEXT").execute(&pool).await;
+
     // Ensure credential_ref column exists on existing databases
     let _ = sqlx::query("ALTER TABLE providers ADD COLUMN credential_ref TEXT")
         .execute(&pool)

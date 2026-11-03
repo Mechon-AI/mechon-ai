@@ -13,6 +13,7 @@ import type {
   CredentialStatus,
   VaultDiagnostics,
   ConnectionTestResult,
+  ProviderDiagnosticReport,
   DatasetVersion,
   ValidationReport,
   ModelTemplateDef,
@@ -23,6 +24,28 @@ import type {
   SplitSummary,
   TrainingReadinessReport
 } from '../types'
+
+import type {
+  StorySession,
+  PlanningSpecification,
+  PlanningMilestone,
+  StoryMessage,
+  PlanningPromptHistory,
+  NarrativeState,
+  AgentEvaluation,
+  CreateStorySessionInput,
+  UpdateStorySessionInput,
+  SavePlanningSpecInput,
+  SaveMilestoneInput,
+  CommitToSFTInput,
+  CommitToSFTResult,
+  AutoStepResult,
+  StoryMessageRevision,
+  EditStoryMessageInput,
+  RegenerateAssistantTurnInput,
+  RestoreRevisionInput,
+  ExecutionTurnResult
+} from '../types/story_architect'
 
 import {
   normalizeReadinessReport,
@@ -255,6 +278,9 @@ export const deleteProvider = (id: string): Promise<void> =>
 
 export const testProvider = (id: string): Promise<ConnectionTestResult> =>
   invoke<ConnectionTestResult>('test_provider', { id })
+
+export const diagnoseProvider = (id: string): Promise<ProviderDiagnosticReport> =>
+  invoke<ProviderDiagnosticReport>('diagnose_provider', { id })
 
 export const saveProviderCredentials = (providerId: string, apiKey: string): Promise<CredentialStatus> =>
   invoke<CredentialStatus>('save_provider_credentials', { providerId, apiKey })
@@ -649,4 +675,97 @@ export const exportConversationalDPO = (
     formatType,
     onlyCompleted
   })
+
+// -------------------------------------------------------------
+// Story Architect API
+// -------------------------------------------------------------
+export const listStorySessions = (projectId: string): Promise<StorySession[]> =>
+  invoke<StorySession[]>('list_story_sessions', { projectId })
+
+export const getStorySession = (sessionId: string): Promise<StorySession> =>
+  invoke<StorySession>('get_story_session', { sessionId })
+
+export const createStorySession = (data: CreateStorySessionInput): Promise<StorySession> =>
+  invoke<StorySession>('create_story_session', { data })
+
+export const updateStorySession = (data: UpdateStorySessionInput): Promise<StorySession> =>
+  invoke<StorySession>('update_story_session', { data })
+
+export const deleteStorySession = (sessionId: string): Promise<void> =>
+  invoke<void>('delete_story_session', { sessionId })
+
+export const getPlanningSpec = (sessionId: string): Promise<PlanningSpecification> =>
+  invoke<PlanningSpecification>('get_planning_spec', { sessionId })
+
+export const savePlanningSpec = (data: SavePlanningSpecInput): Promise<PlanningSpecification> =>
+  invoke<PlanningSpecification>('save_planning_spec', { data })
+
+export const listMilestones = (sessionId: string): Promise<PlanningMilestone[]> =>
+  invoke<PlanningMilestone[]>('list_milestones', { sessionId })
+
+export const saveMilestones = (sessionId: string, milestones: SaveMilestoneInput[]): Promise<PlanningMilestone[]> =>
+  invoke<PlanningMilestone[]>('save_milestones', { sessionId, milestones })
+
+export const listStoryMessages = (sessionId: string): Promise<StoryMessage[]> =>
+  invoke<StoryMessage[]>('list_story_messages', { sessionId })
+
+export const generateNextPrompt = (
+  sessionId: string,
+  feedback?: string,
+  providerId?: string,
+  model?: string
+): Promise<PlanningPromptHistory> =>
+  invoke<PlanningPromptHistory>('generate_next_prompt', { sessionId, feedback, providerId, model })
+
+export const approveAndExecuteTurn = (
+  sessionId: string,
+  promptContent: string,
+  promptHistoryId?: string,
+  engineerEdited?: boolean,
+  providerId?: string,
+  model?: string
+): Promise<AutoStepResult> =>
+  invoke<AutoStepResult>('approve_and_execute_turn', {
+    sessionId,
+    promptContent,
+    promptHistoryId,
+    engineerEdited,
+    providerId,
+    model
+  })
+
+export const executeAutonomousStep = (
+  sessionId: string,
+  providerId?: string,
+  model?: string
+): Promise<AutoStepResult> =>
+  invoke<AutoStepResult>('execute_autonomous_step', { sessionId, providerId, model })
+
+export const pauseStorySession = (sessionId: string, reason?: string): Promise<void> =>
+  invoke<void>('pause_story_session', { sessionId, reason })
+
+export const resumeStorySession = (sessionId: string): Promise<void> =>
+  invoke<void>('resume_story_session', { sessionId })
+
+export const listPromptHistory = (sessionId: string): Promise<PlanningPromptHistory[]> =>
+  invoke<PlanningPromptHistory[]>('list_prompt_history', { sessionId })
+
+export const getLatestNarrativeState = (sessionId: string): Promise<NarrativeState | null> =>
+  invoke<NarrativeState | null>('get_narrative_state', { sessionId })
+
+export const commitStoryToSFT = (data: CommitToSFTInput): Promise<CommitToSFTResult> =>
+  invoke<CommitToSFTResult>('commit_story_to_sft', { data })
+
+export const editStoryMessage = (data: EditStoryMessageInput): Promise<StoryMessage> =>
+  invoke<StoryMessage>('edit_story_message', { data })
+
+export const listMessageRevisions = (messageId: string): Promise<StoryMessageRevision[]> =>
+  invoke<StoryMessageRevision[]>('list_message_revisions', { messageId })
+
+export const restoreMessageRevision = (data: RestoreRevisionInput): Promise<StoryMessage> =>
+  invoke<StoryMessage>('restore_message_revision', { data })
+
+export const regenerateStoryTurn = (data: RegenerateAssistantTurnInput): Promise<ExecutionTurnResult> =>
+  invoke<ExecutionTurnResult>('regenerate_story_turn', { data })
+
 

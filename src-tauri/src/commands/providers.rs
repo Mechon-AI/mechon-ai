@@ -73,6 +73,15 @@ pub async fn test_provider(
     ProviderService::test_provider(&pool, &id, vault.inner().as_ref()).await
 }
 
+#[tauri::command]
+pub async fn diagnose_provider(
+    pool: State<'_, SqlitePool>,
+    vault: State<'_, Arc<dyn CredentialStore>>,
+    id: String,
+) -> Result<crate::providers::models::ProviderDiagnosticReport, AppError> {
+    ProviderService::diagnose(&pool, &id, vault.inner().as_ref()).await
+}
+
 // -------------------------------------------------------------
 // Credential Vault Management Commands
 // -------------------------------------------------------------

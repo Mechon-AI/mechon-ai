@@ -91,6 +91,40 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
     - Native support for multi-turn preference schemas: `prompt: [...]`, `chosen: [...]`, and `rejected: [...]`.
     - Direct export to JSON and JSONL formats for seamless consumption by `trl.DPOTrainer`.
 
+- **Mechon Story Architect & Autonomous Conversation Engine ("Plan the Interaction. Engineer the Conversation.")**:
+  - **Structured Interaction Planning**: Define comprehensive scenarios, multi-step conversation objectives, user/assistant personas, and phase transitions.
+  - **Dual-Agent Autonomous Loop**:
+    - **Planning Agent**: Synthesizes structured scenario specifications into actionable prompts aligned with objectives.
+    - **Narrative / Task Evaluation Agent**: Analyzes generated assistant turns, tracks objective completion percentages, updates world state, and formulates subsequent conversational prompts.
+  - **Deterministic State Machine**: Continuous execution lifecycle: `IDLE → PLANNING → AWAITING_APPROVAL → GENERATING → EVALUATING → UPDATING_CONTEXT → NEXT_PROMPT → GENERATING`.
+  - **Supervised Execution Modes**:
+    - `Manual Review`: Requires engineer approval for each planned prompt before model execution.
+    - `Hybrid Safety`: Automatically executes low-risk prompts and pauses for human verification when narrative branch shifts occur.
+    - `Autonomous Turn`: Executes single-step end-to-end cycles with comprehensive diagnostic logs.
+  - **In-Flight Conversation Control**: Edit generated prompts prior to submission, or modify historical conversation turns with automatic downstream branch truncation.
+  - **Atomic SFT Integration**: Direct one-click commitment of completed multi-turn autonomous scenarios into canonical SFT datasets.
+
+- **Multi-Provider Architecture & 4-Tier Operational Certification**:
+  - **Centralized Provider Registry**: Capability-aware adapter design for cloud APIs, local daemons, and inference servers.
+  - **Anthropic Claude 5.5 Generation (`claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`)**:
+    - **Model-Aware Sampling Suppression**: Automatically omits `temperature` and `top_p` for Claude 5.5 and reasoning generation models where sampling parameters are deprecated/forbidden, eliminating HTTP 400 parameter errors.
+    - **Adaptive Auto-Recovery**: Automatically intercepts client parameter deprecation responses and re-issues generation transparently.
+    - **Dynamic Discovery**: Automatic discovery of account-accessible models directly from `/v1/models`.
+    - **Message Structure Compliance**: Top-level system prompt extraction, consecutive same-role turn merging, and user-first message sequencing.
+  - **OpenAI & OpenAI-Compatible Reasoning Models (`o1`, `o3`, `o4`, DeepSeek-R1, vLLM, LM Studio, SGLang)**:
+    - Automatically handles `max_completion_tokens` vs `max_tokens` and converts `system` messages to `developer` messages for reasoning models.
+    - URL path normalization supporting custom proxy paths, port variations, and local servers.
+    - Extraction of reasoning tokens from `delta.reasoning_content` and `message.thinking`.
+  - **Ollama**:
+    - Native `/api/chat` and `/api/tags` protocol with host URL sanitization.
+    - Detailed token usage metrics extraction (`prompt_eval_count`, `eval_count`).
+  - **Google Gemini**:
+    - Direct Gemini 2.0 / 2.5 API integration with model prefix normalization and token usage extraction.
+  - **4-Tier Operational Diagnostics Suite**:
+    - Comprehensive provider verification: Network Connection, Credential Authentication, Model Discovery, Non-Streaming Chat, and Streaming Token SSE.
+    - A provider is certified `100% OPERATIONAL` only when all tiers pass.
+    - Interactive Diagnostics Modal with latency and token chunk metrics in Provider Manager.
+
 - **Mechon SFT Studio**:
   - Interactive multi-turn dialogue drafting with dynamic system prompt guidance.
   - Streaming LLM completions for assistant turns with configurable sampling parameters.

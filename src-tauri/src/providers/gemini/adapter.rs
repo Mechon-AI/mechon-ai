@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc::UnboundedSender;
 use crate::providers::capabilities::ModelCapabilities;
 use crate::providers::errors::{ProviderError, ProviderErrorCode};
-use crate::providers::models::{ChatRequest, ChatResponse, ModelInfo};
+use crate::providers::models::{ChatRequest, ChatResponse, ModelInfo, UsageInfo};
 use crate::providers::traits::ModelProvider;
 
 pub struct GeminiAdapter {
@@ -27,7 +27,7 @@ impl GeminiAdapter {
             .unwrap_or_default();
 
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
+            base_url: base_url.trim().trim_end_matches('/').to_string(),
             api_key,
             client,
             capabilities,
@@ -70,6 +70,10 @@ impl GeminiAdapter {
         }
 
         (system_instruction, contents)
+    }
+
+    fn clean_model_id<'a>(&self, model: &'a str) -> &'a str {
+        model.strip_prefix("models/").unwrap_or(model)
     }
 }
 
@@ -121,7 +125,7 @@ impl ModelProvider for GeminiAdapter {
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
-        let clean_model = request.model.strip_prefix("models/").unwrap_or(&request.model);
+        let clean_model = self.clean_model_id(&request.model);
         let url = format!("{}/models/{}:generateContent", self.base_url, clean_model);
         let (system_instruction, contents) = self.format_contents(&request);
 
@@ -165,12 +169,23 @@ impl ModelProvider for GeminiAdapter {
             .and_then(|r| r.as_str())
             .map(|s| s.to_string());
 
+        let usage = json.get("usageMetadata").map(|u| {
+            let p = u.get("promptTokenCount").and_then(|v| v.as_i64());
+            let c = u.get("candidatesTokenCount").and_then(|v| v.as_i64());
+            let t = u.get("totalTokenCount").and_then(|v| v.as_i64());
+            UsageInfo {
+                prompt_tokens: p,
+                completion_tokens: c,
+                total_tokens: t,
+            }
+        });
+
         Ok(ChatResponse {
             role: "assistant".to_string(),
             content: text,
             model: request.model,
             finish_reason,
-            usage: None,
+            usage,
         })
     }
 
@@ -179,7 +194,7 @@ impl ModelProvider for GeminiAdapter {
         request: ChatRequest,
         sender: UnboundedSender<String>,
     ) -> Result<(), ProviderError> {
-        let clean_model = request.model.strip_prefix("models/").unwrap_or(&request.model);
+        let clean_model = self.clean_model_id(&request.model);
         let url = format!("{}/models/{}:streamGenerateContent?alt=sse", self.base_url, clean_model);
         let (system_instruction, contents) = self.format_contents(&request);
 

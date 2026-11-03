@@ -160,6 +160,45 @@ export interface ConnectionTestResult {
   latency_ms: number
 }
 
+export type DiagnosticCheckStatus = 'pass' | 'fail' | 'warning' | 'skipped'
+
+export interface ProviderDiagnosticReport {
+  provider_id: string
+  provider_type: string
+  provider_name: string
+  base_url: string
+  model_used?: string
+
+  connection_status: DiagnosticCheckStatus
+  connection_latency_ms?: number
+  connection_http_status?: number
+  connection_error?: string
+
+  auth_status: DiagnosticCheckStatus
+  auth_details: string
+
+  model_discovery_status: DiagnosticCheckStatus
+  models_discovered: string[]
+  discovery_latency_ms?: number
+  discovery_error?: string
+
+  generation_status: DiagnosticCheckStatus
+  generation_latency_ms?: number
+  generation_http_status?: number
+  generation_sample_output?: string
+  generation_error?: string
+
+  streaming_status: DiagnosticCheckStatus
+  streaming_latency_ms?: number
+  streaming_chunk_count: number
+  streaming_sample_output?: string
+  streaming_error?: string
+
+  is_operational: boolean
+  total_latency_ms: number
+  diagnostic_summary: string
+}
+
 export interface Provider {
   id: string
   name: string

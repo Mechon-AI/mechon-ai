@@ -41,7 +41,10 @@ export const useProviderStore = create<ProviderState>()(
             })
           } else if (found && found.models_cache && found.models_cache.length > 0) {
             if (!found.models_cache.includes(get().activeModel)) {
-              set({ activeModel: found.models_cache[0] })
+              const def = (found.default_model && found.models_cache.includes(found.default_model))
+                ? found.default_model
+                : found.models_cache[0]
+              set({ activeModel: def })
             }
           }
         } catch {
@@ -51,7 +54,9 @@ export const useProviderStore = create<ProviderState>()(
 
       setActiveProviderId: (id: string) => {
         const found = get().providers.find(p => p.id === id)
-        const newModel = (found?.models_cache && found.models_cache[0]) || found?.default_model || 'default'
+        const newModel = (found?.default_model && found.models_cache && found.models_cache.includes(found.default_model))
+          ? found.default_model
+          : (found?.models_cache && found.models_cache[0]) || found?.default_model || 'default'
         set({ activeProviderId: id, activeModel: newModel })
       },
 

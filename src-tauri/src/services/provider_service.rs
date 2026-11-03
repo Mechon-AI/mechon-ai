@@ -401,6 +401,47 @@ impl ProviderService {
         Ok(result)
     }
 
+    pub async fn diagnose(
+        pool: &SqlitePool,
+        id: &str,
+        vault: &dyn CredentialStore,
+    ) -> Result<crate::providers::models::ProviderDiagnosticReport, AppError> {
+        let provider = Self::get(pool, id, vault).await?;
+        let api_key = Self::get_raw_key(pool, id, vault).await?;
+
+        let report = ConnectionTester::diagnose_provider(
+            &provider.id,
+            &provider.name,
+            &provider.provider_type,
+            &provider.base_url,
+            provider.default_model.as_deref(),
+            api_key,
+            provider.timeout_seconds,
+        ).await;
+
+        if report.model_discovery_status == crate::providers::models::DiagnosticCheckStatus::Pass && !report.models_discovered.is_empty() {
+            let models_json = serde_json::to_string(&report.models_discovered)?;
+            let now = Utc::now().to_rfc3339();
+            let default_model = if provider.default_model.is_none() || provider.default_model.as_deref() == Some("") {
+                report.models_discovered.first().cloned()
+            } else {
+                provider.default_model
+            };
+
+            let _ = sqlx::query(
+                "UPDATE providers SET models_cache_json = ?, default_model = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(&models_json)
+            .bind(&default_model)
+            .bind(&now)
+            .bind(id)
+            .execute(pool)
+            .await;
+        }
+
+        Ok(report)
+    }
+
     pub async fn migrate_legacy_credentials(
         pool: &SqlitePool,
         vault: &dyn CredentialStore,

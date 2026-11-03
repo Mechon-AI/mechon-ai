@@ -400,3 +400,156 @@ export function normalizeSplitSummary(raw: any): SplitSummary {
     assignments
   }
 }
+
+// ---------------------------------------------------------------------------
+// Story Architect Normalizers
+// ---------------------------------------------------------------------------
+
+export function normalizeStorySession(raw: any) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: '',
+      project_id: '',
+      title: 'Untitled Scenario',
+      description: '',
+      interaction_type: 'storytelling',
+      primary_language: 'en',
+      secondary_language: undefined,
+      target_turns: 10,
+      status: 'draft',
+      execution_mode: 'manual',
+      auto_pause_conditions: [],
+      temperature: 0.7,
+      top_p: 0.9,
+      max_tokens: 2048,
+      max_turns: 20,
+      max_agent_iterations: 50,
+      token_budget: 100000,
+      tokens_used: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  }
+
+  return {
+    id: String(raw.id ?? ''),
+    project_id: String(raw.project_id ?? ''),
+    title: String(raw.title ?? 'Untitled Scenario'),
+    description: raw.description ? String(raw.description) : undefined,
+    interaction_type: String(raw.interaction_type ?? 'storytelling'),
+    primary_language: String(raw.primary_language ?? 'en'),
+    secondary_language: raw.secondary_language ? String(raw.secondary_language) : undefined,
+    target_turns: Number(raw.target_turns ?? 10),
+    status: String(raw.status ?? 'draft'),
+    execution_mode: String(raw.execution_mode ?? 'manual'),
+    auto_pause_conditions: Array.isArray(raw.auto_pause_conditions) ? raw.auto_pause_conditions.map(String) : [],
+    planning_provider_id: raw.planning_provider_id ? String(raw.planning_provider_id) : undefined,
+    planning_model: raw.planning_model ? String(raw.planning_model) : undefined,
+    inference_provider_id: raw.inference_provider_id ? String(raw.inference_provider_id) : undefined,
+    inference_model: raw.inference_model ? String(raw.inference_model) : undefined,
+    evaluation_provider_id: raw.evaluation_provider_id ? String(raw.evaluation_provider_id) : undefined,
+    evaluation_model: raw.evaluation_model ? String(raw.evaluation_model) : undefined,
+    temperature: Number(raw.temperature ?? 0.7),
+    top_p: Number(raw.top_p ?? 0.9),
+    max_tokens: Number(raw.max_tokens ?? 2048),
+    max_turns: Number(raw.max_turns ?? 20),
+    max_agent_iterations: Number(raw.max_agent_iterations ?? 50),
+    token_budget: Number(raw.token_budget ?? 100000),
+    tokens_used: Number(raw.tokens_used ?? 0),
+    sft_session_id: raw.sft_session_id ? String(raw.sft_session_id) : undefined,
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+    updated_at: String(raw.updated_at ?? new Date().toISOString())
+  }
+}
+
+export function normalizePlanningSpec(raw: any) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: '',
+      session_id: '',
+      premise: '',
+      world_environment: '',
+      character_profiles: [],
+      main_conflict: '',
+      secondary_conflicts: '',
+      important_events: [],
+      narrative_progression: '',
+      desired_ending: '',
+      constraints_forbidden_developments: '',
+      learning_objectives: [],
+      reasoning_objectives: [],
+      communication_objectives: [],
+      expected_assistant_behavior: '',
+      quality_requirements: '',
+      completion_criteria: '',
+      custom_fields: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  }
+
+  const rawChars = Array.isArray(raw.character_profiles) ? raw.character_profiles : []
+  const character_profiles = rawChars.map((c: any) => ({
+    name: String(c?.name ?? 'Unnamed Character'),
+    role: String(c?.role ?? 'Protagonist'),
+    personality: String(c?.personality ?? ''),
+    relationship_to_assistant: c?.relationship_to_assistant ? String(c.relationship_to_assistant) : undefined,
+    background: c?.background ? String(c.background) : undefined
+  }))
+
+  return {
+    id: String(raw.id ?? ''),
+    session_id: String(raw.session_id ?? ''),
+    premise: String(raw.premise ?? ''),
+    world_environment: String(raw.world_environment ?? ''),
+    character_profiles,
+    main_conflict: String(raw.main_conflict ?? ''),
+    secondary_conflicts: String(raw.secondary_conflicts ?? ''),
+    important_events: Array.isArray(raw.important_events) ? raw.important_events.map(String) : [],
+    narrative_progression: String(raw.narrative_progression ?? ''),
+    desired_ending: String(raw.desired_ending ?? ''),
+    constraints_forbidden_developments: String(raw.constraints_forbidden_developments ?? ''),
+    learning_objectives: Array.isArray(raw.learning_objectives) ? raw.learning_objectives.map(String) : [],
+    reasoning_objectives: Array.isArray(raw.reasoning_objectives) ? raw.reasoning_objectives.map(String) : [],
+    communication_objectives: Array.isArray(raw.communication_objectives) ? raw.communication_objectives.map(String) : [],
+    expected_assistant_behavior: String(raw.expected_assistant_behavior ?? ''),
+    quality_requirements: String(raw.quality_requirements ?? ''),
+    completion_criteria: String(raw.completion_criteria ?? ''),
+    custom_fields: (raw.custom_fields && typeof raw.custom_fields === 'object') ? raw.custom_fields : {},
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+    updated_at: String(raw.updated_at ?? new Date().toISOString())
+  }
+}
+
+export function normalizeMilestone(raw: any) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: '',
+      session_id: '',
+      order_index: 0,
+      title: 'Milestone',
+      description: '',
+      objective: '',
+      status: 'pending',
+      completion_criteria: '',
+      associated_turn_ids: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  }
+
+  return {
+    id: String(raw.id ?? ''),
+    session_id: String(raw.session_id ?? ''),
+    order_index: Number(raw.order_index ?? 0),
+    title: String(raw.title ?? 'Milestone'),
+    description: raw.description ? String(raw.description) : undefined,
+    objective: String(raw.objective ?? ''),
+    status: String(raw.status ?? 'pending'),
+    completion_criteria: raw.completion_criteria ? String(raw.completion_criteria) : undefined,
+    associated_turn_ids: Array.isArray(raw.associated_turn_ids) ? raw.associated_turn_ids.map(String) : [],
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+    updated_at: String(raw.updated_at ?? new Date().toISOString())
+  }
+}
+

@@ -94,6 +94,21 @@ export const SFTStudioView: React.FC = () => {
   }, [activeProjectId])
 
   useEffect(() => {
+    if (!activeSession || providers.length === 0) return
+    const currentP = providers.find(p => p.id === (activeSession.provider_id || activeProviderId))
+    if (!currentP) return
+    const validModels = currentP.models_cache || []
+    if (validModels.length > 0 && !validModels.includes(activeSession.model)) {
+      const fixedModel = (currentP.default_model && validModels.includes(currentP.default_model))
+        ? currentP.default_model
+        : validModels[0]
+      setActiveSession(prev => prev ? { ...prev, model: fixedModel } : null)
+      setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, model: fixedModel } : s))
+      updateSFTSession(activeSession.id, { model: fixedModel })
+    }
+  }, [providers, activeSession?.id, activeSession?.provider_id])
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeSession?.messages, isGenerating])
 
@@ -130,6 +145,15 @@ export const SFTStudioView: React.FC = () => {
   const loadSessionDetails = async (sessionId: string) => {
     try {
       const full = await getSFTSession(sessionId)
+      if (full) {
+        const pId = full.provider_id || activeProviderId
+        const prov = providers.find(p => p.id === pId)
+        if (prov && prov.models_cache && prov.models_cache.length > 0 && !prov.models_cache.includes(full.model)) {
+          const validM = prov.models_cache[0]
+          full.model = validM
+          updateSFTSession(full.id, { model: validM })
+        }
+      }
       setActiveSession(full)
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Failed to load conversation details'))
@@ -187,12 +211,31 @@ export const SFTStudioView: React.FC = () => {
     if (!userText) return
     if (!retryUserText) setInputContent('')
 
+    // Authoritative provider & model resolution for active conversation
     const pId = activeSession.provider_id || activeProviderId
-    const targetModel = activeSession.model || activeModel
+    const targetProviderObj = providers.find(p => p.id === pId)
+    const availableModels = targetProviderObj?.models_cache && targetProviderObj.models_cache.length > 0
+      ? targetProviderObj.models_cache
+      : []
+
+    // Ensure model is valid for this provider
+    let targetModel = activeSession.model || activeModel
+    if (availableModels.length > 0 && !availableModels.includes(targetModel)) {
+      targetModel = (targetProviderObj?.default_model && availableModels.includes(targetProviderObj.default_model))
+        ? targetProviderObj.default_model
+        : availableModels[0]
+    }
 
     if (!pId) {
       showFeedback('error', 'Please select an active provider before generating.')
       return
+    }
+
+    // Persist provider and model to session if changed
+    if (activeSession.provider_id !== pId || activeSession.model !== targetModel) {
+      setActiveSession(prev => prev ? { ...prev, provider_id: pId, model: targetModel } : null)
+      setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, provider_id: pId, model: targetModel } : s))
+      updateSFTSession(activeSession.id, { provider_id: pId, model: targetModel })
     }
 
     setIsGenerating(true)
@@ -275,10 +318,15 @@ export const SFTStudioView: React.FC = () => {
       const lastUser = [...msgs].reverse().find(m => m.role === 'user')
       if (lastUser) {
         setIsGenerating(true)
+        const pId = activeProviderId || activeSession.provider_id
+        const targetModel = activeModel || activeSession.model
+        if (activeSession.provider_id !== pId || activeSession.model !== targetModel) {
+          updateSFTSession(activeSession.id, { provider_id: pId, model: targetModel })
+        }
         const history = msgs.map(m => ({ role: m.role, content: m.content }))
         const res = await generateCompletion({
-          provider_id: activeSession.provider_id || activeProviderId,
-          model: activeSession.model || activeModel,
+          provider_id: pId,
+          model: targetModel,
           prompt: lastUser.content,
           messages: history,
           system_prompt: activeSession.system_prompt,
@@ -287,7 +335,7 @@ export const SFTStudioView: React.FC = () => {
         const asstMsg = await addSFTMessage(activeSession.id, {
           role: 'assistant',
           content: res.content,
-          model: activeSession.model
+          model: targetModel
         })
         setActiveSession(prev => prev ? {
           ...prev,
@@ -321,8 +369,8 @@ export const SFTStudioView: React.FC = () => {
     }
 
     const targetLang = activeSession.secondary_language || 'en'
-    const pId = activeSession.provider_id || activeProviderId
-    const targetModel = activeSession.model || activeModel
+    const pId = activeProviderId || activeSession.provider_id
+    const targetModel = activeModel || activeSession.model
 
     setIsTranslating(true)
     try {
@@ -346,8 +394,8 @@ export const SFTStudioView: React.FC = () => {
   const handleTranslateSingleTurn = async (messageId: string) => {
     if (!activeSession) return
     const targetLang = activeSession.secondary_language || 'en'
-    const pId = activeSession.provider_id || activeProviderId
-    const targetModel = activeSession.model || activeModel
+    const pId = activeProviderId || activeSession.provider_id
+    const targetModel = activeModel || activeSession.model
 
     setIsRegeneratingTurnId(messageId)
     try {
@@ -457,7 +505,7 @@ export const SFTStudioView: React.FC = () => {
     s.title.toLowerCase().includes(sessionSearch.toLowerCase())
   )
 
-  const activeProvider = providers.find(p => p.id === (activeSession?.provider_id || activeProviderId))
+  const activeProvider = providers.find(p => p.id === (activeProviderId || activeSession?.provider_id))
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -593,8 +641,12 @@ export const SFTStudioView: React.FC = () => {
                       const pId = e.target.value
                       setActiveProviderId(pId)
                       const targetP = providers.find(p => p.id === pId)
-                      const newModel = targetP?.default_model || (targetP?.models_cache && targetP.models_cache[0]) || 'default'
+                      const newModel = (targetP?.default_model && targetP.models_cache?.includes(targetP.default_model))
+                        ? targetP.default_model
+                        : (targetP?.models_cache && targetP.models_cache[0]) || targetP?.default_model || 'default'
+                      setActiveModel(newModel)
                       setActiveSession(prev => prev ? { ...prev, provider_id: pId, model: newModel } : null)
+                      setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, provider_id: pId, model: newModel } : s))
                       updateSFTSession(activeSession.id, { provider_id: pId, model: newModel })
                     }}
                     className="bg-transparent text-foreground border-none text-[11px] focus:outline-none cursor-pointer"
@@ -606,24 +658,33 @@ export const SFTStudioView: React.FC = () => {
 
                   <span className="text-muted-foreground/60">•</span>
 
-                  <select
-                    value={activeSession.model || activeModel}
-                    onChange={e => {
-                      const m = e.target.value
-                      setActiveModel(m)
-                      setActiveSession(prev => prev ? { ...prev, model: m } : null)
-                      updateSFTSession(activeSession.id, { model: m })
-                    }}
-                    className="bg-transparent text-foreground font-mono text-[11px] border-none focus:outline-none cursor-pointer max-w-[140px] truncate"
-                  >
-                    {activeProvider?.models_cache && activeProvider.models_cache.length > 0 ? (
-                      activeProvider.models_cache.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))
-                    ) : (
-                      <option value={activeSession.model || activeModel}>{activeSession.model || activeModel}</option>
-                    )}
-                  </select>
+                  {(() => {
+                    const currentP = providers.find(p => p.id === (activeSession.provider_id || activeProviderId))
+                    const availableModels = currentP?.models_cache && currentP.models_cache.length > 0
+                      ? currentP.models_cache
+                      : [activeSession.model || activeModel || 'default']
+                    const currentModel = availableModels.includes(activeSession.model)
+                      ? activeSession.model
+                      : ((currentP?.default_model && availableModels.includes(currentP.default_model)) ? currentP.default_model : availableModels[0])
+
+                    return (
+                      <select
+                        value={currentModel}
+                        onChange={e => {
+                          const m = e.target.value
+                          setActiveModel(m)
+                          setActiveSession(prev => prev ? { ...prev, model: m } : null)
+                          setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, model: m } : s))
+                          updateSFTSession(activeSession.id, { model: m })
+                        }}
+                        className="bg-transparent text-foreground font-mono text-[11px] border-none focus:outline-none cursor-pointer max-w-[140px] truncate"
+                      >
+                        {availableModels.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    )
+                  })()}
                 </div>
 
                 <button

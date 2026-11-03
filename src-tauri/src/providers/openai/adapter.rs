@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc::UnboundedSender;
 use crate::providers::capabilities::ModelCapabilities;
 use crate::providers::errors::{ProviderError, ProviderErrorCode};
-use crate::providers::models::{ChatRequest, ChatResponse, ModelInfo};
+use crate::providers::models::{ChatMessage, ChatRequest, ChatResponse, ModelInfo, UsageInfo};
 use crate::providers::traits::ModelProvider;
 
 pub struct OpenAICompatibleAdapter {
@@ -30,12 +30,58 @@ impl OpenAICompatibleAdapter {
             .unwrap_or_default();
 
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
+            base_url: base_url.trim().trim_end_matches('/').to_string(),
             api_key,
             auth_header_format,
             custom_headers: Vec::new(),
             client,
             capabilities,
+        }
+    }
+
+    /// Resolve chat completions URL correctly for any provider endpoint format
+    pub fn chat_url(&self) -> String {
+        let trimmed = self.base_url.trim_end_matches('/');
+        if trimmed.ends_with("/chat/completions") {
+            trimmed.to_string()
+        } else if trimmed.ends_with("/v1") || trimmed.ends_with("/v4") || trimmed.ends_with("/v2") || trimmed.ends_with("/v3") {
+            format!("{}/chat/completions", trimmed)
+        } else {
+            // Check if URL contains path components beyond the domain
+            let has_custom_path = if let Some(idx) = trimmed.find("://") {
+                trimmed[idx + 3..].contains('/')
+            } else {
+                trimmed.contains('/')
+            };
+
+            if has_custom_path {
+                format!("{}/chat/completions", trimmed)
+            } else {
+                // Root host, e.g. http://localhost:1234 or https://api.openai.com
+                format!("{}/v1/chat/completions", trimmed)
+            }
+        }
+    }
+
+    /// Resolve models discovery URL correctly
+    pub fn models_url(&self) -> String {
+        let trimmed = self.base_url.trim_end_matches('/');
+        if trimmed.ends_with("/chat/completions") {
+            format!("{}/models", trimmed.trim_end_matches("/chat/completions"))
+        } else if trimmed.ends_with("/v1") || trimmed.ends_with("/v4") || trimmed.ends_with("/v2") || trimmed.ends_with("/v3") {
+            format!("{}/models", trimmed)
+        } else {
+            let has_custom_path = if let Some(idx) = trimmed.find("://") {
+                trimmed[idx + 3..].contains('/')
+            } else {
+                trimmed.contains('/')
+            };
+
+            if has_custom_path {
+                format!("{}/models", trimmed)
+            } else {
+                format!("{}/v1/models", trimmed)
+            }
         }
     }
 
@@ -56,12 +102,59 @@ impl OpenAICompatibleAdapter {
         }
         builder
     }
+
+    /// Prepare request payload with model-specific awareness (e.g. OpenAI o1/o3 reasoning model rules)
+    fn build_payload(&self, request: &ChatRequest, stream: bool) -> Value {
+        let model_lower = request.model.to_lowercase();
+        let is_reasoning_model = model_lower.starts_with("o1")
+            || model_lower.starts_with("o3")
+            || model_lower.starts_with("o4")
+            || model_lower.contains("o1-")
+            || model_lower.contains("o3-");
+
+        let mut payload = serde_json::Map::new();
+        payload.insert("model".to_string(), json!(request.model));
+
+        // Format messages for reasoning models: convert 'system' to 'developer' role
+        let formatted_messages: Vec<ChatMessage> = if is_reasoning_model {
+            request.messages.iter().map(|m| {
+                if m.role == "system" {
+                    ChatMessage { role: "developer".to_string(), content: m.content.clone() }
+                } else {
+                    m.clone()
+                }
+            }).collect()
+        } else {
+            request.messages.clone()
+        };
+        payload.insert("messages".to_string(), json!(formatted_messages));
+
+        if is_reasoning_model {
+            // OpenAI o1/o3 models require max_completion_tokens and reject max_tokens, temperature, top_p
+            payload.insert("max_completion_tokens".to_string(), json!(request.max_tokens.unwrap_or(2048)));
+        } else {
+            payload.insert("max_tokens".to_string(), json!(request.max_tokens.unwrap_or(2048)));
+            if let Some(temp) = request.temperature {
+                payload.insert("temperature".to_string(), json!(temp));
+            } else {
+                payload.insert("temperature".to_string(), json!(0.7));
+            }
+            if let Some(top_p) = request.top_p {
+                payload.insert("top_p".to_string(), json!(top_p));
+            } else {
+                payload.insert("top_p".to_string(), json!(0.9));
+            }
+        }
+
+        payload.insert("stream".to_string(), json!(stream));
+        Value::Object(payload)
+    }
 }
 
 #[async_trait]
 impl ModelProvider for OpenAICompatibleAdapter {
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
-        let url = format!("{}/models", self.base_url);
+        let url = self.models_url();
         let req = self.apply_auth(self.client.get(&url));
         let res = req.send().await.map_err(|e| ProviderError::from_reqwest(&e, &url))?;
 
@@ -104,15 +197,8 @@ impl ModelProvider for OpenAICompatibleAdapter {
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
-        let url = format!("{}/chat/completions", self.base_url);
-        let payload = json!({
-            "model": request.model,
-            "messages": request.messages,
-            "temperature": request.temperature.unwrap_or(0.7),
-            "top_p": request.top_p.unwrap_or(0.9),
-            "max_tokens": request.max_tokens.unwrap_or(2048),
-            "stream": false
-        });
+        let url = self.chat_url();
+        let payload = self.build_payload(&request, false);
 
         let req = self.apply_auth(self.client.post(&url).json(&payload));
         let res = req.send().await.map_err(|e| ProviderError::from_reqwest(&e, &url))?;
@@ -140,10 +226,21 @@ impl ModelProvider for OpenAICompatibleAdapter {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let usage = json.get("usage").map(|u| crate::providers::models::UsageInfo {
-            prompt_tokens: u.get("prompt_tokens").and_then(|v| v.as_i64()),
-            completion_tokens: u.get("completion_tokens").and_then(|v| v.as_i64()),
-            total_tokens: u.get("total_tokens").and_then(|v| v.as_i64()),
+        let usage = json.get("usage").map(|u| {
+            let p = u.get("prompt_tokens").and_then(|v| v.as_i64());
+            let c = u.get("completion_tokens").and_then(|v| v.as_i64());
+            let t = u.get("total_tokens").and_then(|v| v.as_i64()).or_else(|| {
+                if let (Some(pv), Some(cv)) = (p, c) {
+                    Some(pv + cv)
+                } else {
+                    None
+                }
+            });
+            UsageInfo {
+                prompt_tokens: p,
+                completion_tokens: c,
+                total_tokens: t,
+            }
         });
 
         Ok(ChatResponse {
@@ -160,15 +257,8 @@ impl ModelProvider for OpenAICompatibleAdapter {
         request: ChatRequest,
         sender: UnboundedSender<String>,
     ) -> Result<(), ProviderError> {
-        let url = format!("{}/chat/completions", self.base_url);
-        let payload = json!({
-            "model": request.model,
-            "messages": request.messages,
-            "temperature": request.temperature.unwrap_or(0.7),
-            "top_p": request.top_p.unwrap_or(0.9),
-            "max_tokens": request.max_tokens.unwrap_or(2048),
-            "stream": true
-        });
+        let url = self.chat_url();
+        let payload = self.build_payload(&request, true);
 
         let req = self.apply_auth(self.client.post(&url).json(&payload));
         let res = req.send().await.map_err(|e| ProviderError::from_reqwest(&e, &url))?;
@@ -202,7 +292,11 @@ impl ModelProvider for OpenAICompatibleAdapter {
                         break;
                     }
                     if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                        if let Some(delta) = parsed.pointer("/choices/0/delta/content").and_then(|v| v.as_str()) {
+                        let text_chunk = parsed.pointer("/choices/0/delta/content").and_then(|v| v.as_str())
+                            .or_else(|| parsed.pointer("/choices/0/delta/reasoning_content").and_then(|v| v.as_str()))
+                            .or_else(|| parsed.pointer("/choices/0/text").and_then(|v| v.as_str()));
+
+                        if let Some(delta) = text_chunk {
                             let _ = sender.send(delta.to_string());
                         }
                     }

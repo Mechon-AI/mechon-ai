@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from '../common/ErrorBoundary'
+import { useResizable } from '../../hooks/useResizable'
+import { ResizeDivider } from '../common/ResizeDivider'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -45,6 +47,18 @@ export const AppLayout: React.FC = () => {
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
 
+  const {
+    size: sidebarWidth,
+    isDragging: isSidebarDragging,
+    handleMouseDown: handleSidebarResize,
+    handleDoubleClick: handleSidebarReset
+  } = useResizable({
+    key: 'main_sidebar_width',
+    initialSize: 256,
+    minSize: 200,
+    maxSize: 450
+  })
+
   const isDark = theme === 'dark'
 
   useEffect(() => {
@@ -66,6 +80,7 @@ export const AppLayout: React.FC = () => {
   const coreNav = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     { label: 'Projects', path: '/projects', icon: FolderKanban },
+    { label: 'Story Architect', path: '/story-architect', icon: Sparkles, highlight: true },
     { label: 'Mechon SFT', path: '/sft', icon: MessageSquareCode, badge: activeProject?.active_draft_count },
     { label: 'Mechon DPO', path: '/dpo', icon: GitCompare, badge: activeProject?.dpo_task_count },
     { label: 'Mechon Corpus', path: '/datasets', icon: Database },
@@ -93,7 +108,10 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
-      <aside className="w-64 flex flex-col border-r border-border bg-card/60 backdrop-blur-md select-none shrink-0">
+      <aside
+        style={{ width: `${sidebarWidth}px` }}
+        className="flex flex-col border-r border-border bg-card/60 backdrop-blur-md select-none shrink-0"
+      >
         {/* Brand */}
         <div className="h-14 px-4 flex items-center justify-between border-b border-border">
           <div className="flex items-center gap-2.5">
@@ -112,7 +130,7 @@ export const AppLayout: React.FC = () => {
             className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border/60 hover:bg-secondary transition-colors font-mono"
             title="About Mechon AI"
           >
-            v1.1.2
+            v1.1.3
           </button>
         </div>
 
@@ -278,6 +296,15 @@ export const AppLayout: React.FC = () => {
         </div>
       </aside>
 
+      {/* Resizable Divider for Main Sidebar */}
+      <ResizeDivider
+        direction="horizontal"
+        isDragging={isSidebarDragging}
+        onMouseDown={handleSidebarResize}
+        onDoubleClick={handleSidebarReset}
+        title="Drag to resize sidebar. Double-click to reset."
+      />
+
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
@@ -411,7 +438,7 @@ export const AppLayout: React.FC = () => {
               <div className="p-3 rounded-lg bg-secondary/30 border border-border/70 text-[10px] space-y-1 font-mono">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Version:</span>
-                  <span className="text-foreground">1.1.1 (Release)</span>
+                  <span className="text-foreground">1.1.3 (Release)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Architecture:</span>

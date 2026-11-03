@@ -15,6 +15,7 @@ import { VersionHistoryView } from './features/versions/VersionHistoryView'
 import { ExportCenterView } from './features/export/ExportCenterView'
 import { ProviderManagerView } from './features/providers/ProviderManagerView'
 import { SettingsView } from './features/settings/SettingsView'
+import { StoryArchitectView } from './features/story_architect/StoryArchitectView'
 
 import { TemplateValidationView } from './features/engineering/TemplateValidationView'
 import { SequenceAnalyticsView } from './features/engineering/SequenceAnalyticsView'
@@ -41,6 +42,7 @@ export const App: React.FC = () => {
           <Route path="/" element={<AppLayout />}>
             <Route index element={<DashboardView />} />
             <Route path="projects" element={<ProjectsView />} />
+            <Route path="story-architect" element={<ErrorBoundary fallbackTitle="Story Architect Error"><StoryArchitectView /></ErrorBoundary>} />
             <Route path="sft" element={<SFTStudioView />} />
             <Route path="dpo" element={<DPOStudioView />} />
             <Route path="datasets" element={<DatasetExplorerView />} />

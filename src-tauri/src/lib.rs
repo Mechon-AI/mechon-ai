@@ -7,6 +7,7 @@ pub mod languages;
 pub mod models;
 pub mod providers;
 pub mod services;
+pub mod story_architect;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -100,6 +101,7 @@ pub fn run() {
             commands::providers::update_provider_cmd,
             commands::providers::delete_provider_cmd,
             commands::providers::test_provider,
+            commands::providers::diagnose_provider,
             commands::providers::save_provider_credentials,
             commands::providers::get_provider_credential_status,
             commands::providers::replace_provider_credentials,
@@ -156,6 +158,30 @@ pub fn run() {
             commands::engineering::generate_training_readiness_report,
             commands::engineering::list_readiness_reports,
             commands::engineering::export_conversational_dpo,
+
+            // Story Architect & Autonomous Conversation Engine
+            commands::story_architect::list_story_sessions,
+            commands::story_architect::get_story_session,
+            commands::story_architect::create_story_session,
+            commands::story_architect::update_story_session,
+            commands::story_architect::delete_story_session,
+            commands::story_architect::get_planning_spec,
+            commands::story_architect::save_planning_spec,
+            commands::story_architect::list_milestones,
+            commands::story_architect::save_milestones,
+            commands::story_architect::list_story_messages,
+            commands::story_architect::generate_next_prompt,
+            commands::story_architect::approve_and_execute_turn,
+            commands::story_architect::execute_autonomous_step,
+            commands::story_architect::pause_story_session,
+            commands::story_architect::resume_story_session,
+            commands::story_architect::list_prompt_history,
+            commands::story_architect::get_narrative_state,
+            commands::story_architect::commit_story_to_sft,
+            commands::story_architect::edit_story_message,
+            commands::story_architect::list_message_revisions,
+            commands::story_architect::restore_message_revision,
+            commands::story_architect::regenerate_story_turn,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Mechon AI");

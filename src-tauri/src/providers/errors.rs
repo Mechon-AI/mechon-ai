@@ -13,6 +13,7 @@ pub enum ProviderErrorCode {
     RateLimited,
     QuotaExceeded,
     ModelNotFound,
+    InvalidRequest,
     UnsupportedEndpoint,
     InvalidResponse,
     Timeout,
@@ -87,6 +88,11 @@ impl ProviderError {
         };
 
         match status {
+            400 => Self::with_status(
+                ProviderErrorCode::InvalidRequest,
+                format!("Invalid request parameters (HTTP 400): {}", snippet),
+                400,
+            ),
             401 => Self::with_status(
                 ProviderErrorCode::AuthenticationFailed,
                 format!("Authentication failed (HTTP 401). Verify that your API key is valid: {}", snippet),
@@ -112,13 +118,23 @@ impl ProviderError {
                 if lower.contains("quota") || lower.contains("credit") || lower.contains("balance") {
                     Self::with_status(
                         ProviderErrorCode::QuotaExceeded,
-                        format!("Account quota or credit balance exceeded (HTTP 429): {}", snippet),
+                        format!("Account quota or credit balance exceeded (HTTP 429): {}. You can switch to another provider in the top header and retry immediately without restarting.", snippet),
                         429,
                     )
                 } else {
+                    let retry_hint = if let Some(idx) = lower.find("try again in ") {
+                        let end = lower[idx..].find('.').or_else(|| lower[idx..].find(',')).unwrap_or(30);
+                        format!(" [{}]", &snippet[idx..idx + end])
+                    } else if let Some(idx) = lower.find("retry after ") {
+                        let end = lower[idx..].find('.').or_else(|| lower[idx..].find(',')).unwrap_or(30);
+                        format!(" [{}]", &snippet[idx..idx + end])
+                    } else {
+                        String::new()
+                    };
+
                     Self::with_status(
                         ProviderErrorCode::RateLimited,
-                        format!("Rate limit exceeded (HTTP 429). Please back off request frequency: {}", snippet),
+                        format!("Rate limit exceeded (HTTP 429){}. You can switch to another provider in the top header and click Retry without restarting Mechon AI. Details: {}", retry_hint, snippet),
                         429,
                     )
                 }

@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc::UnboundedSender;
 use crate::providers::capabilities::ModelCapabilities;
 use crate::providers::errors::{ProviderError, ProviderErrorCode};
-use crate::providers::models::{ChatRequest, ChatResponse, ModelInfo};
+use crate::providers::models::{ChatRequest, ChatResponse, ModelInfo, UsageInfo};
 use crate::providers::traits::ModelProvider;
 
 pub struct OllamaAdapter {
@@ -21,17 +21,37 @@ impl OllamaAdapter {
             .unwrap_or_default();
 
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
+            base_url: base_url.trim().trim_end_matches('/').to_string(),
             client,
             capabilities,
         }
+    }
+
+    /// Clean root host for Ollama daemon
+    fn root_url(&self) -> &str {
+        let trimmed = self.base_url.trim_end_matches('/');
+        if trimmed.ends_with("/api") {
+            trimmed.trim_end_matches("/api")
+        } else if trimmed.ends_with("/v1") {
+            trimmed.trim_end_matches("/v1")
+        } else {
+            trimmed
+        }
+    }
+
+    pub fn chat_url(&self) -> String {
+        format!("{}/api/chat", self.root_url())
+    }
+
+    pub fn tags_url(&self) -> String {
+        format!("{}/api/tags", self.root_url())
     }
 }
 
 #[async_trait]
 impl ModelProvider for OllamaAdapter {
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
-        let url = format!("{}/api/tags", self.base_url);
+        let url = self.tags_url();
         let res = self.client.get(&url).send().await
             .map_err(|e| ProviderError::from_reqwest(&e, &url))?;
 
@@ -74,7 +94,7 @@ impl ModelProvider for OllamaAdapter {
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
-        let url = format!("{}/api/chat", self.base_url);
+        let url = self.chat_url();
         let payload = json!({
             "model": request.model,
             "messages": request.messages,
@@ -102,15 +122,34 @@ impl ModelProvider for OllamaAdapter {
         let content = json
             .pointer("/message/content")
             .and_then(|v| v.as_str())
+            .or_else(|| json.pointer("/message/thinking").and_then(|v| v.as_str()))
             .unwrap_or("")
             .to_string();
+
+        let usage = {
+            let prompt_tokens = json.get("prompt_eval_count").and_then(|v| v.as_i64());
+            let completion_tokens = json.get("eval_count").and_then(|v| v.as_i64());
+            let total_tokens = match (prompt_tokens, completion_tokens) {
+                (Some(p), Some(c)) => Some(p + c),
+                _ => None,
+            };
+            if prompt_tokens.is_some() || completion_tokens.is_some() {
+                Some(UsageInfo {
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                })
+            } else {
+                None
+            }
+        };
 
         Ok(ChatResponse {
             role: "assistant".to_string(),
             content,
             model: request.model,
             finish_reason: Some("stop".to_string()),
-            usage: None,
+            usage,
         })
     }
 
@@ -119,7 +158,7 @@ impl ModelProvider for OllamaAdapter {
         request: ChatRequest,
         sender: UnboundedSender<String>,
     ) -> Result<(), ProviderError> {
-        let url = format!("{}/api/chat", self.base_url);
+        let url = self.chat_url();
         let payload = json!({
             "model": request.model,
             "messages": request.messages,
@@ -159,7 +198,10 @@ impl ModelProvider for OllamaAdapter {
                 }
 
                 if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
-                    if let Some(delta) = parsed.pointer("/message/content").and_then(|v| v.as_str()) {
+                    let delta_text = parsed.pointer("/message/content").and_then(|v| v.as_str())
+                        .or_else(|| parsed.pointer("/message/thinking").and_then(|v| v.as_str()));
+
+                    if let Some(delta) = delta_text {
                         let _ = sender.send(delta.to_string());
                     }
                     if let Some(done) = parsed.get("done").and_then(|v| v.as_bool()) {

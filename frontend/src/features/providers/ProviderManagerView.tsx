@@ -21,7 +21,8 @@ import {
   Zap,
   Globe,
   Radio,
-  Sliders
+  Sliders,
+  Activity
 } from 'lucide-react'
 import { useProviderStore } from '../../stores/useProviderStore'
 import {
@@ -30,9 +31,10 @@ import {
   updateProvider,
   deleteProvider,
   testProvider,
+  diagnoseProvider,
   getVaultDiagnostics
 } from '../../services/api'
-import type { Provider, ProviderDefinition, ConnectionTestResult, VaultDiagnostics } from '../../types'
+import type { Provider, ProviderDefinition, ConnectionTestResult, VaultDiagnostics, ProviderDiagnosticReport } from '../../types'
 
 export const ProviderManagerView: React.FC = () => {
   const {
@@ -69,6 +71,9 @@ export const ProviderManagerView: React.FC = () => {
   const [vaultDiag, setVaultDiag] = useState<VaultDiagnostics | null>(null)
   const [showDiagModal, setShowDiagModal] = useState(false)
   const [diagLoading, setDiagLoading] = useState(false)
+  const [diagnosingId, setDiagnosingId] = useState<string | null>(null)
+  const [diagnosticReport, setDiagnosticReport] = useState<ProviderDiagnosticReport | null>(null)
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false)
 
   useEffect(() => {
     fetchProviders()
@@ -237,6 +242,25 @@ export const ProviderManagerView: React.FC = () => {
       showFeedback('error', `Connection error: ${err.message || err}`)
     } finally {
       setTestingId(null)
+    }
+  }
+
+  const handleDiagnose = async (id: string) => {
+    setDiagnosingId(id)
+    try {
+      const report = await diagnoseProvider(id)
+      setDiagnosticReport(report)
+      setShowDiagnosticModal(true)
+      await fetchProviders()
+      if (report.is_operational) {
+        showFeedback('success', report.diagnostic_summary)
+      } else {
+        showFeedback('error', report.diagnostic_summary)
+      }
+    } catch (err: any) {
+      showFeedback('error', `Diagnostic failed: ${err.message || err}`)
+    } finally {
+      setDiagnosingId(null)
     }
   }
 
@@ -565,6 +589,16 @@ export const ProviderManagerView: React.FC = () => {
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin text-primary' : ''}`} />
                   {isTesting ? 'Testing...' : 'Test Connection'}
+                </button>
+
+                <button
+                  onClick={() => handleDiagnose(p.id)}
+                  disabled={diagnosingId === p.id}
+                  className="px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 transition-colors cursor-pointer"
+                  title="Run 4-tier operational verification: Connection, Auth, Generation, and Streaming"
+                >
+                  <Activity className={`h-3.5 w-3.5 ${diagnosingId === p.id ? 'animate-spin' : ''}`} />
+                  {diagnosingId === p.id ? 'Diagnosing...' : 'Run Diagnostics'}
                 </button>
               </div>
             </div>
@@ -898,6 +932,196 @@ export const ProviderManagerView: React.FC = () => {
                 className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4-Tier Provider Diagnostic Report Modal */}
+      {showDiagnosticModal && diagnosticReport && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Provider Diagnostic Report: {diagnosticReport.provider_name}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    {diagnosticReport.provider_type} • {diagnosticReport.base_url}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDiagnosticModal(false)}
+                className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Overall Operational Banner */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              diagnosticReport.is_operational
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-destructive/10 border-destructive/30 text-destructive'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                {diagnosticReport.is_operational ? (
+                  <CheckCircle className="h-5 w-5 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-destructive" />
+                )}
+                <div>
+                  <div className="font-bold text-xs uppercase tracking-wide">
+                    {diagnosticReport.is_operational ? 'OPERATIONAL (100% VERIFIED)' : 'VERIFICATION FAILED'}
+                  </div>
+                  <div className="text-[11px] opacity-90">{diagnosticReport.diagnostic_summary}</div>
+                </div>
+              </div>
+              <div className="text-right font-mono text-[11px]">
+                <div>{diagnosticReport.total_latency_ms} ms</div>
+                <div className="text-[10px] opacity-60">Total Latency</div>
+              </div>
+            </div>
+
+            {/* Detailed Checks Grid */}
+            <div className="space-y-3">
+              {/* 1. Connection & Network */}
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-primary" /> 1. Network & Endpoint Connection
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                    diagnosticReport.connection_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-destructive/20 text-destructive'
+                  }`}>
+                    {diagnosticReport.connection_status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between font-mono">
+                  <span>Latency: {diagnosticReport.connection_latency_ms ?? 0} ms</span>
+                  {diagnosticReport.connection_http_status && (
+                    <span>HTTP Status: {diagnosticReport.connection_http_status}</span>
+                  )}
+                </div>
+                {diagnosticReport.connection_error && (
+                  <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-mono">
+                    {diagnosticReport.connection_error}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Authentication Check */}
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5 text-primary" /> 2. Credential & Authentication
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                    diagnosticReport.auth_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-destructive/20 text-destructive'
+                  }`}>
+                    {diagnosticReport.auth_status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {diagnosticReport.auth_details}
+                </div>
+              </div>
+
+              {/* 3. Model Discovery Check */}
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Server className="h-3.5 w-3.5 text-primary" /> 3. Model Discovery ({diagnosticReport.models_discovered.length} found)
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                    diagnosticReport.model_discovery_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                  }`}>
+                    {diagnosticReport.model_discovery_status}
+                  </span>
+                </div>
+                {diagnosticReport.models_discovered.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pt-1">
+                    {diagnosticReport.models_discovered.map(m => (
+                      <span key={m} className="px-1.5 py-0.5 rounded bg-background border border-border text-[10px] font-mono">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-muted-foreground">No dynamic models discovered (using curated static list).</div>
+                )}
+                {diagnosticReport.discovery_error && (
+                  <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-mono">
+                    {diagnosticReport.discovery_error}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Non-Streaming Generation */}
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-primary" /> 4. Non-Streaming Chat Generation (Model: {diagnosticReport.model_used})
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                    diagnosticReport.generation_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-destructive/20 text-destructive'
+                  }`}>
+                    {diagnosticReport.generation_status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between font-mono">
+                  <span>Latency: {diagnosticReport.generation_latency_ms ?? 0} ms</span>
+                  {diagnosticReport.generation_sample_output && (
+                    <span className="text-foreground">Output: "{diagnosticReport.generation_sample_output}"</span>
+                  )}
+                </div>
+                {diagnosticReport.generation_error && (
+                  <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-mono">
+                    {diagnosticReport.generation_error}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Streaming Generation */}
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Radio className="h-3.5 w-3.5 text-primary" /> 5. Streaming Token SSE Protocol
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                    diagnosticReport.streaming_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-destructive/20 text-destructive'
+                  }`}>
+                    {diagnosticReport.streaming_status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between font-mono">
+                  <span>Chunks Received: {diagnosticReport.streaming_chunk_count}</span>
+                  <span>Latency: {diagnosticReport.streaming_latency_ms ?? 0} ms</span>
+                </div>
+                {diagnosticReport.streaming_sample_output && (
+                  <div className="text-[10px] text-muted-foreground font-mono bg-background p-1.5 rounded border border-border">
+                    Sample: {diagnosticReport.streaming_sample_output}
+                  </div>
+                )}
+                {diagnosticReport.streaming_error && (
+                  <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-mono">
+                    {diagnosticReport.streaming_error}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-border flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDiagnosticModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs transition-colors"
+              >
+                Done
               </button>
             </div>
           </div>
