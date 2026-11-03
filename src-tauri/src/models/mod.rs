@@ -136,6 +136,10 @@ pub struct SFTCommitInput {
     pub primary_language: Option<String>,
     pub secondary_language: Option<String>,
     pub language_metadata: Option<Value>,
+    pub save_as_new: Option<bool>,
+    pub create_version_snapshot: Option<bool>,
+    pub version_tag: Option<String>,
+    pub version_description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

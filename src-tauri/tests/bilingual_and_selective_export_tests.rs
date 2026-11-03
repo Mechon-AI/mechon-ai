@@ -89,6 +89,7 @@ async fn test_selective_sft_and_dpo_export() {
             primary_language: None,
             secondary_language: None,
             language_metadata: None,
+            ..Default::default()
         }).await.unwrap();
 
         sft_record_ids.push(record.id);
@@ -258,6 +259,7 @@ async fn test_bilingual_sft_workflow_and_commit() {
         primary_language: Some("id".to_string()),
         secondary_language: Some("en".to_string()),
         language_metadata: None,
+        ..Default::default()
     }).await.unwrap();
 
     assert_eq!(record.language_mode, "bilingual");

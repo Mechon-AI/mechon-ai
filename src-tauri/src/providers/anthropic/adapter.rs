@@ -133,7 +133,20 @@ impl AnthropicAdapter {
     /// Detect models that reject or deprecate sampling parameters (temperature / top_p)
     pub fn is_sampling_deprecated_for_model(model: &str) -> bool {
         let m = model.to_lowercase();
-        m.contains("-5") || m.contains("5-5") || m.contains("fable") || m.contains("opus-4") || m.contains("sonnet-4") || m.contains("haiku-4") || m.starts_with("claude-5")
+        m.contains("-5")
+            || m.contains("5-5")
+            || m.contains("5.5")
+            || m.contains("5_5")
+            || m.contains("fable")
+            || m.contains("opus-4")
+            || m.contains("sonnet-4")
+            || m.contains("haiku-4")
+            || m.starts_with("claude-5")
+            || m.contains("claude-4")
+            || m.contains("claude-3-7")
+            || m.contains("claude-3.7")
+            || m.contains("thinking")
+            || m.contains("reasoning")
     }
 
     /// Format detailed Anthropic diagnostic error on HTTP 400 or other errors

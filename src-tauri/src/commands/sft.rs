@@ -170,3 +170,30 @@ pub async fn get_corpus_languages(
 ) -> Result<serde_json::Value, AppError> {
     DatasetService::get_corpus_languages(&pool, &project_id).await
 }
+
+#[tauri::command]
+pub async fn load_corpus_record_into_session(
+    pool: State<'_, SqlitePool>,
+    record_id: String,
+    as_new_draft: Option<bool>,
+) -> Result<SFTSession, AppError> {
+    SFTService::load_corpus_record_into_session(&pool, &record_id, as_new_draft.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn reorder_sft_messages(
+    pool: State<'_, SqlitePool>,
+    session_id: String,
+    message_ids: Vec<String>,
+) -> Result<Vec<SFTMessage>, AppError> {
+    SFTService::reorder_messages(&pool, &session_id, message_ids).await
+}
+
+#[tauri::command]
+pub async fn remove_sft_message_translation(
+    pool: State<'_, SqlitePool>,
+    message_id: String,
+    lang_code: String,
+) -> Result<SFTMessage, AppError> {
+    SFTService::remove_message_translation(&pool, &message_id, &lang_code).await
+}

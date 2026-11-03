@@ -373,4 +373,28 @@ impl TranslationService {
 
         map
     }
+
+    pub async fn approve_all_translations(
+        pool: &SqlitePool,
+        session_id: &str,
+        target_language: &str,
+    ) -> Result<SFTSession, AppError> {
+        let session = SFTService::get_session(pool, session_id).await?;
+        for msg in &session.messages {
+            let mut status_val = msg.translation_status.clone();
+            if !status_val.is_object() {
+                status_val = json!({});
+            }
+            if let Some(map) = status_val.as_object_mut() {
+                map.insert(target_language.to_string(), json!("approved"));
+            }
+            let status_str = serde_json::to_string(&status_val)?;
+            sqlx::query("UPDATE sft_messages SET translation_status_json = ? WHERE id = ?")
+                .bind(&status_str)
+                .bind(&msg.id)
+                .execute(pool)
+                .await?;
+        }
+        SFTService::get_session(pool, session_id).await
+    }
 }

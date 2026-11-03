@@ -99,6 +99,15 @@ pub async fn batch_update_translation_status(
 }
 
 #[tauri::command]
+pub async fn approve_all_translations(
+    pool: State<'_, SqlitePool>,
+    session_id: String,
+    target_language: String,
+) -> Result<SFTSession, AppError> {
+    TranslationService::approve_all_translations(&pool, &session_id, &target_language).await
+}
+
+#[tauri::command]
 pub async fn get_supported_languages() -> Result<Vec<crate::languages::LanguageInfo>, AppError> {
     Ok(crate::languages::LanguageRegistry::all_languages())
 }

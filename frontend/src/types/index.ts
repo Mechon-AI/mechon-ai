@@ -17,13 +17,13 @@ export interface Project {
 export interface SFTMessage {
   id: string
   session_id: string
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'developer' | 'user' | 'assistant' | 'tool' | string
   content: string
   sequence_order: number
   model?: string
   token_count: number
   translations?: Record<string, string>
-  translation_status?: Record<string, 'pending' | 'generated' | 'edited' | 'approved' | 'failed' | string>
+  translation_status?: Record<string, 'pending' | 'generated' | 'edited' | 'approved' | 'rejected' | 'needs_review' | 'failed' | string>
   created_at: string
 }
 
@@ -38,14 +38,29 @@ export interface SFTSession {
   temperature: number
   top_p: number
   max_tokens: number
-  language_mode?: 'monolingual' | 'bilingual'
+  language_mode?: 'monolingual' | 'bilingual' | 'multilingual' | string
   primary_language?: string
   secondary_language?: string
+  target_languages?: string[]
   language_metadata?: Record<string, any>
   committed_record_id?: string
   messages: SFTMessage[]
   created_at: string
   updated_at: string
+}
+
+export interface SFTCommitInput {
+  title_override?: string
+  tags?: string[]
+  metadata?: Record<string, any>
+  language_mode?: string
+  primary_language?: string
+  secondary_language?: string
+  language_metadata?: Record<string, any>
+  save_as_new?: boolean
+  create_version_snapshot?: boolean
+  version_tag?: string
+  version_description?: string
 }
 
 export interface SFTRecordMessage {

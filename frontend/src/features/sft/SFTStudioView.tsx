@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   MessageSquareCode,
   Plus,
@@ -14,6 +15,7 @@ import {
   Sliders,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   BookmarkPlus,
   Tag,
   Search,
@@ -24,7 +26,10 @@ import {
   AlertCircle,
   Languages,
   CheckCheck,
-  ArrowRight
+  ArrowRight,
+  Database,
+  Code2,
+  UserPlus
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useProjectStore } from '../../stores/useProjectStore'
@@ -45,14 +50,22 @@ import {
   translateSFTSession,
   translateSFTMessage,
   updateSFTMessageTranslation,
-  batchUpdateTranslationStatus
+  batchUpdateTranslationStatus,
+  loadCorpusRecordIntoSession,
+  reorderSFTMessages,
+  removeSFTMessageTranslation,
+  approveAllTranslations
 } from '../../services/api'
-import type { SFTSession, SFTMessage } from '../../types'
+import type { SFTSession, SFTMessage, SFTCommitInput } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
-import { LanguagePairSelector, LanguageIdentityBadge } from '../../components/language'
 import { lookupLanguage, isRTL } from '../../types/languages'
+import { LoadFromCorpusModal } from './LoadFromCorpusModal'
+import { DynamicLanguageBar } from './DynamicLanguageBar'
+import { TranslateModal } from './TranslateModal'
+import { LiveDatasetPreviewDrawer } from './LiveDatasetPreviewDrawer'
 
 export const SFTStudioView: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const { activeProjectId, ensureActiveProject } = useProjectStore()
   const { providers, activeProviderId, activeModel, setActiveProviderId, setActiveModel, fetchProviders } = useProviderStore()
 
@@ -65,19 +78,31 @@ export const SFTStudioView: React.FC = () => {
   const [editContent, setEditContent] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Bilingual & Review state
-  const [studioMode, setStudioMode] = useState<'chat' | 'bilingual'>('chat')
+  // Multilingual & Review state
+  const [studioMode, setStudioMode] = useState<'chat' | 'multilingual'>('chat')
+  const [activeLanguageTab, setActiveLanguageTab] = useState<string>('id')
   const [isTranslating, setIsTranslating] = useState(false)
   const [editingTranslationId, setEditingTranslationId] = useState<string | null>(null)
   const [translationEditText, setTranslationEditText] = useState('')
   const [isRegeneratingTurnId, setIsRegeneratingTurnId] = useState<string | null>(null)
 
-  // Drawer / Param state
+  // Modals & Drawers state
+  const [showCorpusModal, setShowCorpusModal] = useState(false)
+  const [showTranslateModal, setShowTranslateModal] = useState(false)
+  const [showLivePreviewDrawer, setShowLivePreviewDrawer] = useState(false)
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
-  const [showParamsDrawer, setShowParamsDrawer] = useState(false)
+  const [showManualAddModal, setShowManualAddModal] = useState(false)
+  const [manualRole, setManualRole] = useState<'user' | 'assistant' | 'system' | 'developer' | 'tool'>('user')
+  const [manualContent, setManualContent] = useState('')
+
+  // Commit state
   const [showCommitModal, setShowCommitModal] = useState(false)
   const [commitTags, setCommitTags] = useState('dialogue, instruction')
   const [commitTitle, setCommitTitle] = useState('')
+  const [commitSaveAsNew, setCommitSaveAsNew] = useState(false)
+  const [commitCreateSnapshot, setCommitCreateSnapshot] = useState(false)
+  const [commitVersionTag, setCommitVersionTag] = useState('')
+  const [commitVersionDesc, setCommitVersionDesc] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -92,6 +117,14 @@ export const SFTStudioView: React.FC = () => {
     fetchProviders()
     initView()
   }, [activeProjectId])
+
+  // Handle URL query parameter `recordId` to auto-load from Corpus
+  useEffect(() => {
+    const recordId = searchParams.get('recordId')
+    if (recordId) {
+      handleLoadFromCorpus(recordId, false)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (!activeSession || providers.length === 0) return
@@ -112,6 +145,15 @@ export const SFTStudioView: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeSession?.messages, isGenerating])
 
+  // Keep activeLanguageTab aligned with session primary language initially
+  useEffect(() => {
+    if (activeSession) {
+      if (!activeLanguageTab || activeLanguageTab === 'id' || activeLanguageTab === 'en') {
+        setActiveLanguageTab(activeSession.primary_language || 'id')
+      }
+    }
+  }, [activeSession?.primary_language])
+
   const initView = async () => {
     let pId = activeProjectId
     if (!pId) {
@@ -129,12 +171,10 @@ export const SFTStudioView: React.FC = () => {
       const list = await getSFTSessions(targetProject)
       setSessions(list)
       if (list.length > 0) {
-        // If current active session not in list or null, pick first
         if (!activeSession || !list.some(s => s.id === activeSession.id)) {
           loadSessionDetails(list[0].id)
         }
       } else {
-        // Create initial draft session if none exist
         handleNewSession(targetProject)
       }
     } catch (err: any) {
@@ -172,13 +212,29 @@ export const SFTStudioView: React.FC = () => {
         model: activeModel,
         temperature: 0.7,
         top_p: 0.9,
-        max_tokens: 2048
+        max_tokens: 2048,
+        language_mode: 'monolingual',
+        primary_language: 'id',
+        secondary_language: 'en'
       })
       setSessions(prev => [created, ...prev])
       setActiveSession(created)
+      setActiveLanguageTab(created.primary_language || 'id')
       showFeedback('success', 'New conversation draft created.')
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Failed to create conversation'))
+    }
+  }
+
+  const handleLoadFromCorpus = async (recordId: string, asNewDraft: boolean) => {
+    try {
+      const loaded = await loadCorpusRecordIntoSession(recordId, asNewDraft)
+      setSessions(prev => [loaded, ...prev])
+      setActiveSession(loaded)
+      setActiveLanguageTab(loaded.primary_language || 'id')
+      showFeedback('success', `Loaded Corpus record #${recordId.slice(0, 8)} into editor.`)
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Failed to load record from Corpus'))
     }
   }
 
@@ -211,14 +267,12 @@ export const SFTStudioView: React.FC = () => {
     if (!userText) return
     if (!retryUserText) setInputContent('')
 
-    // Authoritative provider & model resolution for active conversation
     const pId = activeSession.provider_id || activeProviderId
     const targetProviderObj = providers.find(p => p.id === pId)
     const availableModels = targetProviderObj?.models_cache && targetProviderObj.models_cache.length > 0
       ? targetProviderObj.models_cache
       : []
 
-    // Ensure model is valid for this provider
     let targetModel = activeSession.model || activeModel
     if (availableModels.length > 0 && !availableModels.includes(targetModel)) {
       targetModel = (targetProviderObj?.default_model && availableModels.includes(targetProviderObj.default_model))
@@ -231,7 +285,6 @@ export const SFTStudioView: React.FC = () => {
       return
     }
 
-    // Persist provider and model to session if changed
     if (activeSession.provider_id !== pId || activeSession.model !== targetModel) {
       setActiveSession(prev => prev ? { ...prev, provider_id: pId, model: targetModel } : null)
       setSessions(prev => prev.map(s => s.id === activeSession.id ? { ...s, provider_id: pId, model: targetModel } : s))
@@ -242,7 +295,6 @@ export const SFTStudioView: React.FC = () => {
     try {
       let currentMessages = activeSession.messages || []
 
-      // If this is a new message (not retrying an existing user turn)
       if (!retryUserText) {
         const userMsg = await addSFTMessage(activeSession.id, {
           role: 'user',
@@ -253,7 +305,6 @@ export const SFTStudioView: React.FC = () => {
         setActiveSession({ ...activeSession, messages: currentMessages, status: 'in_progress' })
       }
 
-      // 2. Generate Assistant Response with full multi-turn history
       const history = currentMessages.map(m => ({ role: m.role, content: m.content }))
 
       const res = await generateCompletion({
@@ -269,7 +320,6 @@ export const SFTStudioView: React.FC = () => {
 
       const assistantText = res.content || 'No response generated.'
 
-      // 3. Save Assistant Turn to Backend
       const assistantMsg = await addSFTMessage(activeSession.id, {
         role: 'assistant',
         content: assistantText,
@@ -281,12 +331,50 @@ export const SFTStudioView: React.FC = () => {
         messages: [...prev.messages, assistantMsg as SFTMessage]
       } : null)
 
-      // Refresh session list status
       loadSessions()
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Generation failed'))
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  const handleManualAddTurn = async () => {
+    if (!activeSession || !manualContent.trim()) return
+    try {
+      const added = await addSFTMessage(activeSession.id, {
+        role: manualRole,
+        content: manualContent.trim(),
+        model: activeSession.model || activeModel
+      })
+      setActiveSession(prev => prev ? {
+        ...prev,
+        messages: [...prev.messages, added as SFTMessage]
+      } : null)
+      setManualContent('')
+      setShowManualAddModal(false)
+      showFeedback('success', `Added ${manualRole} turn.`)
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Failed to add manual turn'))
+    }
+  }
+
+  const handleMoveTurn = async (messageId: string, direction: 'up' | 'down') => {
+    if (!activeSession) return
+    const msgs = [...activeSession.messages]
+    const idx = msgs.findIndex(m => m.id === messageId)
+    if (idx === -1) return
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= msgs.length) return
+
+    const [moved] = msgs.splice(idx, 1)
+    msgs.splice(targetIdx, 0, moved)
+
+    try {
+      const reordered = await reorderSFTMessages(activeSession.id, msgs.map(m => m.id))
+      setActiveSession({ ...activeSession, messages: reordered })
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Failed to reorder turns'))
     }
   }
 
@@ -308,12 +396,10 @@ export const SFTStudioView: React.FC = () => {
   const handleRegenerateFrom = async (sequenceOrder: number) => {
     if (!activeSession) return
     try {
-      // Truncate assistant response and any following turns
       await truncateSFTDownstream(activeSession.id, sequenceOrder)
       const refreshed = await getSFTSession(activeSession.id)
       setActiveSession(refreshed)
 
-      // Trigger generation for the remaining conversation context
       const msgs = refreshed.messages || []
       const lastUser = [...msgs].reverse().find(m => m.role === 'user')
       if (lastUser) {
@@ -361,41 +447,70 @@ export const SFTStudioView: React.FC = () => {
     }
   }
 
-  const handleTranslateSession = async () => {
+  // Dynamic Language Management
+  const targetLanguages = Array.from(
+    new Set([
+      ...(activeSession?.secondary_language ? [activeSession.secondary_language] : []),
+      ...(activeSession?.messages?.flatMap(m => (m.translations ? Object.keys(m.translations) : [])) || [])
+    ])
+  ).filter(code => code !== activeSession?.primary_language)
+
+  const handleModeChange = async (newMode: 'monolingual' | 'bilingual' | 'multilingual') => {
     if (!activeSession) return
-    if (!activeSession.messages || activeSession.messages.length === 0) {
-      showFeedback('error', 'No conversation turns to translate. Add user and assistant messages first.')
-      return
-    }
+    await updateSFTSession(activeSession.id, { language_mode: newMode })
+    setActiveSession(prev => prev ? { ...prev, language_mode: newMode } : null)
+  }
 
-    const targetLang = activeSession.secondary_language || 'en'
-    const pId = activeProviderId || activeSession.provider_id
-    const targetModel = activeModel || activeSession.model
+  const handlePrimaryLanguageChange = async (langCode: string) => {
+    if (!activeSession) return
+    await updateSFTSession(activeSession.id, { primary_language: langCode })
+    setActiveSession(prev => prev ? { ...prev, primary_language: langCode } : null)
+    setActiveLanguageTab(langCode)
+  }
 
-    setIsTranslating(true)
-    try {
-      const updated = await translateSFTSession({
-        session_id: activeSession.id,
-        target_language: targetLang,
-        provider_id: pId,
-        model: targetModel
-      })
-      setActiveSession(updated)
-      setStudioMode('bilingual')
-      showFeedback('success', `Conversation translated to ${targetLang.toUpperCase()} successfully. Review aligned turns below.`)
-      loadSessions()
-    } catch (err: any) {
-      showFeedback('error', formatErrorMessage(err, 'Translation failed'))
-    } finally {
-      setIsTranslating(false)
+  const handleAddTargetLanguage = async (newLang: string) => {
+    if (!activeSession) return
+    const updatedTargets = Array.from(new Set([...targetLanguages, newLang]))
+    const newMode = updatedTargets.length > 1 ? 'multilingual' : 'bilingual'
+    await updateSFTSession(activeSession.id, {
+      language_mode: newMode,
+      secondary_language: newLang
+    })
+    setActiveSession(prev => prev ? {
+      ...prev,
+      language_mode: newMode,
+      secondary_language: newLang
+    } : null)
+    setActiveLanguageTab(newLang)
+    showFeedback('success', `Added language ${lookupLanguage(newLang).name}.`)
+  }
+
+  const handleRemoveTargetLanguage = async (langToRemove: string) => {
+    if (!activeSession) return
+    for (const m of activeSession.messages) {
+      if (m.translations && m.translations[langToRemove]) {
+        await removeSFTMessageTranslation(m.id, langToRemove)
+      }
     }
+    const remaining = targetLanguages.filter(l => l !== langToRemove)
+    const newMode = remaining.length === 0 ? 'monolingual' : remaining.length === 1 ? 'bilingual' : 'multilingual'
+    const newSec = remaining[0] || ''
+    await updateSFTSession(activeSession.id, {
+      language_mode: newMode,
+      secondary_language: newSec
+    })
+    await loadSessionDetails(activeSession.id)
+    setActiveLanguageTab(activeSession.primary_language || 'id')
+    showFeedback('success', `Removed language ${lookupLanguage(langToRemove).name}.`)
   }
 
   const handleTranslateSingleTurn = async (messageId: string) => {
     if (!activeSession) return
-    const targetLang = activeSession.secondary_language || 'en'
-    const pId = activeProviderId || activeSession.provider_id
-    const targetModel = activeModel || activeSession.model
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
+    const pId = activeSession.provider_id || activeProviderId
+    const targetModel = activeSession.model || activeModel
 
     setIsRegeneratingTurnId(messageId)
     try {
@@ -410,7 +525,7 @@ export const SFTStudioView: React.FC = () => {
         ...prev,
         messages: prev.messages.map(m => m.id === messageId ? updatedMsg : m)
       } : null)
-      showFeedback('success', 'Turn re-translated with context.')
+      showFeedback('success', 'Turn translated.')
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Turn translation failed'))
     } finally {
@@ -420,7 +535,9 @@ export const SFTStudioView: React.FC = () => {
 
   const handleApproveTurn = async (messageId: string, content?: string) => {
     if (!activeSession) return
-    const targetLang = activeSession.secondary_language || 'en'
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
     const msg = activeSession.messages.find(m => m.id === messageId)
     const text = content !== undefined ? content : (msg?.translations?.[targetLang] || '')
 
@@ -438,53 +555,79 @@ export const SFTStudioView: React.FC = () => {
     }
   }
 
+  const handleRejectTurn = async (messageId: string) => {
+    if (!activeSession) return
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
+    const msg = activeSession.messages.find(m => m.id === messageId)
+    const text = msg?.translations?.[targetLang] || ''
+
+    try {
+      await updateSFTMessageTranslation({
+        message_id: messageId,
+        target_language: targetLang,
+        content: text,
+        status: 'rejected'
+      })
+      await loadSessionDetails(activeSession.id)
+      showFeedback('success', 'Turn translation marked as rejected.')
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Reject failed'))
+    }
+  }
+
   const handleApproveAllTurns = async () => {
     if (!activeSession) return
-    const targetLang = activeSession.secondary_language || 'en'
+    const targetLang = activeLanguageTab !== activeSession.primary_language
+      ? activeLanguageTab
+      : activeSession.secondary_language || 'en'
     try {
-      const updated = await batchUpdateTranslationStatus({
-        session_id: activeSession.id,
-        target_language: targetLang,
-        status: 'approved'
-      })
+      const updated = await approveAllTranslations(activeSession.id, targetLang)
       setActiveSession(updated)
-      showFeedback('success', 'All turns approved!')
+      showFeedback('success', `All turns in ${lookupLanguage(targetLang).name} marked as approved.`)
     } catch (err: any) {
-      showFeedback('error', formatErrorMessage(err, 'Bulk approval failed'))
+      showFeedback('error', formatErrorMessage(err, 'Failed to approve all turns'))
     }
   }
 
   const handleCommitConfirm = async () => {
     if (!activeSession) return
-    if (!activeSession.messages || activeSession.messages.length === 0) {
-      showFeedback('error', 'Cannot commit an empty conversation. Add at least one turn.')
-      return
-    }
-
     setIsCommitting(true)
     try {
       const tagsArray = commitTags
         .split(',')
         .map(t => t.trim())
-        .filter(Boolean)
+        .filter(t => t.length > 0)
 
-      const isBilingual = activeSession.language_mode === 'bilingual' ||
-        activeSession.messages.some(m => m.translations && Object.keys(m.translations).length > 0)
+      const isMulti = activeSession.language_mode === 'multilingual' || targetLanguages.length > 1
+      const isBilingual = activeSession.language_mode === 'bilingual' || targetLanguages.length === 1
 
-      const record = await commitSFTSession(activeSession.id, {
+      const input: SFTCommitInput = {
         title_override: commitTitle.trim() || activeSession.title,
         tags: tagsArray,
         metadata: {
           model: activeSession.model || activeModel,
           provider_id: activeSession.provider_id || activeProviderId,
           temperature: activeSession.temperature,
-          language_mode: isBilingual ? 'bilingual' : 'monolingual',
+          language_mode: isMulti ? 'multilingual' : isBilingual ? 'bilingual' : 'monolingual',
           primary_language: activeSession.primary_language || 'id',
           secondary_language: activeSession.secondary_language || 'en'
-        }
-      })
+        },
+        save_as_new: commitSaveAsNew,
+        create_version_snapshot: commitCreateSnapshot,
+        version_tag: commitVersionTag.trim() || undefined,
+        version_description: commitVersionDesc.trim() || undefined
+      }
 
-      showFeedback('success', `Committed conversation as SFT record #${record.id.slice(0, 8)}!`)
+      const record = await commitSFTSession(activeSession.id, input)
+
+      showFeedback(
+        'success',
+        commitSaveAsNew
+          ? `Created new Corpus record #${record.id.slice(0, 8)}!`
+          : `Updated Corpus record #${record.id.slice(0, 8)} (v${record.revision})!`
+      )
       setShowCommitModal(false)
       await loadSessions()
       await loadSessionDetails(activeSession.id)
@@ -505,22 +648,36 @@ export const SFTStudioView: React.FC = () => {
     s.title.toLowerCase().includes(sessionSearch.toLowerCase())
   )
 
-  const activeProvider = providers.find(p => p.id === (activeProviderId || activeSession?.provider_id))
+  const activeTargetLanguage = activeLanguageTab !== (activeSession?.primary_language || 'id')
+    ? activeLanguageTab
+    : (activeSession?.secondary_language || targetLanguages[0] || 'en')
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      {/* Sessions Drawer */}
+      {/* Left Panel: Conversations & Corpus Loader */}
       <aside className="w-72 border-r border-border bg-card/40 flex flex-col shrink-0 select-none">
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversations</span>
-            <button
-              onClick={() => handleNewSession()}
-              className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all"
-              title="New SFT Chat"
-            >
-              <Plus className="h-3.5 w-3.5" /> New Chat
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowCorpusModal(true)}
+                className="p-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs flex items-center gap-1 font-semibold transition-all cursor-pointer"
+                title="Load existing conversation from Corpus"
+              >
+                <Database className="h-3.5 w-3.5 text-primary" />
+                <span>Corpus</span>
+              </button>
+
+              <button
+                onClick={() => handleNewSession()}
+                className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all cursor-pointer"
+                title="New Conversation Draft"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>New</span>
+              </button>
+            </div>
           </div>
 
           <div className="relative">
@@ -530,15 +687,16 @@ export const SFTStudioView: React.FC = () => {
               placeholder="Filter sessions..."
               value={sessionSearch}
               onChange={e => setSessionSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-md bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full pl-8 pr-3 py-1.5 rounded-md bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
             />
           </div>
         </div>
 
+        {/* Sessions List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {filteredSessions.map(s => {
             const isSelected = activeSession?.id === s.id
-            const isCommitted = s.status === 'committed'
+            const isCommitted = s.status === 'committed' || s.committed_record_id
             return (
               <div
                 key={s.id}
@@ -554,7 +712,7 @@ export const SFTStudioView: React.FC = () => {
                   <div className="flex items-center gap-1">
                     {isCommitted ? (
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        COMMITTED
+                        CORPUS
                       </span>
                     ) : (
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-accent text-muted-foreground">
@@ -585,7 +743,7 @@ export const SFTStudioView: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-background">
         {activeSession ? (
           <>
-            {/* Conversation Header Bar */}
+            {/* Top Bar: Title, Workspace Mode Switcher, Provider & Commit */}
             <div className="h-14 border-b border-border px-6 flex items-center justify-between bg-card/40 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <input
@@ -596,41 +754,43 @@ export const SFTStudioView: React.FC = () => {
                     setActiveSession(updated)
                     updateSFTSession(activeSession.id, { title: e.target.value })
                   }}
-                  className="font-bold text-sm bg-transparent hover:bg-secondary/50 px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all truncate max-w-xs"
+                  className="font-bold text-sm bg-transparent hover:bg-secondary/50 px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:outline-none transition-all truncate max-w-xs text-foreground"
                 />
 
                 {/* Workspace Mode Switcher */}
                 <div className="flex items-center rounded-lg bg-secondary p-0.5 border border-border shrink-0">
                   <button
                     onClick={() => setStudioMode('chat')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                       studioMode === 'chat'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <MessageSquareCode className="h-3.5 w-3.5" /> Chat
+                    <MessageSquareCode className="h-3.5 w-3.5" />
+                    <span>Chat & Direct Edit</span>
                   </button>
                   <button
-                    onClick={() => setStudioMode('bilingual')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
-                      studioMode === 'bilingual'
-                        ? 'bg-cyan-600 text-white shadow-sm'
-                        : 'text-muted-foreground hover:text-cyan-400'
+                    onClick={() => setStudioMode('multilingual')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                      studioMode === 'multilingual'
+                        ? 'bg-sky-600 text-white shadow-sm'
+                        : 'text-muted-foreground hover:text-sky-400'
                     }`}
                   >
-                    <Languages className="h-3.5 w-3.5" /> Bilingual Review
+                    <Languages className="h-3.5 w-3.5" />
+                    <span>Multilingual Review</span>
                   </button>
                 </div>
 
-                {activeSession.status === 'committed' && (
+                {activeSession.committed_record_id && (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
-                    <CheckCircle className="h-3 w-3" /> COMMITTED TO SFT
+                    <CheckCircle className="h-3 w-3" /> LINKED TO CORPUS
                   </span>
                 )}
               </div>
 
-              {/* Provider & Parameter Controls */}
+              {/* Top Controls */}
               <div className="flex items-center gap-2">
                 {/* Provider & Model Selectors */}
                 <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/60 border border-border text-xs">
@@ -689,7 +849,7 @@ export const SFTStudioView: React.FC = () => {
 
                 <button
                   onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
                     showSystemPrompt
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-secondary hover:bg-accent border-border text-muted-foreground hover:text-foreground'
@@ -699,89 +859,49 @@ export const SFTStudioView: React.FC = () => {
                   System Prompt
                 </button>
 
+                {/* Live Inspector Drawer Toggle */}
+                <button
+                  onClick={() => setShowLivePreviewDrawer(!showLivePreviewDrawer)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    showLivePreviewDrawer
+                      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                      : 'bg-secondary hover:bg-secondary/80 border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Toggle Live Dataset JSON/JSONL preview & statistics"
+                >
+                  <Code2 className="h-3.5 w-3.5" />
+                  <span>Live Preview</span>
+                </button>
+
+                {/* Commit to Corpus Button */}
                 <button
                   onClick={() => {
                     setCommitTitle(activeSession.title)
+                    setCommitSaveAsNew(false)
                     setShowCommitModal(true)
                   }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Commit conversation as atomic SFT dataset record"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Save changes or commit new record to Mechon Corpus"
                 >
-                  <BookmarkPlus className="h-3.5 w-3.5" /> Commit to Dataset
+                  <BookmarkPlus className="h-3.5 w-3.5" />
+                  <span>Save to Corpus</span>
                 </button>
               </div>
             </div>
 
-            {/* Bilingual Configuration Strip */}
-            <div className="px-6 py-2 border-b border-border bg-card/60 flex items-center justify-between text-xs shrink-0">
-              <div className="flex items-center gap-2">
-                <Languages className="h-4 w-4 text-cyan-400" />
-                <span className="font-semibold text-muted-foreground text-[11px]">Bilingual Workflow:</span>
-
-                <LanguagePairSelector
-                  primaryLanguage={activeSession.primary_language || 'id'}
-                  secondaryLanguage={activeSession.secondary_language || 'en'}
-                  onPrimaryChange={(code) => {
-                    setActiveSession(prev => prev ? { ...prev, primary_language: code } : null)
-                    updateSFTSession(activeSession.id, { primary_language: code })
-                  }}
-                  onSecondaryChange={(code) => {
-                    setActiveSession(prev => prev ? { ...prev, secondary_language: code } : null)
-                    updateSFTSession(activeSession.id, { secondary_language: code })
-                  }}
-                  onSwap={() => {
-                    const curP = activeSession.primary_language || 'id'
-                    const curS = activeSession.secondary_language || 'en'
-                    setActiveSession(prev => prev ? { ...prev, primary_language: curS, secondary_language: curP } : null)
-                    updateSFTSession(activeSession.id, { primary_language: curS, secondary_language: curP })
-                  }}
-                  compact
-                />
-
-                <button
-                  onClick={handleTranslateSession}
-                  disabled={isTranslating || !activeSession.messages || activeSession.messages.length === 0}
-                  className="ml-2 px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[11px] flex items-center gap-1.5 shadow-sm disabled:opacity-50 transition-colors cursor-pointer"
-                  title="Translate entire conversation context-aware to target language"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isTranslating ? 'animate-spin' : ''}`} />
-                  {isTranslating ? 'Translating Turns...' : 'Generate Translation'}
-                </button>
-              </div>
-
-              {/* Progress counter & bulk actions in Bilingual Review mode */}
-              {studioMode === 'bilingual' && activeSession.messages && activeSession.messages.length > 0 && (() => {
-                const secLang = activeSession.secondary_language || 'en'
-                const approvedCount = activeSession.messages.filter(m => m.translation_status?.[secLang] === 'approved').length
-                const totalCount = activeSession.messages.length
-                const percent = Math.round((approvedCount / totalCount) * 100)
-
-                return (
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        Approved: <strong className="text-foreground">{approvedCount}</strong>/{totalCount} ({percent}%)
-                      </span>
-                      <div className="w-20 h-2 rounded-full bg-secondary overflow-hidden border border-border">
-                        <div
-                          className="h-full bg-emerald-500 transition-all duration-300"
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleApproveAllTurns}
-                      className="px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 border border-border text-[11px] font-semibold text-foreground flex items-center gap-1 cursor-pointer"
-                      title="Mark all translated turns as approved"
-                    >
-                      <CheckCheck className="h-3 w-3 text-emerald-400" />
-                      Approve All Turns
-                    </button>
-                  </div>
-                )
-              })()}
-            </div>
+            {/* Dynamic Multilingual Bar */}
+            <DynamicLanguageBar
+              languageMode={activeSession.language_mode || 'monolingual'}
+              primaryLanguage={activeSession.primary_language || 'id'}
+              targetLanguages={targetLanguages}
+              activeLanguageTab={activeLanguageTab}
+              onChangeMode={handleModeChange}
+              onChangePrimaryLanguage={handlePrimaryLanguageChange}
+              onAddTargetLanguage={handleAddTargetLanguage}
+              onRemoveTargetLanguage={handleRemoveTargetLanguage}
+              onSelectLanguageTab={code => setActiveLanguageTab(code)}
+              onOpenTranslateModal={() => setShowTranslateModal(true)}
+            />
 
             {/* Notification Banner */}
             {notification && (
@@ -814,394 +934,581 @@ export const SFTStudioView: React.FC = () => {
                     setActiveSession(updated)
                     updateSFTSession(activeSession.id, { system_prompt: e.target.value })
                   }}
-                  className="w-full p-2.5 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full p-2.5 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
                   placeholder="Enter system prompt for model behavior..."
                 />
               </div>
             )}
 
-            {/* Content Area: Chat Mode vs Side-by-Side Bilingual Review Mode */}
-            {studioMode === 'chat' ? (
-              <>
-                {/* Messages Chat Flow */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {activeSession.messages && activeSession.messages.length > 0 ? (
-                    activeSession.messages.map((m, index) => {
-                      const isUser = m.role === 'user'
-                      const isEditing = editingMessageId === m.id
+            {/* Main Content Area: Chat Mode vs Multilingual Review Mode */}
+            <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {studioMode === 'chat' ? (
+                  <>
+                    {/* Messages Chat Flow */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                      {activeSession.messages && activeSession.messages.length > 0 ? (
+                        activeSession.messages.map((m, index) => {
+                          const isUser = m.role === 'user'
+                          const isEditing = editingMessageId === m.id
+                          const isPrimaryTab = activeLanguageTab === (activeSession.primary_language || 'id')
+                          const displayedContent = isPrimaryTab
+                            ? m.content
+                            : (m.translations?.[activeLanguageTab] || m.content)
 
-                      return (
-                        <div
-                          key={m.id || index}
-                          className={`flex flex-col gap-1.5 group max-w-4xl mx-auto ${
-                            isUser ? 'items-end' : 'items-start'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
-                            <span className="font-bold uppercase tracking-wider font-mono">
-                              {isUser ? 'USER' : `ASSISTANT (${m.model || activeSession.model || 'model'})`}
-                            </span>
-                            <span>•</span>
-                            <span>Turn {index + 1}</span>
-                            {m.translations && Object.keys(m.translations).length > 0 && (
-                              <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 text-[9px] font-bold">
-                                Translated
-                              </span>
-                            )}
-                          </div>
-
-                          <div
-                            className={`relative rounded-2xl p-4 text-xs leading-relaxed max-w-[85%] border shadow-sm transition-all ${
-                              isUser
-                                ? 'bg-primary text-primary-foreground border-primary/40'
-                                : 'bg-card text-foreground border-border'
-                            }`}
-                          >
-                            {isEditing ? (
-                              <div className="space-y-2 min-w-[320px]">
-                                <textarea
-                                  rows={4}
-                                  value={editContent}
-                                  onChange={e => setEditContent(e.target.value)}
-                                  className="w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                />
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => setEditingMessageId(null)}
-                                    className="px-2.5 py-1 rounded text-[11px] hover:bg-secondary border border-border"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditSave(m.id)}
-                                    className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm"
-                                  >
-                                    Save Turn
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="prose prose-invert prose-xs max-w-none break-words">
-                                <ReactMarkdown>{m.content}</ReactMarkdown>
-                              </div>
-                            )}
-
-                            {/* Floating Turn Action Toolbar */}
-                            {!isEditing && (
-                              <div className="absolute right-2 -bottom-3.5 hidden group-hover:flex items-center gap-1 bg-card border border-border rounded-lg shadow-md px-1.5 py-0.5 text-muted-foreground text-[10px]">
-                                <button
-                                  onClick={() => copyToClipboard(m.content, m.id)}
-                                  className="p-1 hover:text-foreground hover:bg-secondary rounded"
-                                  title="Copy Turn Content"
-                                >
-                                  {copiedId === m.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setEditingMessageId(m.id)
-                                    setEditContent(m.content)
-                                  }}
-                                  className="p-1 hover:text-foreground hover:bg-secondary rounded"
-                                  title="Edit Turn"
-                                >
-                                  <Edit2 className="h-3 w-3" />
-                                </button>
-                                {!isUser && (
-                                  <button
-                                    onClick={() => handleRegenerateFrom(m.sequence_order)}
-                                    className="p-1 hover:text-primary hover:bg-secondary rounded"
-                                    title="Regenerate from this turn"
-                                  >
-                                    <RefreshCw className="h-3 w-3" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteMessage(m.id)}
-                                  className="p-1 hover:text-destructive hover:bg-destructive/10 rounded"
-                                  title="Delete Turn"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-center text-xs text-muted-foreground py-16">
-                      <div className="space-y-2 max-w-md">
-                        <MessageSquareCode className="h-10 w-10 text-primary/40 mx-auto" />
-                        <h3 className="font-bold text-foreground text-sm">Empty Conversation Draft</h3>
-                        <p className="leading-relaxed">
-                          Type your prompt below to start building this multi-turn demonstration. Then use "Generate Translation" to create an aligned bilingual dataset.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {isGenerating && (
-                    <div className="flex items-center gap-2 text-xs text-primary animate-pulse p-4 max-w-4xl mx-auto">
-                      <Sparkles className="h-4 w-4 animate-spin" />
-                      <span>Model is generating completion...</span>
-                    </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Chat Input Bar */}
-                <div className="p-4 border-t border-border bg-card/40 shrink-0">
-                  {activeSession.messages &&
-                    activeSession.messages.length > 0 &&
-                    activeSession.messages[activeSession.messages.length - 1].role === 'user' &&
-                    !isGenerating && (
-                      <div className="max-w-4xl mx-auto mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
-                        <span className="flex items-center gap-1.5">
-                          <AlertCircle className="h-3.5 w-3.5" /> Last user turn has no assistant response.
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const lastUserMsg = activeSession.messages[activeSession.messages.length - 1]
-                            handleSendMessage(undefined, lastUserMsg.content)
-                          }}
-                          className="px-2.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-[11px] flex items-center gap-1 transition-colors"
-                        >
-                          <RefreshCw className="h-3 w-3" /> Retry Generation
-                        </button>
-                      </div>
-                    )}
-
-                  <form onSubmit={handleSendMessage} className="relative max-w-4xl mx-auto flex items-end gap-2">
-                    <textarea
-                      rows={2}
-                      value={inputContent}
-                      onChange={e => setInputContent(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSendMessage()
-                        }
-                      }}
-                      placeholder="Type user message (Enter to send, Shift+Enter for newline)..."
-                      className="flex-1 p-3 rounded-xl bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                    />
-
-                    <button
-                      type="submit"
-                      disabled={isGenerating || !inputContent.trim()}
-                      className="h-10 px-5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-50 transition-all shrink-0 cursor-pointer"
-                    >
-                      {isGenerating ? <Square className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      <span>Send</span>
-                    </button>
-                  </form>
-                </div>
-              </>
-            ) : (
-              /* Side-by-Side Bilingual Review Interface */
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div className="max-w-5xl mx-auto space-y-4">
-                  {(() => {
-                    const pLang = lookupLanguage(activeSession.primary_language || 'id')
-                    const sLang = lookupLanguage(activeSession.secondary_language || 'en')
-                    return (
-                      <div className="grid grid-cols-2 gap-4 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider">
-                        <span className="text-primary flex items-center gap-1.5">
-                          Primary ({pLang.name} - {pLang.code.toUpperCase()})
-                          {pLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
-                        </span>
-                        <span className="text-cyan-400 flex items-center gap-1.5">
-                          Translation ({sLang.name} - {sLang.code.toUpperCase()})
-                          {sLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
-                        </span>
-                      </div>
-                    )
-                  })()}
-
-                  {activeSession.messages && activeSession.messages.length > 0 ? (
-                    activeSession.messages.map((m, index) => {
-                      const secLang = activeSession.secondary_language || 'en'
-                      const transText = m.translations?.[secLang] || (m.translations ? Object.values(m.translations)[0] : '')
-                      const status = (m.translation_status?.[secLang] || 'pending').toLowerCase()
-                      const isEditing = editingTranslationId === m.id
-                      const isRegenerating = isRegeneratingTurnId === m.id
-                      const pInfo = lookupLanguage(activeSession.primary_language || 'id')
-                      const sInfo = lookupLanguage(secLang)
-
-                      return (
-                        <div key={m.id || index} className="grid grid-cols-2 gap-4 items-start">
-                          {/* Left: Original Primary Message */}
-                          <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs shadow-sm">
-                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                              <span className="font-bold text-foreground">{m.role}</span>
-                              <span>Turn {index + 1}</span>
-                            </div>
+                          return (
                             <div
-                              dir={pInfo.rtl ? 'rtl' : 'ltr'}
-                              className={`prose prose-invert prose-xs max-w-none break-words ${
-                                pInfo.rtl ? 'text-right' : 'text-left'
+                              key={m.id || index}
+                              className={`flex flex-col gap-1.5 group max-w-4xl mx-auto ${
+                                isUser ? 'items-end' : 'items-start'
                               }`}
                             >
-                              <ReactMarkdown>{m.content}</ReactMarkdown>
-                            </div>
-                          </div>
-
-                          {/* Right: Aligned Translation Card */}
-                          <div className="p-4 rounded-xl bg-card border border-cyan-500/30 space-y-3 text-xs shadow-sm">
-                            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
-                              <span className="font-bold text-cyan-400">{m.role} ({sInfo.code.toUpperCase()})</span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                  status === 'approved'
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : status === 'generated'
-                                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                                    : status === 'edited'
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                    : 'bg-secondary text-muted-foreground'
-                                }`}
-                              >
-                                {status}
-                              </span>
-                            </div>
-
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <textarea
-                                  rows={4}
-                                  value={translationEditText}
-                                  onChange={e => setTranslationEditText(e.target.value)}
-                                  dir={sInfo.rtl ? 'rtl' : 'ltr'}
-                                  className={`w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
-                                    sInfo.rtl ? 'text-right' : 'text-left'
-                                  }`}
-                                />
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => setEditingTranslationId(null)}
-                                    className="px-2.5 py-1 rounded text-[11px] border border-border hover:bg-secondary cursor-pointer"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      await handleApproveTurn(m.id, translationEditText)
-                                      setEditingTranslationId(null)
-                                    }}
-                                    className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer"
-                                  >
-                                    Save & Approve
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div
-                                dir={sInfo.rtl ? 'rtl' : 'ltr'}
-                                className={`prose prose-invert prose-xs max-w-none break-words min-h-[40px] ${
-                                  sInfo.rtl ? 'text-right' : 'text-left'
-                                }`}
-                              >
-                                {transText ? (
-                                  <ReactMarkdown>{transText}</ReactMarkdown>
-                                ) : (
-                                  <span className="text-muted-foreground italic">
-                                    No translation generated for this turn yet. Click "Regenerate Turn" or "Generate Translation".
+                              {/* Turn Meta Header */}
+                              <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                                <span className="font-bold uppercase tracking-wider font-mono text-foreground">
+                                  {m.role}
+                                </span>
+                                <span>•</span>
+                                <span>Turn {index + 1}</span>
+                                {!isPrimaryTab && (
+                                  <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-400 text-[9px] font-bold">
+                                    {activeLanguageTab.toUpperCase()}
+                                  </span>
+                                )}
+                                {m.translations && Object.keys(m.translations).length > 0 && (
+                                  <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary text-[9px] font-bold">
+                                    {Object.keys(m.translations).length} trans
                                   </span>
                                 )}
                               </div>
-                            )}
 
-                            {/* Action Buttons for Turn */}
-                            {!isEditing && (
-                              <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[11px]">
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    onClick={() => {
-                                      setEditingTranslationId(m.id)
-                                      setTranslationEditText(transText)
-                                    }}
-                                    className="px-2 py-1 rounded bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 cursor-pointer"
-                                    title="Edit translated text"
-                                  >
-                                    <Edit2 className="h-3 w-3" /> Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleTranslateSingleTurn(m.id)}
-                                    disabled={isRegenerating}
-                                    className="px-2 py-1 rounded bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                                    title="Regenerate single turn translation in context"
-                                  >
-                                    <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin text-cyan-400' : ''}`} />
-                                    Regenerate
-                                  </button>
-                                </div>
+                              <div
+                                className={`relative rounded-2xl p-4 text-xs leading-relaxed max-w-[85%] border shadow-sm transition-all ${
+                                  isUser
+                                    ? 'bg-primary text-primary-foreground border-primary/40'
+                                    : 'bg-card text-foreground border-border'
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <div className="space-y-2 min-w-[320px]">
+                                    <textarea
+                                      rows={4}
+                                      value={editContent}
+                                      onChange={e => setEditContent(e.target.value)}
+                                      className="w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        onClick={() => setEditingMessageId(null)}
+                                        className="px-2.5 py-1 rounded text-[11px] hover:bg-secondary border border-border cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => handleEditSave(m.id)}
+                                        className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer"
+                                      >
+                                        Save Turn
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="prose prose-invert prose-xs max-w-none break-words">
+                                    <ReactMarkdown>{displayedContent}</ReactMarkdown>
+                                  </div>
+                                )}
 
-                                {status !== 'approved' && transText && (
-                                  <button
-                                    onClick={() => handleApproveTurn(m.id)}
-                                    className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1 shadow-sm cursor-pointer"
-                                    title="Approve turn translation"
-                                  >
-                                    <Check className="h-3 w-3" /> Approve
-                                  </button>
+                                {/* Floating Turn Actions Toolbar */}
+                                {!isEditing && (
+                                  <div className="absolute right-2 -bottom-3.5 hidden group-hover:flex items-center gap-1 bg-card border border-border rounded-lg shadow-md px-1.5 py-0.5 text-muted-foreground text-[10px]">
+                                    {/* Reorder Up */}
+                                    <button
+                                      onClick={() => handleMoveTurn(m.id, 'up')}
+                                      disabled={index === 0}
+                                      className="p-1 hover:text-foreground hover:bg-secondary rounded disabled:opacity-30 cursor-pointer"
+                                      title="Move Turn Up"
+                                    >
+                                      <ChevronUp className="h-3 w-3" />
+                                    </button>
+
+                                    {/* Reorder Down */}
+                                    <button
+                                      onClick={() => handleMoveTurn(m.id, 'down')}
+                                      disabled={index === activeSession.messages.length - 1}
+                                      className="p-1 hover:text-foreground hover:bg-secondary rounded disabled:opacity-30 cursor-pointer"
+                                      title="Move Turn Down"
+                                    >
+                                      <ChevronDown className="h-3 w-3" />
+                                    </button>
+
+                                    <button
+                                      onClick={() => copyToClipboard(displayedContent, m.id)}
+                                      className="p-1 hover:text-foreground hover:bg-secondary rounded cursor-pointer"
+                                      title="Copy Turn Content"
+                                    >
+                                      {copiedId === m.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setEditingMessageId(m.id)
+                                        setEditContent(m.content)
+                                      }}
+                                      className="p-1 hover:text-foreground hover:bg-secondary rounded cursor-pointer"
+                                      title="Edit Turn"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </button>
+
+                                    {!isUser && (
+                                      <button
+                                        onClick={() => handleRegenerateFrom(m.sequence_order)}
+                                        className="p-1 hover:text-primary hover:bg-secondary rounded cursor-pointer"
+                                        title="Regenerate from this turn"
+                                      >
+                                        <RefreshCw className="h-3 w-3" />
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() => handleDeleteMessage(m.id)}
+                                      className="p-1 hover:text-destructive hover:bg-destructive/10 rounded cursor-pointer"
+                                      title="Delete Turn"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
-                            )}
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-center text-xs text-muted-foreground py-16">
+                          <div className="space-y-2 max-w-md">
+                            <MessageSquareCode className="h-10 w-10 text-primary/40 mx-auto" />
+                            <h3 className="font-bold text-foreground text-sm">Empty Conversation Draft</h3>
+                            <p className="leading-relaxed">
+                              Type your prompt below or click "+ Add Turn" to construct manual dialogues. You can also load existing datasets from Mechon Corpus.
+                            </p>
                           </div>
                         </div>
-                      )
-                    })
-                  ) : (
-                    <div className="p-12 text-center text-xs text-muted-foreground">
-                      No messages to review. Add conversation turns in Chat mode first.
+                      )}
+
+                      {isGenerating && (
+                        <div className="flex items-center gap-2 text-xs text-primary animate-pulse p-4 max-w-4xl mx-auto">
+                          <Sparkles className="h-4 w-4 animate-spin" />
+                          <span>Model is generating completion...</span>
+                        </div>
+                      )}
+
+                      <div ref={messagesEndRef} />
                     </div>
-                  )}
-                </div>
+
+                    {/* Chat Input & Manual Turn Toolbar */}
+                    <div className="p-4 border-t border-border bg-card/40 shrink-0">
+                      {activeSession.messages &&
+                        activeSession.messages.length > 0 &&
+                        activeSession.messages[activeSession.messages.length - 1].role === 'user' &&
+                        !isGenerating && (
+                          <div className="max-w-4xl mx-auto mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+                            <span className="flex items-center gap-1.5">
+                              <AlertCircle className="h-3.5 w-3.5" /> Last user turn has no assistant response.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const lastUserMsg = activeSession.messages[activeSession.messages.length - 1]
+                                handleSendMessage(undefined, lastUserMsg.content)
+                              }}
+                              className="px-2.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className="h-3 w-3" /> Retry Generation
+                            </button>
+                          </div>
+                        )}
+
+                      <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between text-xs">
+                        <button
+                          onClick={() => setShowManualAddModal(true)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border text-[11px] font-medium transition-colors cursor-pointer"
+                          title="Add a custom dialogue turn manually (user, assistant, system, developer, tool)"
+                        >
+                          <UserPlus className="w-3.5 h-3.5 text-primary" />
+                          <span>+ Add Turn Manually</span>
+                        </button>
+
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          Generating via: {activeSession.model || activeModel}
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleSendMessage} className="relative max-w-4xl mx-auto flex items-end gap-2">
+                        <textarea
+                          rows={2}
+                          value={inputContent}
+                          onChange={e => setInputContent(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              handleSendMessage()
+                            }
+                          }}
+                          placeholder="Type message to continue conversation (Enter to send, Shift+Enter for newline)..."
+                          className="flex-1 p-3 rounded-xl bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary resize-none text-foreground"
+                        />
+
+                        <button
+                          type="submit"
+                          disabled={isGenerating || !inputContent.trim()}
+                          className="h-10 px-5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-50 transition-all shrink-0 cursor-pointer"
+                        >
+                          {isGenerating ? <Square className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                          <span>Send</span>
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                ) : (
+                  /* Side-by-Side Multilingual Review Interface */
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    <div className="max-w-5xl mx-auto space-y-4">
+                      {/* Comparison Columns Header */}
+                      {(() => {
+                        const pLang = lookupLanguage(activeSession.primary_language || 'id')
+                        const sLang = lookupLanguage(activeTargetLanguage)
+                        const approvedCount = activeSession.messages.filter(m => m.translation_status?.[activeTargetLanguage] === 'approved').length
+                        const totalCount = activeSession.messages.length
+                        const percent = totalCount > 0 ? Math.round((approvedCount / totalCount) * 100) : 0
+
+                        return (
+                          <div className="flex items-center justify-between border-b border-border pb-3">
+                            <div className="grid grid-cols-2 gap-6 flex-1 text-xs font-bold uppercase tracking-wider">
+                              <span className="text-primary flex items-center gap-1.5">
+                                Source ({pLang.name} - {pLang.code.toUpperCase()})
+                                {pLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                              </span>
+                              <span className="text-sky-400 flex items-center gap-1.5">
+                                Translation ({sLang.name} - {sLang.code.toUpperCase()})
+                                {sLang.rtl && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-500 font-mono">RTL</span>}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 ml-4">
+                              <span className="text-[11px] font-mono text-muted-foreground">
+                                Approved: <strong className="text-foreground">{approvedCount}</strong>/{totalCount} ({percent}%)
+                              </span>
+                              <button
+                                onClick={handleApproveAllTurns}
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                                title={`Approve all turns in ${sLang.name}`}
+                              >
+                                <CheckCheck className="w-3.5 h-3.5" />
+                                <span>Approve All ({sLang.code.toUpperCase()})</span>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Turn Cards */}
+                      {activeSession.messages && activeSession.messages.length > 0 ? (
+                        activeSession.messages.map((m, index) => {
+                          const transText = m.translations?.[activeTargetLanguage] || ''
+                          const status = (m.translation_status?.[activeTargetLanguage] || 'pending').toLowerCase()
+                          const isEditing = editingTranslationId === m.id
+                          const isRegenerating = isRegeneratingTurnId === m.id
+                          const pInfo = lookupLanguage(activeSession.primary_language || 'id')
+                          const sInfo = lookupLanguage(activeTargetLanguage)
+
+                          return (
+                            <div key={m.id || index} className="grid grid-cols-2 gap-6 items-start">
+                              {/* Left Column: Original Primary Text */}
+                              <div className="p-4 rounded-xl bg-card border border-border space-y-2 text-xs shadow-sm">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                                  <span className="font-bold text-foreground">{m.role}</span>
+                                  <span>Turn {index + 1}</span>
+                                </div>
+                                <div
+                                  dir={pInfo.rtl ? 'rtl' : 'ltr'}
+                                  className={`prose prose-invert prose-xs max-w-none break-words ${
+                                    pInfo.rtl ? 'text-right' : 'text-left'
+                                  }`}
+                                >
+                                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                                </div>
+                              </div>
+
+                              {/* Right Column: Aligned Translation Text */}
+                              <div className="p-4 rounded-xl bg-card border border-sky-500/30 space-y-3 text-xs shadow-sm">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground uppercase border-b border-border/60 pb-1">
+                                  <span className="font-bold text-sky-400">{m.role} ({sInfo.code.toUpperCase()})</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                      status === 'approved'
+                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                        : status === 'generated'
+                                        ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                                        : status === 'rejected'
+                                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                        : 'bg-secondary text-muted-foreground'
+                                    }`}
+                                  >
+                                    {status}
+                                  </span>
+                                </div>
+
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <textarea
+                                      rows={4}
+                                      value={translationEditText}
+                                      onChange={e => setTranslationEditText(e.target.value)}
+                                      dir={sInfo.rtl ? 'rtl' : 'ltr'}
+                                      className={`w-full p-2.5 rounded-lg bg-secondary border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
+                                        sInfo.rtl ? 'text-right' : 'text-left'
+                                      }`}
+                                    />
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        onClick={() => setEditingTranslationId(null)}
+                                        className="px-2.5 py-1 rounded text-[11px] border border-border hover:bg-secondary cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          await handleApproveTurn(m.id, translationEditText)
+                                          setEditingTranslationId(null)
+                                        }}
+                                        className="px-3 py-1 rounded text-[11px] font-bold bg-primary text-primary-foreground shadow-sm cursor-pointer"
+                                      >
+                                        Save & Approve
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    dir={sInfo.rtl ? 'rtl' : 'ltr'}
+                                    className={`prose prose-invert prose-xs max-w-none break-words min-h-[40px] ${
+                                      sInfo.rtl ? 'text-right' : 'text-left'
+                                    }`}
+                                  >
+                                    {transText ? (
+                                      <ReactMarkdown>{transText}</ReactMarkdown>
+                                    ) : (
+                                      <span className="text-muted-foreground italic">
+                                        No translation for {sInfo.name} yet. Click "Regenerate" or use "Translate LLM".
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Turn Actions */}
+                                {!isEditing && (
+                                  <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[11px]">
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          setEditingTranslationId(m.id)
+                                          setTranslationEditText(transText)
+                                        }}
+                                        className="px-2 py-1 rounded bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 cursor-pointer"
+                                        title="Edit translated text"
+                                      >
+                                        <Edit2 className="h-3 w-3" />
+                                        <span>Edit</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleTranslateSingleTurn(m.id)}
+                                        disabled={isRegenerating}
+                                        className="px-2 py-1 rounded bg-secondary hover:bg-accent border border-border text-foreground flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                        title="Regenerate single turn translation in context"
+                                      >
+                                        <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin text-sky-400' : ''}`} />
+                                        <span>Regenerate</span>
+                                      </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5">
+                                      {transText && status !== 'rejected' && (
+                                        <button
+                                          onClick={() => handleRejectTurn(m.id)}
+                                          className="px-2 py-1 rounded bg-secondary hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 border border-border transition-colors cursor-pointer"
+                                          title="Reject this translation"
+                                        >
+                                          Reject
+                                        </button>
+                                      )}
+                                      {transText && status !== 'approved' && (
+                                        <button
+                                          onClick={() => handleApproveTurn(m.id)}
+                                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1 shadow-sm cursor-pointer"
+                                          title="Approve turn translation"
+                                        >
+                                          <Check className="h-3 w-3" />
+                                          <span>Approve</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="p-12 text-center text-xs text-muted-foreground">
+                          No messages to review. Add conversation turns in Chat mode first.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* Right Side Live Dataset Inspector Drawer */}
+              <LiveDatasetPreviewDrawer
+                session={activeSession}
+                isOpen={showLivePreviewDrawer}
+                onClose={() => setShowLivePreviewDrawer(false)}
+              />
+            </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-center text-xs text-muted-foreground p-8">
             <div className="space-y-3">
               <MessageSquareCode className="h-10 w-10 text-muted-foreground/40 mx-auto" />
               <p>No active conversation. Select a session or click New Chat to start.</p>
-              <button
-                onClick={() => handleNewSession()}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold"
-              >
-                Create New Conversation
-              </button>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setShowCorpusModal(true)}
+                  className="px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 font-bold border border-border cursor-pointer flex items-center gap-1.5"
+                >
+                  <Database className="w-4 h-4 text-primary" />
+                  <span>Load from Corpus</span>
+                </button>
+                <button
+                  onClick={() => handleNewSession()}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold cursor-pointer"
+                >
+                  Create New Conversation
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Commit Session Modal */}
-      {showCommitModal && activeSession && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-foreground">Commit Session to SFT Dataset</h3>
-                <p className="text-xs text-muted-foreground">
-                  The entire conversation ({activeSession.messages.length} turns) will commit as EXACTLY ONE atomic SFT dataset record.
-                </p>
-              </div>
-              <button onClick={() => setShowCommitModal(false)} className="p-1 rounded-lg hover:bg-secondary">
+      {/* Manual Turn Add Modal */}
+      {showManualAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-5 space-y-4 text-foreground">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-primary" />
+                <span>Add Dialogue Turn Manually</span>
+              </h3>
+              <button onClick={() => setShowManualAddModal(false)} className="p-1 rounded-lg hover:bg-secondary cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Role</label>
+                <select
+                  value={manualRole}
+                  onChange={e => setManualRole(e.target.value as any)}
+                  className="w-full px-3 py-1.5 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                >
+                  <option value="user">User</option>
+                  <option value="assistant">Assistant</option>
+                  <option value="system">System</option>
+                  <option value="developer">Developer</option>
+                  <option value="tool">Tool</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Message Content</label>
+                <textarea
+                  rows={4}
+                  value={manualContent}
+                  onChange={e => setManualContent(e.target.value)}
+                  placeholder="Enter message text..."
+                  className="w-full p-2.5 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowManualAddModal(false)}
+                className="px-3 py-1.5 rounded-lg text-xs hover:bg-secondary border border-border cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleManualAddTurn}
+                disabled={!manualContent.trim()}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                Add Turn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Corpus Loader Modal */}
+      <LoadFromCorpusModal
+        projectId={activeProjectId || ''}
+        isOpen={showCorpusModal}
+        onClose={() => setShowCorpusModal(false)}
+        onLoadRecord={handleLoadFromCorpus}
+      />
+
+      {/* Translation Modal */}
+      {activeSession && (
+        <TranslateModal
+          session={activeSession}
+          providers={providers}
+          isOpen={showTranslateModal}
+          onClose={() => setShowTranslateModal(false)}
+          onSuccess={updated => {
+            setActiveSession(updated)
+            showFeedback('success', 'Full conversation translated.')
+          }}
+        />
+      )}
+
+      {/* Commit Session Modal */}
+      {showCommitModal && activeSession && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 text-foreground">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Save / Commit to Mechon Corpus</h3>
+                <p className="text-xs text-muted-foreground">
+                  Save conversation ({activeSession.messages.length} turns) as an atomic dataset record.
+                </p>
+              </div>
+              <button onClick={() => setShowCommitModal(false)} className="p-1 rounded-lg hover:bg-secondary cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-2 text-xs">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Record Title</label>
                 <input
                   type="text"
                   value={commitTitle}
                   onChange={e => setCommitTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
                 />
               </div>
 
@@ -1211,23 +1518,75 @@ export const SFTStudioView: React.FC = () => {
                   type="text"
                   value={commitTags}
                   onChange={e => setCommitTags(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 rounded-lg bg-secondary/80 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
                   placeholder="e.g. reasoning, customer-support, bilingual"
                 />
               </div>
 
-              <div className="p-3 rounded-lg bg-secondary/40 border border-border/80 text-[11px] space-y-1 font-mono text-muted-foreground">
+              {/* Save As New Option */}
+              {activeSession.committed_record_id && (
+                <div className="p-3 rounded-lg bg-secondary/40 border border-border space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={commitSaveAsNew}
+                      onChange={e => setCommitSaveAsNew(e.target.checked)}
+                      className="rounded accent-primary"
+                    />
+                    <span>Save As New Record (fork from original #{activeSession.committed_record_id.slice(0, 8)})</span>
+                  </label>
+                  <p className="text-[10px] text-muted-foreground pl-5">
+                    Unchecked: overwrites the existing record and increments revision (v2, v3, etc.).
+                  </p>
+                </div>
+              )}
+
+              {/* Version Snapshot Option */}
+              <div className="p-3 rounded-lg bg-secondary/40 border border-border space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={commitCreateSnapshot}
+                    onChange={e => setCommitCreateSnapshot(e.target.checked)}
+                    className="rounded accent-primary"
+                  />
+                  <span>Create Dataset Version Snapshot</span>
+                </label>
+
+                {commitCreateSnapshot && (
+                  <div className="space-y-2 pl-5 pt-1">
+                    <div>
+                      <label className="text-[10px] uppercase font-mono text-muted-foreground block mb-0.5">Version Tag</label>
+                      <input
+                        type="text"
+                        value={commitVersionTag}
+                        onChange={e => setCommitVersionTag(e.target.value)}
+                        placeholder="e.g. v1.1.0"
+                        className="w-full px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-mono text-muted-foreground block mb-0.5">Version Description</label>
+                      <input
+                        type="text"
+                        value={commitVersionDesc}
+                        onChange={e => setCommitVersionDesc(e.target.value)}
+                        placeholder="Summary of changes in this version..."
+                        className="w-full px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 rounded-lg bg-secondary/40 border border-border text-[11px] space-y-1 font-mono text-muted-foreground">
                 <div>Model: {activeSession.model || activeModel}</div>
                 <div>Turns: {activeSession.messages.length} messages (Canonical ChatML Schema)</div>
-                <div className="flex items-center gap-2">
-                  <span>Language Alignment:</span>
-                  <LanguageIdentityBadge
-                    primaryLanguage={activeSession.primary_language || 'id'}
-                    secondaryLanguage={activeSession.secondary_language || 'en'}
-                    mode={activeSession.language_mode || 'bilingual'}
-                  />
-                </div>
-                <div>Commit Destination: Project SFT Corpus (1 Atomic Record)</div>
+                <div>Language Mode: {activeSession.language_mode || 'monolingual'}</div>
+                <div>Source: {lookupLanguage(activeSession.primary_language || 'id').name}</div>
+                {targetLanguages.length > 0 && (
+                  <div>Targets: {targetLanguages.map(l => lookupLanguage(l).name).join(', ')}</div>
+                )}
               </div>
             </div>
 
@@ -1235,7 +1594,7 @@ export const SFTStudioView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowCommitModal(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium hover:bg-secondary border border-border"
+                className="px-4 py-2 rounded-lg text-xs font-medium hover:bg-secondary border border-border cursor-pointer"
               >
                 Cancel
               </button>
@@ -1246,7 +1605,7 @@ export const SFTStudioView: React.FC = () => {
                 className="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <BookmarkPlus className="h-4 w-4" />
-                {isCommitting ? 'Committing...' : 'Confirm & Commit Record'}
+                {isCommitting ? 'Saving...' : 'Confirm & Save to Corpus'}
               </button>
             </div>
           </div>

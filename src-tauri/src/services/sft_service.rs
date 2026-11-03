@@ -483,8 +483,11 @@ impl SFTService {
 
         let metadata_json = serde_json::to_string(&Value::Object(metadata_obj))?;
 
-        // Check if session was already committed once to prevent duplication
-        let record_id = if let Some(existing_record_id) = &session.committed_record_id {
+        let force_new = input.save_as_new.unwrap_or(false);
+
+        // Check if session was already committed once to prevent duplication (unless save_as_new is explicitly requested)
+        let record_id = if !force_new && session.committed_record_id.is_some() {
+            let existing_record_id = session.committed_record_id.as_ref().unwrap();
             // Update existing record
             sqlx::query(
                 "UPDATE sft_records
@@ -543,6 +546,24 @@ impl SFTService {
         .execute(pool)
         .await?;
 
+        // Optional version snapshot creation
+        if input.create_version_snapshot == Some(true) {
+            let v_tag = input.version_tag.unwrap_or_else(|| {
+                format!("v1.{}.0", Utc::now().format("%Y%m%d%H%M%S"))
+            });
+            let summary = format!("Committed conversation '{}' (record {}) into SFT dataset", session.title, record_id);
+            let description = input.version_description.or(Some(summary));
+            let _ = crate::services::version_service::VersionService::create_snapshot(
+                pool,
+                crate::models::SnapshotCreateInput {
+                    project_id: session.project_id.clone(),
+                    dataset_type: "sft".to_string(),
+                    version_tag: v_tag,
+                    description,
+                },
+            ).await;
+        }
+
         // Log audit event
         let audit_id = Uuid::new_v4().to_string();
         let _ = sqlx::query(
@@ -558,5 +579,166 @@ impl SFTService {
         .await;
 
         crate::services::dataset_service::DatasetService::get_sft_record(pool, &record_id).await
+    }
+
+    /// Load an existing Corpus SFT Record into an active SFTSession for editing or cloning
+    pub async fn load_corpus_record_into_session(
+        pool: &SqlitePool,
+        record_id: &str,
+        as_new_draft: bool,
+    ) -> Result<SFTSession, AppError> {
+        let record = crate::services::dataset_service::DatasetService::get_sft_record(pool, record_id).await?;
+        let now = Utc::now().to_rfc3339();
+        let new_session_id = Uuid::new_v4().to_string();
+
+        let title = record.metadata.get("title")
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("Corpus Record {}", &record.id[..record.id.len().min(8)]));
+
+        let mut system_prompt = "You are a helpful, respectful, and honest assistant.".to_string();
+        let mut messages_to_insert = Vec::new();
+
+        if let Some(msg_arr) = record.messages.as_array() {
+            let mut seq = 0;
+            for (idx, m) in msg_arr.iter().enumerate() {
+                let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+                let content = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                if idx == 0 && role == "system" {
+                    system_prompt = content.to_string();
+                    continue;
+                }
+                let translations = m.get("translations").cloned().unwrap_or_else(|| json!({}));
+                let trans_status = m.get("translation_status").cloned().unwrap_or_else(|| json!({}));
+                messages_to_insert.push((role.to_string(), content.to_string(), seq, translations, trans_status));
+                seq += 1;
+            }
+        }
+
+        let committed_record_id = if as_new_draft {
+            None
+        } else {
+            Some(record.id.clone())
+        };
+
+        let lang_meta_str = serde_json::to_string(&record.language_metadata).unwrap_or_else(|_| "{}".to_string());
+
+        sqlx::query(
+            "INSERT INTO sft_sessions (id, project_id, title, system_prompt, status, provider_id, model, temperature, top_p, max_tokens, language_mode, primary_language, secondary_language, language_metadata_json, committed_record_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'draft', NULL, NULL, 0.7, 0.9, 2048, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&new_session_id)
+        .bind(&record.project_id)
+        .bind(&title)
+        .bind(&system_prompt)
+        .bind(&record.language_mode)
+        .bind(&record.primary_language)
+        .bind(&record.secondary_language)
+        .bind(&lang_meta_str)
+        .bind(&committed_record_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        for (role, content, seq, trans, trans_status) in messages_to_insert {
+            let msg_id = Uuid::new_v4().to_string();
+            let token_count = (content.len() as i64 / 4).max(1);
+            let trans_str = serde_json::to_string(&trans).unwrap_or_else(|_| "{}".to_string());
+            let status_str = serde_json::to_string(&trans_status).unwrap_or_else(|_| "{}".to_string());
+
+            sqlx::query(
+                "INSERT INTO sft_messages (id, session_id, role, content, sequence_order, model, token_count, translations_json, translation_status_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)"
+            )
+            .bind(&msg_id)
+            .bind(&new_session_id)
+            .bind(&role)
+            .bind(&content)
+            .bind(seq)
+            .bind(token_count)
+            .bind(&trans_str)
+            .bind(&status_str)
+            .bind(&now)
+            .execute(pool)
+            .await?;
+        }
+
+        Self::get_session(pool, &new_session_id).await
+    }
+
+    /// Reorder conversation turns by supplying ordered list of message IDs
+    pub async fn reorder_messages(
+        pool: &SqlitePool,
+        session_id: &str,
+        message_ids: Vec<String>,
+    ) -> Result<Vec<SFTMessage>, AppError> {
+        let mut tx = pool.begin().await?;
+        for (idx, msg_id) in message_ids.iter().enumerate() {
+            sqlx::query("UPDATE sft_messages SET sequence_order = ? WHERE id = ? AND session_id = ?")
+                .bind(idx as i64)
+                .bind(msg_id)
+                .bind(session_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        let now = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE sft_sessions SET updated_at = ? WHERE id = ?")
+            .bind(&now)
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+
+        let session = Self::get_session(pool, session_id).await?;
+        Ok(session.messages)
+    }
+
+    /// Remove a specific language translation from a message
+    pub async fn remove_message_translation(
+        pool: &SqlitePool,
+        message_id: &str,
+        lang_code: &str,
+    ) -> Result<SFTMessage, AppError> {
+        let row = sqlx::query_as::<_, (String, String, String, String, i64, Option<String>, i64, String, String, String)>(
+            "SELECT id, session_id, role, content, sequence_order, model, token_count, translations_json, translation_status_json, created_at
+             FROM sft_messages WHERE id = ?"
+        )
+        .bind(message_id)
+        .fetch_one(pool)
+        .await?;
+
+        let mut trans: Value = serde_json::from_str(&row.7).unwrap_or(json!({}));
+        let mut status: Value = serde_json::from_str(&row.8).unwrap_or(json!({}));
+
+        if let Some(map) = trans.as_object_mut() {
+            map.remove(lang_code);
+        }
+        if let Some(map) = status.as_object_mut() {
+            map.remove(lang_code);
+        }
+
+        let trans_str = serde_json::to_string(&trans)?;
+        let status_str = serde_json::to_string(&status)?;
+
+        sqlx::query("UPDATE sft_messages SET translations_json = ?, translation_status_json = ? WHERE id = ?")
+            .bind(&trans_str)
+            .bind(&status_str)
+            .bind(message_id)
+            .execute(pool)
+            .await?;
+
+        Ok(SFTMessage {
+            id: row.0,
+            session_id: row.1,
+            role: row.2,
+            content: row.3,
+            sequence_order: row.4,
+            model: row.5,
+            token_count: row.6,
+            translations: trans,
+            translation_status: status,
+            created_at: row.9,
+        })
     }
 }

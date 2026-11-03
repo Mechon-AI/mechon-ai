@@ -24,7 +24,8 @@ import {
   Languages,
   CheckSquare,
   Square,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ErrorBoundary } from '../../components/common/ErrorBoundary'
@@ -578,7 +579,15 @@ export const DatasetExplorerView: React.FC = () => {
 
             {/* Actions for SFT */}
             {activeTab === 'sft' && selectedSFT && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => navigate(`/sft?recordId=${selectedSFT.id}`)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-xs font-semibold transition-colors cursor-pointer"
+                  title="Open and edit conversation in Universal Corpus Editor"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in Editor</span>
+                </button>
                 <button
                   onClick={() => openEditSFT(selectedSFT)}
                   className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"

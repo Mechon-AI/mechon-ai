@@ -82,6 +82,9 @@ pub fn run() {
             commands::sft::delete_sft_record,
             commands::sft::duplicate_sft_record,
             commands::sft::get_corpus_languages,
+            commands::sft::load_corpus_record_into_session,
+            commands::sft::reorder_sft_messages,
+            commands::sft::remove_sft_message_translation,
 
             // DPO Studio
             commands::dpo::get_dpo_tasks,
@@ -116,6 +119,7 @@ pub fn run() {
             commands::translation::translate_sft_message,
             commands::translation::update_sft_message_translation,
             commands::translation::batch_update_translation_status,
+            commands::translation::approve_all_translations,
             commands::translation::get_supported_languages,
             commands::translation::lookup_language_info,
 

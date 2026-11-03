@@ -475,6 +475,7 @@ async fn test_data_integrity_sft_commit_and_dpo_task_metadata() {
         primary_language: None,
         secondary_language: None,
         language_metadata: None,
+        ..Default::default()
     }).await.unwrap();
     assert_eq!(committed.turn_count, 2);
     assert_eq!(committed.messages.as_array().unwrap().len(), 3); // 1 system + 2 messages
@@ -802,6 +803,7 @@ async fn test_export_dataset_to_file_all_formats_and_integrity() {
         primary_language: None,
         secondary_language: None,
         language_metadata: None,
+        ..Default::default()
     }).await.unwrap();
 
     // 2. Create DPO task and annotate

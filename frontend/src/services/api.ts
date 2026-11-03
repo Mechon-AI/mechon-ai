@@ -149,10 +149,22 @@ export const deleteSFTMessage = (messageId: string): Promise<void> =>
 export const truncateSFTDownstream = (sessionId: string, fromSequence: number): Promise<void> =>
   invoke('truncate_sft_downstream', { sessionId, fromSequence })
 
+export const reorderSFTMessages = (sessionId: string, messageIds: string[]): Promise<SFTMessage[]> =>
+  invoke<SFTMessage[]>('reorder_sft_messages', { sessionId, messageIds })
+
+export const removeSFTMessageTranslation = (messageId: string, langCode: string): Promise<SFTMessage> =>
+  invoke<SFTMessage>('remove_sft_message_translation', { messageId, langCode })
+
+export const approveAllTranslations = (sessionId: string, targetLanguage: string): Promise<SFTSession> =>
+  invoke<SFTSession>('approve_all_translations', { sessionId, targetLanguage })
+
+export const loadCorpusRecordIntoSession = (recordId: string, asNewDraft = false): Promise<SFTSession> =>
+  invoke<SFTSession>('load_corpus_record_into_session', { recordId, asNewDraft })
+
 // SFT Commit: CRITICAL 1 conversation -> exactly 1 SFT Record
 export const commitSFTSession = (
   sessionId: string,
-  data: { title_override?: string; tags?: string[]; metadata?: any }
+  data: import('../types').SFTCommitInput
 ): Promise<SFTRecord> =>
   invoke<SFTRecord>('commit_sft_session', { sessionId, data })
 
