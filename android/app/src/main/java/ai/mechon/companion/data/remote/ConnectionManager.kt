@@ -109,8 +109,15 @@ class ConnectionManager(
         }
     }
 
+    private var lastReconnectTriggerTime = 0L
+
     fun triggerReconnect(immediate: Boolean = false) {
         if (!sessionManager.isPaired) return
+        val now = System.currentTimeMillis()
+        if (!immediate && now - lastReconnectTriggerTime < 2000L) {
+            return
+        }
+        lastReconnectTriggerTime = now
         if (reconnectJob?.isActive == true && !immediate) return
 
         reconnectJob?.cancel()

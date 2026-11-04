@@ -15,14 +15,20 @@ import java.util.concurrent.TimeUnit
 
 class DesktopApiClient(
     private val sessionManager: SessionManager,
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .retryOnConnectionFailure(true)
         .build(),
     private val gson: Gson = Gson()
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+    fun cancelAllRequests() {
+        client.dispatcher.cancelAll()
+    }
 
     suspend fun ping(targetUrl: String? = null): Boolean = withContext(Dispatchers.IO) {
         val base = (targetUrl ?: sessionManager.desktopUrl).trimEnd('/')
