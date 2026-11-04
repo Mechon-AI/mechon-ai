@@ -438,3 +438,127 @@ async fn test_gateway_tailscale_ip_detection() {
     assert_eq!(body_json["network"]["is_tailscale_active"], true);
     assert_eq!(body_json["network"]["tailscale_ip"], "100.127.109.78");
 }
+
+#[tokio::test]
+async fn test_unified_mobile_v1_api_and_inference() {
+    let pool = setup_test_db().await;
+    let vault: Arc<dyn CredentialStore> = Arc::new(InMemoryCredentialStore::new());
+
+    let code = "MCH-TEST-V128".to_string();
+    let internal = Arc::new(RwLock::new(GatewayInternalState {
+        pairing_code: Some(code.clone()),
+        pairing_expires_at: Some(chrono::Utc::now().timestamp() + 900),
+        ..Default::default()
+    }));
+
+    let state = GatewayAppState {
+        pool: pool.clone(),
+        vault: vault.clone(),
+        internal,
+    };
+    let app = create_gateway_router(state);
+
+    // 1. Pair
+    let pair_body = json!({
+        "pairing_code": code,
+        "device_name": "Test Mobile Client",
+        "device_platform": "android"
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/mobile/v1/pair")
+        .header("Content-Type", "application/json")
+        .body(Body::from(pair_body.to_string()))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64).await.unwrap();
+    let pair_json: Value = serde_json::from_slice(&bytes).unwrap();
+    let token = pair_json["token"].as_str().unwrap().to_string();
+
+    // 2. Health Check (/api/mobile/v1/health)
+    let health_req = Request::builder()
+        .method("GET")
+        .uri("/api/mobile/v1/health")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let health_resp = app.clone().oneshot(health_req).await.unwrap();
+    assert_eq!(health_resp.status(), StatusCode::OK);
+    let h_bytes = axum::body::to_bytes(health_resp.into_body(), 1024 * 64).await.unwrap();
+    let h_json: Value = serde_json::from_slice(&h_bytes).unwrap();
+    assert_eq!(h_json["status"], "ok");
+    assert_eq!(h_json["authenticated"], true);
+    assert_eq!(h_json["version"], "1.2.8");
+
+    // 3. Capabilities (/api/mobile/v1/capabilities)
+    let caps_req = Request::builder()
+        .method("GET")
+        .uri("/api/mobile/v1/capabilities")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let caps_resp = app.clone().oneshot(caps_req).await.unwrap();
+    assert_eq!(caps_resp.status(), StatusCode::OK);
+    let c_bytes = axum::body::to_bytes(caps_resp.into_body(), 1024 * 64).await.unwrap();
+    let c_json: Value = serde_json::from_slice(&c_bytes).unwrap();
+    assert_eq!(c_json["streaming"], true);
+    assert_eq!(c_json["tailscale_supported"], true);
+
+    // 4. Remote Models Registry (/api/mobile/v1/models)
+    let models_req = Request::builder()
+        .method("GET")
+        .uri("/api/mobile/v1/models")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let models_resp = app.clone().oneshot(models_req).await.unwrap();
+    assert_eq!(models_resp.status(), StatusCode::OK);
+
+    // 5. Remote Chat Inference - Non-Streaming
+    let chat_body = json!({
+        "provider_id": "mock",
+        "model": "mock-llama-3-8b",
+        "messages": [
+            { "role": "user", "content": "Hello from Mechon Mobile v1.2.8" }
+        ],
+        "stream": false
+    });
+    let chat_req = Request::builder()
+        .method("POST")
+        .uri("/api/mobile/v1/inference")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(chat_body.to_string()))
+        .unwrap();
+    let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
+    assert_eq!(chat_resp.status(), StatusCode::OK);
+    let ch_bytes = axum::body::to_bytes(chat_resp.into_body(), 1024 * 64).await.unwrap();
+    let ch_json: Value = serde_json::from_slice(&ch_bytes).unwrap();
+    assert_eq!(ch_json["role"], "assistant");
+    assert!(!ch_json["content"].as_str().unwrap().is_empty());
+
+    // 6. Remote Chat Inference - Streaming SSE
+    let stream_body = json!({
+        "provider_id": "mock",
+        "model": "mock-llama-3-8b",
+        "messages": [
+            { "role": "user", "content": "Stream tokens to Mechon Mobile" }
+        ],
+        "stream": true
+    });
+    let stream_req = Request::builder()
+        .method("POST")
+        .uri("/api/mobile/v1/inference")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(stream_body.to_string()))
+        .unwrap();
+    let stream_resp = app.clone().oneshot(stream_req).await.unwrap();
+    assert_eq!(stream_resp.status(), StatusCode::OK);
+    assert_eq!(stream_resp.headers().get("Content-Type").unwrap(), "text/event-stream");
+    let stream_bytes = axum::body::to_bytes(stream_resp.into_body(), 1024 * 64).await.unwrap();
+    let stream_text = String::from_utf8_lossy(&stream_bytes);
+    assert!(stream_text.contains("data: "));
+    assert!(stream_text.contains("[DONE]"));
+}
