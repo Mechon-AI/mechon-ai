@@ -81,15 +81,31 @@ jobs:
           cp mechon-ai-${TAG_NAME}-linux-x86_64/mechon-ai mechon-ai-linux-x86_64
           
           # 3. Android Companion APKs
-          cp ../android/app/build/outputs/apk/release/app-release.apk mechon-mobile-${TAG_NAME}.apk
-          cp ../android/app/build/outputs/apk/debug/app-debug.apk mechon-mobile-${TAG_NAME}-debug.apk
+          if [ -f ../android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp ../android/app/build/outputs/apk/release/app-release.apk mechon-mobile-${TAG_NAME}.apk
+          elif [ -f ../android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp ../android/app/build/outputs/apk/release/app-release-unsigned.apk mechon-mobile-${TAG_NAME}.apk
+          elif [ -f ../android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp ../android/app/build/outputs/apk/debug/app-debug.apk mechon-mobile-${TAG_NAME}.apk
+          fi
+
+          if [ -f ../android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp ../android/app/build/outputs/apk/debug/app-debug.apk mechon-mobile-${TAG_NAME}-debug.apk
+          fi
 
           # 4. Packaging manifests
           cp ../packaging/arch/PKGBUILD .
           cp ../packaging/arch/mechon-ai.desktop .
           
           # 5. Generate SHA-256 Checksums
-          sha256sum mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-linux-x86_64 mechon-mobile-${TAG_NAME}.apk mechon-mobile-${TAG_NAME}-debug.apk PKGBUILD mechon-ai.desktop > SHA256SUMS.txt
+          FILES_TO_HASH="mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-linux-x86_64 PKGBUILD mechon-ai.desktop"
+          if [ -f "mechon-mobile-${TAG_NAME}.apk" ]; then
+            FILES_TO_HASH="$FILES_TO_HASH mechon-mobile-${TAG_NAME}.apk"
+          fi
+          if [ -f "mechon-mobile-${TAG_NAME}-debug.apk" ]; then
+            FILES_TO_HASH="$FILES_TO_HASH mechon-mobile-${TAG_NAME}-debug.apk"
+          fi
+          sha256sum $FILES_TO_HASH > SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
