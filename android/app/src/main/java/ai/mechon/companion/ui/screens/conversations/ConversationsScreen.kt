@@ -1,362 +1,455 @@
 package ai.mechon.companion.ui.screens.conversations
 
+import android.text.format.DateUtils
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.mechon.companion.data.local.ConversationEntity
+import ai.mechon.companion.ui.components.*
 import ai.mechon.companion.ui.theme.*
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
     viewModel: ConversationsViewModel,
     onConversationSelected: (String) -> Unit,
+    onNavigateToChat: () -> Unit,
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToChat: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    var isSearchVisible by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var renameText by remember { mutableStateOf("") }
+
+    // Date Grouping logic: Today, Yesterday, Previous 7 Days, Older
+    val groupedConversations = remember(uiState.filteredConversations) {
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance()
+
+        calendar.timeInMillis = now
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val todayStart = calendar.timeInMillis
+
+        calendar.add(Calendar.DAY_OF_YEAR, -1)
+        val yesterdayStart = calendar.timeInMillis
+
+        calendar.add(Calendar.DAY_OF_YEAR, -6)
+        val weekStart = calendar.timeInMillis
+
+        val groups = linkedMapOf<String, MutableList<ConversationEntity>>()
+
+        uiState.filteredConversations.sortedByDescending { it.updatedAt }.forEach { conv ->
+            val groupKey = when {
+                conv.updatedAt >= todayStart -> "Today"
+                conv.updatedAt >= yesterdayStart -> "Yesterday"
+                conv.updatedAt >= weekStart -> "Previous 7 Days"
+                else -> "Older"
+            }
+            groups.getOrPut(groupKey) { mutableListOf() }.add(conv)
+        }
+        groups
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState.isSelectionMode) {
+            if (uiState.isSelectionMode) {
+                TopAppBar(
+                    title = {
                         Text(
                             text = "${uiState.selectedIds.size} Selected",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MechonBlueLight
+                            color = SoftLavender,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
-                        Text(
-                            text = "Conversations",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                },
-                actions = {
-                    if (uiState.isSelectionMode) {
-                        IconButton(onClick = { viewModel.selectAll() }) {
-                            Icon(
-                                imageVector = Icons.Default.SelectAll,
-                                contentDescription = "Select All",
-                                tint = TextPrimary
-                            )
-                        }
-                        IconButton(onClick = { viewModel.deleteSelected() }) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Selected",
-                                tint = MechonRed
-                            )
-                        }
+                    },
+                    navigationIcon = {
                         IconButton(onClick = { viewModel.clearSelection() }) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Cancel Selection",
-                                tint = TextMuted
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = onNavigateToPairing) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = "Pairing",
-                                tint = MechonBlueLight
-                            )
-                        }
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = TextMuted
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MechonDarkBg
-                )
-            )
-        },
-        floatingActionButton = {
-            if (!uiState.isSelectionMode) {
-                FloatingActionButton(
-                    onClick = {
-                        viewModel.createNewConversation { id ->
-                            onConversationSelected(id)
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
                         }
                     },
-                    containerColor = MechonBlue,
-                    contentColor = TextPrimary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "New Conversation"
-                    )
-                }
+                    actions = {
+                        IconButton(onClick = { viewModel.selectAll() }) {
+                            Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = SoftLavender)
+                        }
+                        IconButton(onClick = { viewModel.sendSelectedToDesktop() }) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = "Send to Desktop", tint = ElectricViolet)
+                        }
+                        IconButton(onClick = { viewModel.deleteSelected() }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = StatusError)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = ObsidianBlack)
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            MechonLogoMark(size = 24.dp)
+                            Text(
+                                text = "Conversation History",
+                                color = TextPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isSearchVisible = !isSearchVisible }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = SoftLavender)
+                        }
+                        IconButton(onClick = {
+                            viewModel.createNewConversation { newId ->
+                                onConversationSelected(newId)
+                            }
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "New Chat", tint = TextPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = ObsidianBlack)
+                )
             }
         },
         bottomBar = {
-            if (uiState.isSelectionMode) {
-                Surface(
-                    color = MechonSurface,
-                    modifier = Modifier.fillMaxWidth()
+            if (!uiState.isSelectionMode) {
+                MechonFloatingBottomNav(
+                    currentTab = NavTab.HISTORY,
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            NavTab.CHAT -> onNavigateToChat()
+                            NavTab.HISTORY -> {} // Already on History
+                            NavTab.SETTINGS -> onNavigateToSettings()
+                        }
+                    }
+                )
+            }
+        },
+        containerColor = ObsidianBlack
+    ) { paddingValues ->
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(ObsidianBlack)
+                .padding(paddingValues)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Search Field (Animated Visibility)
+                AnimatedVisibility(
+                    visible = isSearchVisible && !uiState.isSelectionMode,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
                 ) {
-                    Row(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.Center
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Button(
-                            onClick = { viewModel.sendSelectedToDesktop() },
-                            enabled = !uiState.isSyncing && uiState.selectedIds.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MechonGreen),
-                            shape = RoundedCornerShape(12.dp),
+                        TextField(
+                            value = uiState.searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            placeholder = { Text("Search conversations...", color = TextMuted, fontSize = 13.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = {
+                                if (uiState.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }, modifier = Modifier.size(20.dp)) {
+                                        Icon(Icons.Default.Clear, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = ElevatedSurface,
+                                unfocusedContainerColor = ElevatedSurface,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = ElectricViolet,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(46.dp)
+                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                        )
+                    }
+                }
+
+                // Feedback Banners (Sync / Error)
+                AnimatedVisibility(
+                    visible = uiState.syncSuccessMessage != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Surface(
+                        color = StatusConnected.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, StatusConnected.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (uiState.isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Transmitting to Desktop...", fontWeight = FontWeight.Bold)
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = null,
-                                    tint = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Send to Mechon Desktop (${uiState.selectedIds.size})",
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
+                            Text(
+                                text = uiState.syncSuccessMessage ?: "",
+                                color = StatusConnected,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            IconButton(onClick = { viewModel.clearFeedback() }, modifier = Modifier.size(18.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = StatusConnected, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
                 }
-            }
-        },
-        containerColor = MechonDarkBg
-    ) { paddingValues ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Feedback Banners
-            if (uiState.syncSuccessMessage != null) {
-                Surface(
-                    color = MechonGreen.copy(alpha = 0.2f),
-                    modifier = Modifier.fillMaxWidth()
+
+                AnimatedVisibility(
+                    visible = uiState.errorMessage != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        color = StatusError.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, StatusError.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                     ) {
-                        Text(
-                            text = uiState.syncSuccessMessage ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MechonGreen,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        IconButton(
-                            onClick = { viewModel.clearFeedback() },
-                            modifier = Modifier.size(20.dp)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = null,
-                                tint = MechonGreen,
-                                modifier = Modifier.size(14.dp)
+                            Text(
+                                text = uiState.errorMessage ?: "",
+                                color = StatusError,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
                             )
+                            IconButton(onClick = { viewModel.clearFeedback() }, modifier = Modifier.size(18.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = StatusError, modifier = Modifier.size(14.dp))
+                            }
                         }
                     }
                 }
-            }
 
-            if (uiState.errorMessage != null) {
-                Surface(
-                    color = MechonRed.copy(alpha = 0.2f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                // History List
+                if (groupedConversations.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = uiState.errorMessage ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MechonRed,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        IconButton(
-                            onClick = { viewModel.clearFeedback() },
-                            modifier = Modifier.size(20.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
+                                imageVector = Icons.Default.ChatBubbleOutline,
                                 contentDescription = null,
-                                tint = MechonRed,
-                                modifier = Modifier.size(14.dp)
+                                tint = TextMuted,
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Text(
+                                text = "No conversation history",
+                                color = TextSecondary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Start a chat or roleplay session to begin.",
+                                color = TextMuted,
+                                fontSize = 12.sp
                             )
                         }
                     }
-                }
-            }
-
-            if (uiState.conversations.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Forum,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No Conversations Yet",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Tap the + button below to start your first chat session.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ) {
-                    items(uiState.conversations, key = { it.id }) { conv ->
-                        val isSelected = uiState.selectedIds.contains(conv.id)
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) MechonSurfaceVariant else MechonSurface,
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(
-                                    if (isSelected) MechonBlue else MechonBorder
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        groupedConversations.forEach { (dateHeader, convs) ->
+                            item(key = "header_$dateHeader") {
+                                Text(
+                                    text = dateHeader.uppercase(),
+                                    color = SoftLavender,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.2.sp,
+                                    modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 4.dp)
                                 )
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    if (uiState.isSelectionMode) {
-                                        viewModel.toggleSelection(conv.id)
-                                    } else {
-                                        onConversationSelected(conv.id)
-                                    }
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (uiState.isSelectionMode) {
-                                    Checkbox(
-                                        checked = isSelected,
-                                        onCheckedChange = { viewModel.toggleSelection(conv.id) },
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = MechonBlue,
-                                            checkmarkColor = TextPrimary
-                                        )
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
+                            }
 
-                                Column(modifier = Modifier.weight(1f)) {
+                            items(convs, key = { it.id }) { conv ->
+                                val isSelected = uiState.selectedIds.contains(conv.id)
+                                val timeFormatted = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(conv.updatedAt))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(if (isSelected) ElectricViolet.copy(alpha = 0.2f) else ElevatedSurface)
+                                        .border(1.dp, if (isSelected) ElectricViolet else GlassBorder, RoundedCornerShape(16.dp))
+                                        .clickable {
+                                            if (uiState.isSelectionMode) {
+                                                viewModel.toggleSelection(conv.id)
+                                            } else {
+                                                onConversationSelected(conv.id)
+                                            }
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.weight(1f)
                                     ) {
-                                        Text(
-                                            text = conv.title,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        // Sync Status Badge
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = if (conv.isSynced) MechonGreen.copy(alpha = 0.2f) else MechonSurfaceVariant
-                                        ) {
-                                            Text(
-                                                text = if (conv.isSynced) "Synced" else "Local Only",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (conv.isSynced) MechonGreen else TextMuted,
-                                                fontSize = 10.sp,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        if (uiState.isSelectionMode) {
+                                            Checkbox(
+                                                checked = isSelected,
+                                                onCheckedChange = { viewModel.toggleSelection(conv.id) },
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = ElectricViolet,
+                                                    uncheckedColor = TextMuted
+                                                ),
+                                                modifier = Modifier.size(20.dp)
                                             )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(CircleShape)
+                                                    .background(ElevatedSurfaceHighlight),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ChatBubble,
+                                                    contentDescription = null,
+                                                    tint = SoftLavender,
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Column {
+                                            Text(
+                                                text = conv.title.ifBlank { "New Conversation" },
+                                                color = TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+
+                                            Spacer(modifier = Modifier.height(2.dp))
+
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = conv.modelId,
+                                                    color = SoftLavender,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1
+                                                )
+                                                Text(text = "•", color = TextMuted, fontSize = 10.sp)
+                                                Text(
+                                                    text = timeFormatted,
+                                                    color = TextMuted,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    // Context Actions Menu
+                                    if (!uiState.isSelectionMode) {
+                                        var menuOpen by remember { mutableStateOf(false) }
 
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "${conv.modelId} • ${conv.providerId}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextMuted
-                                        )
-                                        Text(
-                                            text = dateFormat.format(Date(conv.updatedAt)),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextMuted,
-                                            fontSize = 11.sp
-                                        )
+                                        Box {
+                                            IconButton(
+                                                onClick = { menuOpen = true },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = TextMuted, modifier = Modifier.size(16.dp))
+                                            }
+
+                                            DropdownMenu(
+                                                expanded = menuOpen,
+                                                onDismissRequest = { menuOpen = false },
+                                                modifier = Modifier
+                                                    .background(ElevatedSurface)
+                                                    .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Rename", color = TextPrimary, fontSize = 13.sp) },
+                                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(16.dp)) },
+                                                    onClick = {
+                                                        menuOpen = false
+                                                        renameTarget = conv
+                                                        renameText = conv.title
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Select for Export", color = TextPrimary, fontSize = 13.sp) },
+                                                    leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(16.dp)) },
+                                                    onClick = {
+                                                        menuOpen = false
+                                                        viewModel.toggleSelection(conv.id)
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Delete", color = StatusError, fontSize = 13.sp) },
+                                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = StatusError, modifier = Modifier.size(16.dp)) },
+                                                    onClick = {
+                                                        menuOpen = false
+                                                        viewModel.deleteConversation(conv.id)
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -365,5 +458,44 @@ fun ConversationsScreen(
                 }
             }
         }
+    }
+
+    // Rename Dialog
+    if (renameTarget != null) {
+        val target = renameTarget!!
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            containerColor = ElevatedSurface,
+            title = { Text("Rename Conversation", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricViolet,
+                        unfocusedBorderColor = GlassBorder
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.renameConversation(target.id, renameText)
+                        renameTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                ) {
+                    Text("Save", color = TextPrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) {
+                    Text("Cancel", color = TextMuted)
+                }
+            }
+        )
     }
 }

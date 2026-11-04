@@ -11,12 +11,24 @@ import kotlinx.coroutines.launch
 
 data class ConversationsUiState(
     val conversations: List<ConversationEntity> = emptyList(),
+    val searchQuery: String = "",
     val selectedIds: Set<String> = emptySet(),
     val isSelectionMode: Boolean = false,
     val isSyncing: Boolean = false,
     val syncSuccessMessage: String? = null,
     val errorMessage: String? = null
-)
+) {
+    val filteredConversations: List<ConversationEntity>
+        get() {
+            if (searchQuery.isBlank()) return conversations
+            val query = searchQuery.trim().lowercase()
+            return conversations.filter {
+                it.title.lowercase().contains(query) ||
+                it.modelId.lowercase().contains(query) ||
+                it.providerId.lowercase().contains(query)
+            }
+        }
+}
 
 class ConversationsViewModel(
     private val chatRepository: ChatRepository,
@@ -121,6 +133,29 @@ class ConversationsViewModel(
                     }
                 }
             )
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    fun renameConversation(id: String, newTitle: String) {
+        if (newTitle.isBlank()) return
+        viewModelScope.launch {
+            chatRepository.renameConversation(id, newTitle.trim())
+        }
+    }
+
+    fun deleteConversation(id: String) {
+        viewModelScope.launch {
+            chatRepository.deleteConversation(id)
+        }
+    }
+
+    fun archiveConversation(id: String) {
+        viewModelScope.launch {
+            chatRepository.deleteConversation(id)
         }
     }
 
