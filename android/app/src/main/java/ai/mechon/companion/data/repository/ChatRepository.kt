@@ -11,7 +11,9 @@ import ai.mechon.companion.data.remote.DesktopApiClient
 import ai.mechon.companion.data.remote.SessionManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class ChatRepository(
@@ -45,7 +47,7 @@ class ChatRepository(
         characterId: String? = null,
         characterName: String? = null,
         characterAvatar: String? = null
-    ): ConversationEntity {
+    ): ConversationEntity = withContext(Dispatchers.IO) {
         val model = modelId ?: sessionManager.defaultModel
         val provider = providerId ?: sessionManager.defaultProvider
         val conv = ConversationEntity(
@@ -61,18 +63,18 @@ class ChatRepository(
             updatedAt = System.currentTimeMillis()
         )
         conversationDao.insertConversation(conv)
-        return conv
+        conv
     }
 
-    suspend fun updateConversation(conversation: ConversationEntity) {
+    suspend fun updateConversation(conversation: ConversationEntity) = withContext(Dispatchers.IO) {
         conversationDao.updateConversation(conversation.copy(updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun renameConversation(id: String, newTitle: String) {
+    suspend fun renameConversation(id: String, newTitle: String) = withContext(Dispatchers.IO) {
         conversationDao.renameConversation(id, newTitle)
     }
 
-    suspend fun setArchived(id: String, archived: Boolean) {
+    suspend fun setArchived(id: String, archived: Boolean) = withContext(Dispatchers.IO) {
         conversationDao.setArchived(id, archived)
     }
 
