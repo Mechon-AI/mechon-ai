@@ -91,6 +91,12 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
     - Native support for multi-turn preference schemas: `prompt: [...]`, `chosen: [...]`, and `rejected: [...]`.
     - Direct export to JSON and JSONL formats for seamless consumption by `trl.DPOTrainer`.
 
+- **Corpus Single Export & Selection-Based Export Pipeline (v1.2.3)**:
+  - **Individual Record Export in Mechon Corpus**: Direct single-record export actions in SFT Record and DPO Pair Inspectors and per-card quick export actions, preserving canonical v2.0 schemas with post-write verification.
+  - **Authoritative Selection-Based Export**: Seamless synchronization between Mechon Corpus selection state and Import & Export Center with active tab state preservation and automatic scope activation.
+  - **Conversational DPO Selective Export**: Hugging Face TRL multi-turn conversational preference export with selective record filtering (`chosen` / `rejected` message arrays).
+  - **Format Integrity Across Pipelines**: Zero-leakage selective export across JSON, JSONL, and CSV with validation and empty selection error prevention.
+
 - **Subsystem Model Synchronization & Multilingual Translation Pipeline (v1.2.2)**:
   - **Independent Subsystem Model Architecture**: Clear separation of model configurations across Main Inference Engine, Planning Agent, Translation Engine, and Evaluation Agent, with dedicated subsystem model routing and zero cross-leakage.
   - **Multilingual Translation Pipeline**: Selective and full-conversation translation engine with status tracking (`pending`, `completed`, `edited`, `approved`, `failed`), dynamic language pair support, context preservation, and retry mechanisms.

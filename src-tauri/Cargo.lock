@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "mechon-ai"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "async-trait",
  "chrono",
