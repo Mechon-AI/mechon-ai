@@ -99,9 +99,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     
     if (existingIndex !== -1) {
       const existingTab = tabs[existingIndex]
-      if (forceActive) {
-        set({ activeTabId: existingTab.id })
+      const updatedTabs = [...tabs]
+      if (params) {
+        updatedTabs[existingIndex] = { ...existingTab, params: { ...existingTab.params, ...params } }
       }
+      set({
+        tabs: updatedTabs,
+        activeTabId: forceActive ? existingTab.id : get().activeTabId
+      })
       persistState(get())
       return existingTab.id
     }

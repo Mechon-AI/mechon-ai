@@ -690,12 +690,14 @@ export const listReadinessReports = async (projectId: string): Promise<TrainingR
 export const exportConversationalDPO = (
   projectId: string,
   formatType = 'jsonl',
-  onlyCompleted = true
+  onlyCompleted = true,
+  recordIds?: string[]
 ): Promise<string> =>
   invoke<string>('export_conversational_dpo', {
     projectId,
     formatType,
-    onlyCompleted
+    onlyCompleted,
+    recordIds
   })
 
 // -------------------------------------------------------------

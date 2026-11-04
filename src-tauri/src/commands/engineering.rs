@@ -161,12 +161,14 @@ pub async fn export_conversational_dpo(
     project_id: String,
     format_type: Option<String>,
     only_completed: Option<bool>,
+    record_ids: Option<Vec<String>>,
 ) -> Result<String, AppError> {
     EngineeringService::export_conversational_dpo(
         &pool,
         &project_id,
         &format_type.unwrap_or_else(|| "jsonl".to_string()),
         only_completed.unwrap_or(true),
+        record_ids,
     )
     .await
 }

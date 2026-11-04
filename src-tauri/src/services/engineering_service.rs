@@ -450,23 +450,48 @@ impl EngineeringService {
         project_id: &str,
         format_type: &str,
         only_completed: bool,
+        record_ids: Option<Vec<String>>,
     ) -> Result<String, AppError> {
-        let sql = if only_completed {
-            "SELECT id, system_prompt, prompt, response_a, response_b, preference, rationale, metadata_json
-             FROM dpo_tasks
-             WHERE project_id = ? AND preference IS NOT NULL AND preference IN ('a', 'b')
-             ORDER BY created_at ASC"
+        let rows: Vec<(String, Option<String>, String, String, String, Option<String>, Option<String>, String)> = if let Some(ref ids) = record_ids {
+            if ids.is_empty() {
+                return Err(AppError::Validation("No examples selected. Select records from Mechon Corpus first.".to_string()));
+            }
+            let tasks = crate::services::dpo_service::DPOService::get_tasks_by_ids(pool, project_id, ids).await?;
+            let mut list = Vec::new();
+            for t in tasks {
+                if only_completed && t.status != "completed" && t.preference.is_none() {
+                    continue;
+                }
+                list.push((
+                    t.id,
+                    t.system_prompt,
+                    t.prompt,
+                    t.response_a,
+                    t.response_b,
+                    t.preference,
+                    t.rationale,
+                    serde_json::to_string(&t.metadata).unwrap_or_else(|_| "{}".to_string()),
+                ));
+            }
+            list
         } else {
-            "SELECT id, system_prompt, prompt, response_a, response_b, preference, rationale, metadata_json
-             FROM dpo_tasks
-             WHERE project_id = ?
-             ORDER BY created_at ASC"
-        };
+            let sql = if only_completed {
+                "SELECT id, system_prompt, prompt, response_a, response_b, preference, rationale, metadata_json
+                 FROM dpo_tasks
+                 WHERE project_id = ? AND preference IS NOT NULL AND preference IN ('a', 'b')
+                 ORDER BY created_at ASC"
+            } else {
+                "SELECT id, system_prompt, prompt, response_a, response_b, preference, rationale, metadata_json
+                 FROM dpo_tasks
+                 WHERE project_id = ?
+                 ORDER BY created_at ASC"
+            };
 
-        let rows: Vec<(String, Option<String>, String, String, String, Option<String>, Option<String>, String)> = sqlx::query_as(sql)
-            .bind(project_id)
-            .fetch_all(pool)
-            .await?;
+            sqlx::query_as(sql)
+                .bind(project_id)
+                .fetch_all(pool)
+                .await?
+        };
 
         let mut formatted = Vec::new();
         for (id, sys, prompt, resp_a, resp_b, pref, rat, meta_json) in rows {

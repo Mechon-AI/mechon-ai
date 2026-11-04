@@ -39,8 +39,10 @@ import {
   getDPOTasks,
   deleteDPOTask,
   duplicateDPOTask,
-  updateDPOTask
+  updateDPOTask,
+  exportDatasetToFile
 } from '../../services/api'
+import { formatErrorMessage } from '../../utils/errors'
 import type { SFTRecord, DPOTask } from '../../types'
 import { LanguageFilter, LanguageIdentityBadge } from '../../components/language'
 import { lookupLanguage, isRTL } from '../../types/languages'
@@ -200,6 +202,49 @@ export const DatasetExplorerView: React.FC = () => {
       loadData()
     } catch (err: any) {
       showFeedback('error', `Duplicate failed: ${err.message}`)
+    }
+  }
+
+  const [isExportingRecord, setIsExportingRecord] = useState(false)
+
+  const handleExportSingleRecord = async (recordId: string, pipeline: 'sft' | 'dpo') => {
+    let pId = activeProjectId
+    if (!pId) {
+      pId = await ensureActiveProject()
+    }
+    if (!pId) {
+      showFeedback('error', 'No active project selected.')
+      return
+    }
+
+    setIsExportingRecord(true)
+    try {
+      const res = await exportDatasetToFile({
+        project_id: pId,
+        pipeline,
+        format_type: 'jsonl',
+        include_metadata: true,
+        only_completed: true,
+        record_ids: [recordId],
+        bilingual_mode: 'canonical_aligned'
+      })
+
+      if (res.cancelled) {
+        return
+      }
+
+      if (res.success && res.file_path) {
+        showFeedback(
+          'success',
+          `Successfully exported record #${recordId.slice(0, 6)} to ${res.file_path} (${res.file_size_bytes} bytes). Integrity verified.`
+        )
+      } else if (res.error) {
+        showFeedback('error', `Export failed: ${res.error}`)
+      }
+    } catch (err: any) {
+      showFeedback('error', formatErrorMessage(err, 'Failed to export record'))
+    } finally {
+      setIsExportingRecord(false)
     }
   }
 
@@ -372,7 +417,15 @@ export const DatasetExplorerView: React.FC = () => {
                 Clear
               </button>
               <button
-                onClick={() => navigate(`/export?pipeline=${activeTab}&source=selected`)}
+                onClick={() => {
+                  useEditorStore.getState().openTab({
+                    type: 'export',
+                    title: 'Export Center',
+                    params: { pipeline: activeTab, source: 'selected' },
+                    forceActive: true
+                  })
+                  navigate(`/export?pipeline=${activeTab}&source=selected`)
+                }}
                 className="px-2 py-1 rounded bg-primary text-primary-foreground font-semibold text-[10px] flex items-center gap-1 shadow-sm hover:opacity-90 cursor-pointer"
               >
                 <Download className="h-3 w-3" />
@@ -454,20 +507,31 @@ export const DatasetExplorerView: React.FC = () => {
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
                           <span>{r.turn_count || safeMessages.length} turns</span>
                           <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    useEditorStore.getState().openTab({
-                      type: 'dpo',
-                      title: `DPO #${selectedDPO.id.slice(0, 6)}`,
-                      params: { taskId: selectedDPO.id }
-                    })
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-xs font-semibold transition-colors cursor-pointer mr-1"
-                  title="Open and edit pair in DPO Studio"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Open in Studio</span>
-                </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                useEditorStore.getState().openTab({
+                                  type: 'sft',
+                                  title: `SFT #${r.id.slice(0, 6)}`,
+                                  params: { recordId: r.id }
+                                })
+                              }}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-[10px] font-semibold transition-colors cursor-pointer mr-0.5"
+                              title="Open and edit conversation in SFT Studio"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              <span>Open in Studio</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleExportSingleRecord(r.id, 'sft')
+                              }}
+                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                              title="Export this record to file"
+                            >
+                              <Download className="h-3 w-3" />
+                            </button>
                             {isBilingual && (
                               <LanguageIdentityBadge
                                 primaryLanguage={r.primary_language}
@@ -560,6 +624,37 @@ export const DatasetExplorerView: React.FC = () => {
                         <p className="text-[11px] text-muted-foreground line-clamp-2">
                           {t.response_a || 'Awaiting response generation'}
                         </p>
+
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-1">
+                          <span className="truncate max-w-[80px]">{t.status}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                useEditorStore.getState().openTab({
+                                  type: 'dpo',
+                                  title: `DPO #${t.id.slice(0, 6)}`,
+                                  params: { taskId: t.id }
+                                })
+                              }}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 text-[10px] font-semibold transition-colors cursor-pointer mr-0.5"
+                              title="Open and edit pair in DPO Studio"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              <span>Open in Studio</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleExportSingleRecord(t.id, 'dpo')
+                              }}
+                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                              title="Export this task to file"
+                            >
+                              <Download className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -646,6 +741,15 @@ export const DatasetExplorerView: React.FC = () => {
                   <span>Open in Editor</span>
                 </button>
                 <button
+                  onClick={() => handleExportSingleRecord(selectedSFT.id, 'sft')}
+                  disabled={isExportingRecord}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  title="Export this individual record to file"
+                >
+                  <Download className={`h-3.5 w-3.5 text-primary ${isExportingRecord ? 'animate-spin' : ''}`} />
+                  <span>Export</span>
+                </button>
+                <button
                   onClick={() => openEditSFT(selectedSFT)}
                   className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                   title="Edit Record Metadata"
@@ -692,6 +796,15 @@ export const DatasetExplorerView: React.FC = () => {
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   <span>Open in Studio</span>
+                </button>
+                <button
+                  onClick={() => handleExportSingleRecord(selectedDPO.id, 'dpo')}
+                  disabled={isExportingRecord}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold transition-colors cursor-pointer mr-1 disabled:opacity-50"
+                  title="Export this individual task to file"
+                >
+                  <Download className={`h-3.5 w-3.5 text-primary ${isExportingRecord ? 'animate-spin' : ''}`} />
+                  <span>Export</span>
                 </button>
                 <button
                   onClick={() => openEditDPO(selectedDPO)}

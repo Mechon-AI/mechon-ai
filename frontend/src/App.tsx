@@ -46,9 +46,17 @@ const RouteSync: React.FC = () => {
     }
 
     if (routeMap[path]) {
-      openTab(routeMap[path])
+      const searchParams = new URLSearchParams(location.search)
+      const params: Record<string, string> = {}
+      searchParams.forEach((v, k) => {
+        params[k] = v
+      })
+      openTab({
+        ...routeMap[path],
+        params: Object.keys(params).length > 0 ? params : undefined
+      })
     }
-  }, [location.pathname])
+  }, [location.pathname, location.search])
 
   return <EditorShell />
 }

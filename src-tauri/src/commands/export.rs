@@ -52,13 +52,20 @@ pub async fn import_dataset_file(
 
 #[derive(serde::Deserialize)]
 pub struct ExportToFileInput {
+    #[serde(alias = "projectId")]
     pub project_id: String,
     pub pipeline: String, // "sft" | "dpo"
+    #[serde(alias = "formatType")]
     pub format_type: String, // "jsonl" | "json" | "csv" | "txt"
+    #[serde(alias = "includeMetadata")]
     pub include_metadata: Option<bool>,
+    #[serde(alias = "onlyCompleted")]
     pub only_completed: Option<bool>,
+    #[serde(alias = "destinationPath")]
     pub destination_path: Option<String>,
+    #[serde(alias = "recordIds")]
     pub record_ids: Option<Vec<String>>,
+    #[serde(alias = "bilingualMode")]
     pub bilingual_mode: Option<String>,
 }
 
@@ -113,7 +120,7 @@ pub async fn export_dataset_to_file(
             &fmt,
             params.include_metadata.unwrap_or(true),
             params.only_completed.unwrap_or(true),
-            params.record_ids,
+            params.record_ids.clone(),
         ).await?;
         (text, count)
     } else {
@@ -130,7 +137,7 @@ pub async fn export_dataset_to_file(
             &params.project_id,
             &fmt,
             params.include_metadata.unwrap_or(true),
-            params.record_ids,
+            params.record_ids.clone(),
             params.bilingual_mode.as_deref(),
         ).await?;
         (text, count)
@@ -142,7 +149,17 @@ pub async fn export_dataset_to_file(
         let safe_name: String = project.name.chars()
             .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
             .collect();
-        let default_file_name = format!("{}_{}_export.{}", safe_name, pipeline_lower, ext);
+        let default_file_name = if let Some(ref ids) = params.record_ids {
+            if ids.len() == 1 {
+                let rec_id = &ids[0];
+                let short_id = if rec_id.len() > 8 { &rec_id[..8] } else { rec_id };
+                format!("{}_{}_{}_export.{}", safe_name, pipeline_lower, short_id, ext)
+            } else {
+                format!("{}_{}_selected_{}_export.{}", safe_name, pipeline_lower, ids.len(), ext)
+            }
+        } else {
+            format!("{}_{}_export.{}", safe_name, pipeline_lower, ext)
+        };
 
         let dialog = rfd::AsyncFileDialog::new()
             .set_title(format!("Export {} Dataset ({})", pipeline_lower.to_uppercase(), fmt.to_uppercase()))

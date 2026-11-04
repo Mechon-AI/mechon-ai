@@ -54,7 +54,7 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = React.memo(
       case 'versions':
         return <VersionHistoryView />
       case 'export':
-        return <ExportCenterView />
+        return <ExportCenterView tab={tab} />
       case 'providers':
         return <ProviderManagerView />
       case 'settings':

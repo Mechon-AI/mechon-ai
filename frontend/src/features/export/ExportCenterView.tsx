@@ -29,14 +29,18 @@ import {
 import type { SplitSummary } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
 
-export const ExportCenterView: React.FC = () => {
+interface ExportCenterViewProps {
+  tab?: { params?: Record<string, any> }
+}
+
+export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ tab }) => {
   const [searchParams] = useSearchParams()
   const { activeProjectId, getActiveProject, ensureActiveProject } = useProjectStore()
   const { selectedSftIds, selectedDpoIds } = useSelectionStore()
   const activeProject = getActiveProject()
 
-  const initialPipeline = searchParams.get('pipeline') === 'dpo' ? 'dpo' : 'sft'
-  const initialSource = searchParams.get('source') === 'selected' ? 'selected' : 'entire'
+  const initialPipeline = (searchParams.get('pipeline') || (tab?.params?.pipeline as string | undefined)) === 'dpo' ? 'dpo' : 'sft'
+  const initialSource = (searchParams.get('source') || (tab?.params?.source as string | undefined)) === 'selected' ? 'selected' : 'entire'
 
   const [pipeline, setPipeline] = useState<'sft' | 'dpo'>(initialPipeline)
   const [exportSource, setExportSource] = useState<'entire' | 'selected'>(initialSource)
@@ -62,6 +66,17 @@ export const ExportCenterView: React.FC = () => {
     setNotification({ type, message })
     setTimeout(() => setNotification(null), 4000)
   }
+
+  useEffect(() => {
+    const rawPipeline = searchParams.get('pipeline') || (tab?.params?.pipeline as string | undefined)
+    if (rawPipeline === 'sft' || rawPipeline === 'dpo') {
+      setPipeline(rawPipeline)
+    }
+    const rawSource = searchParams.get('source') || (tab?.params?.source as string | undefined)
+    if (rawSource === 'selected' || rawSource === 'entire') {
+      setExportSource(rawSource)
+    }
+  }, [searchParams, tab?.params])
 
   useEffect(() => {
     initView()
@@ -104,7 +119,7 @@ export const ExportCenterView: React.FC = () => {
       if (pipeline === 'sft') {
         text = await exportSFTDataset(targetProject, format, includeMetadata, targetIds, bilingualMode)
       } else if (dpoFormat === 'conversational') {
-        text = await exportConversationalDPO(targetProject, format, true)
+        text = await exportConversationalDPO(targetProject, format, true, targetIds)
       } else {
         text = await exportDPODataset(targetProject, format, includeMetadata, true, targetIds)
       }
