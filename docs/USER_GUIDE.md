@@ -110,3 +110,76 @@ Create conversational datasets away from your desk:
 4. **Chat with Desktop Models**: Access all providers and models configured on desktop directly from Android.
 5. **Standalone `@Web Search`**: Query real-time web sources on mobile independently.
 6. **Transfer to Desktop**: Select conversations on Android and tap **Transfer to Desktop** to import them into Mechon Corpus for fine-tuning curation.
+
+---
+
+## 9. Model Playground: Pre-Commit Generation Testing
+
+Before committing prompts or responses into long-lived training datasets, test hypotheses in the **Model Playground**:
+1. Select any connected provider (Ollama, Gemini, Claude, Groq, etc.) and model.
+2. Enter draft system instructions and user prompts.
+3. Adjust sampling parameters (Temperature, Top-P, Max Tokens).
+4. Execute generation and verify output structure, reasoning quality, and tone.
+
+---
+
+## 10. Training Readiness: 8-Dimension Pre-Flight Audit
+
+Certify that your dataset is physically and structurally ready for GPU fine-tuning:
+1. Open **Training Readiness** from the Engineering Suite.
+2. Select your target foundation model architecture (e.g. Meta LLaMA 3, Qwen 2.5, Gemma 2, Mistral) and token context limit (e.g. 4,096 tokens).
+3. Run the full audit. The engine evaluates 8 dimensions:
+   - **Dataset Non-Empty**: Confirms valid records exist.
+   - **Chat Template Formatting**: Verifies template compatibility.
+   - **Truncation Risk Boundary**: Simulates token lengths to ensure zero abrupt turn clipping.
+   - **Exact Duplicate Detection**: Flags redundant rows.
+   - **Empty / Null Message Guard**: Detects missing turns.
+   - **Role Alternation Compliance**: Enforces proper `user`/`assistant` sequencing.
+   - **Bilingual Alignment Consistency**: Validates parallel translation integrity.
+   - **Special Token Leakage**: Scans for accidental raw tokens (`<|im_start|>`, `<|eot_id|>`).
+4. Datasets receive an official status: **CERTIFIED FOR TRAINING (READY)** or actionable remediation warnings.
+
+---
+
+## 11. Model-Aware Chat Template Validation
+
+Different foundation models expect radically different Jinja2 chat templates:
+1. Open **Chat Templates** in the Engineering Suite.
+2. Select your target foundation model:
+   - **Meta Llama 3 / 3.1 / 3.2 / 3.3** (`<|start_header_id|>...<|end_header_id|>`)
+   - **Qwen 2.5 / 2** (`<|im_start|>...<|im_end|>`)
+   - **Google Gemma 2 / Gemma** (`<start_of_turn>...<end_of_turn>`)
+   - **Mistral Instruct / Nemo** (`[INST]...[/INST]`)
+   - **Microsoft Phi-3 / Phi-3.5 / Phi-4**
+   - **Standard ChatML**
+3. Inspect rendered sequences turn-by-turn with syntax highlighting.
+4. Toggle `Add generation prompt` to preview training vs. inference formatting.
+
+---
+
+## 12. Train / Eval Splitting & Leakage Prevention
+
+Ensure high scientific rigor in your fine-tuning experiments:
+1. Open **Train / Eval Splits** from the sidebar.
+2. Enter a partition name (e.g. `prod-split-v1`) and a deterministic random seed (e.g. `42`).
+3. Set your split proportions (e.g. `80% Train : 10% Val : 10% Eval`).
+4. **Group-Level Leakage Shield**: Mechon AI groups multi-turn conversation branches and near-duplicate clusters together, assigning them atomically to either train, val, or eval. This guarantees **0 data leakage** across evaluation sets.
+
+---
+
+## 13. System Prompt & Persona Audit
+
+Prevent persona drift and contradictory instructions:
+1. Configure your target policy:
+   - **Single Consistent Persona**: Enforces >85% identity consistency with a unified system persona for single-model fine-tuning.
+   - **Multiple Intentional Personas**: Permits distinct task-specific roles while flagging unintended fragmentation.
+   - **Mixed Instruction / Generalist**: Allows diverse instructions with permissive persona checks.
+2. Run the audit to inspect persona distribution, detect missing system instructions, and review identified **System Prompt Clusters** (e.g. Cluster-1).
+
+---
+
+## 14. Deduplication & Diagnostic Quality Control
+
+Maintain dataset hygiene and fix common sequence defects:
+- **Deduplication Engine**: Identifies exact duplicate conversations via SHA-256 and near-duplicates using 3-gram MinHash Jaccard similarity.
+- **Diagnostic Issues Panel**: Automatically surfaces structural issues such as `CONSECUTIVE_ROLE_TURNS` (e.g. consecutive `user` turns detected at message index 5, 8, 11) with one-click suggested fixes ("Merge consecutive turns or insert the alternate role").

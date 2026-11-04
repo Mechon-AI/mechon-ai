@@ -26,16 +26,40 @@
 
 ```mermaid
 graph TD
+    subgraph Mobile ["Mechon Mobile (Android 14+ Companion)"]
+        UI_MobileChat["Obsidian Mobile Chat<br/>Streaming SSE & Actions"]
+        UI_MobileSearch["Standalone @Web Search<br/>Tavily / Brave / Serp / SearXNG"]
+        MobileKeystore["Android Keystore<br/>AES-256 GCM Isolated Vault"]
+        MobileNet["LAN UDP (38476) & Tailscale Mesh<br/>Verified Connection State Machine"]
+        UI_MobileSearch --> MobileKeystore
+        UI_MobileChat --> MobileNet
+    end
+
     subgraph Frontend ["Frontend Shell (React 18 + TypeScript + Vite 6)"]
-        UI_Dashboard["Dashboard & Workspace"]
-        UI_SFT["Mechon SFT Studio<br/>Chat, Bilingual & Revision"]
-        UI_DPO["Mechon DPO Studio<br/>Pairwise Evaluation"]
-        UI_Story["Story Architect<br/>Planning & Agentic Authoring"]
-        UI_Corpus["Mechon Corpus<br/>Explorer & Dataset Inspector"]
-        UI_Export["Export Center<br/>Selective & Multilingual Export"]
-        UI_Providers["Provider Manager<br/>Registry & Diagnostics"]
-        UI_Engineering["Dataset Engineering<br/>Quality, Deduplication & Analytics"]
-        UI_Layout["Workspace Layout Manager<br/>Resizable Panels & Persistent Ratios"]
+        UI_Dashboard["Dashboard & Workspace Explorer"]
+        
+        subgraph UI_CoreStudios ["Core Authoring Studios"]
+            UI_SFT["SFT Studio<br/>Chat, Multilingual & In-Flight Curation"]
+            UI_Story["Story Architect<br/>Tri-Agent Simulation & Narrative Loop"]
+            UI_DPO["DPO Studio<br/>Dual Inference & Preference Annotation"]
+            UI_Forge["Dataset Forge<br/>Document Ingestion & Chunking"]
+            UI_Corpus["Mechon Corpus<br/>Unified SFT/DPO Explorer & Bridge"]
+            UI_Playground["Model Playground<br/>Pre-Commit Generation Testing"]
+        end
+
+        subgraph UI_EngSuite ["Dataset Engineering Suite"]
+            UI_Readiness["Training Readiness<br/>8-Dimension Certification Audit"]
+            UI_Templates["Chat Template Validation<br/>Jinja2: Llama 3, Qwen, Gemma, Mistral, Phi"]
+            UI_Persona["System Prompt & Persona Audit<br/>Policy Checks & Clustering"]
+            UI_Splits["Train / Eval Splitting<br/>Seeded 80/10/10 & Leakage Shield"]
+            UI_Dedup["Deduplication Engine<br/>Exact & Near-Duplicate Detection"]
+            UI_SeqAnalytics["Sequence Analytics<br/>Token Distribution & Context Limits"]
+            UI_Diagnostics["Diagnostics & QC<br/>Role Alignment & Structural Fixes"]
+        end
+
+        UI_Export["Export Center<br/>Selective, ShareGPT, Alpaca, TRL & CSV"]
+        UI_Providers["Provider Manager<br/>Registry & Model Discovery"]
+        UI_Layout["Modular Editor UI<br/>5-Region Shell & Custom Presets"]
         UI_State["Zustand Stores & TanStack Query"]
     end
 
@@ -46,47 +70,58 @@ graph TD
 
     subgraph Rust_Core ["Native Rust Backend Core"]
 
+        subgraph Mobile_Gateway ["Mobile Remote Gateway (Axum Engine)"]
+            AxumServer["Axum HTTP Gateway (TCP Port 38475)<br/>SSE Streaming & Session Auth"]
+            DiscoveryBeacon["UDP Discovery Beacon (Port 38476)<br/>Broadcast & SSDP Multicast"]
+            TailscaleProbe["Tailscale Mesh Probe<br/>100.64.0.0/10 & MagicDNS"]
+            DeviceAuth["Device Authorization Vault<br/>Cryptographic Bearer Handshake"]
+        end
+
         subgraph Authoring ["Dataset Authoring Services"]
             Svc_SFT["SFT Service<br/>Session & Atomic Commits"]
             Svc_DPO["DPO Service<br/>Dual Generation & Annotation"]
             Svc_Story["Story Planning Service<br/>Premise, Characters & Objectives"]
             Svc_Conversation["Conversation Engine<br/>Multi-Turn Context & Execution"]
-            Svc_Revision["Revision Service<br/>Edit, Regenerate & Restore"]
+            Svc_Revision["Revision Service<br/>Edit, Regenerate & Truncate"]
         end
 
         subgraph Agentic ["Agentic Dataset Engineering Engine"]
-            Planner["Planning Agent<br/>Story-to-Prompt Generation"]
-            Context["Narrative Context Manager<br/>Continuity & Ground Truths"]
-            Evaluator["Progress Evaluation Agent<br/>Milestone & Objective Tracking"]
+            Planner["Planning Agent<br/>Narrative-to-Prompt Generation"]
+            Context["Narrative Context Manager<br/>Continuity & World Lore"]
+            Evaluator["Progress Evaluation Agent<br/>Consistency, Objectives & Depth"]
             Approval["Human-in-the-Loop Controller<br/>Manual / Hybrid / Auto-Allow"]
             Orchestrator["Agent Orchestrator<br/>Autonomous Execution Loop"]
-            Provenance["Agent Provenance Tracker<br/>Prompt & Generation History"]
+            Provenance["Agent Provenance Tracker<br/>Prompt & Turn History"]
         end
 
         subgraph Provider_System ["Model Provider Orchestration"]
-            Config["Authoritative Provider Config<br/>Provider & Model Resolution"]
+            Config["Authoritative Provider Config<br/>Canonical Alias Normalization"]
             Router["Provider Router<br/>Request Dispatch & Session Overrides"]
             Registry["Provider Registry"]
             Capabilities["Model Capability Registry<br/>Parameters & Protocol Support"]
-            Diagnostics["Provider Diagnostics<br/>Health, Auth & Generation Tests"]
+            Diagnostics["Provider Diagnostics<br/>Health, Auth & Latency Tests"]
             Retry["Error & Retry Manager<br/>429, Timeout & Recovery"]
 
             Mock["Mock Adapter"]
-            Ollama["Ollama Adapter"]
-            Groq["Groq Adapter"]
-            OpenAI["OpenAI-Compatible Adapter"]
+            Ollama["Ollama Local Adapter"]
+            Gemini["Google Gemini Adapter"]
             Anthropic["Anthropic Messages Adapter"]
-            Streaming["Unified Streaming Engine<br/>Provider-Specific SSE Parsers"]
+            OpenAI["OpenAI-Compatible Adapter<br/>OpenAI, Groq, Mistral, OpenRouter, vLLM"]
+            Streaming["Unified Streaming Engine<br/>Server-Sent Events (SSE) Streamer"]
         end
 
         subgraph Data_Engineering ["Dataset Engineering Services"]
             Dataset["Dataset Service<br/>Corpus & Record Management"]
             Translation["Translation Service<br/>Dynamic Language Pairs"]
-            Export["Export Service<br/>JSONL, JSON, CSV & TXT"]
+            Export["Export Service<br/>JSONL, JSON, CSV & SHA-256 Checksums"]
             Validation["Quality Validation Service<br/>Schema & Structural Audits"]
-            Dedup["Deduplication Engine"]
-            Analytics["Sequence & Dataset Analytics"]
-            Versioning["Dataset Versioning<br/>SHA-256 Snapshots & Rollback"]
+            ReadinessEng["Readiness Engine<br/>8-Dimension Pre-Flight Audit"]
+            TemplateEng["Template Engine<br/>Model-Aware Jinja2 Compiler"]
+            PersonaEng["Persona Audit Engine<br/>Clustering & Contradiction Detection"]
+            SplitEng["Split Engine<br/>Group-Level Leakage Prevention"]
+            DedupEng["Deduplication Engine<br/>MinHash & Exact Match"]
+            AnalyticsEng["Sequence & Token Analytics"]
+            Versioning["Dataset Versioning<br/>Snapshots & Rollback"]
         end
 
         subgraph Security ["Security & Credential Vault"]
@@ -96,20 +131,23 @@ graph TD
         end
 
         subgraph Storage ["Persistent Storage"]
-            Pool["SQLx Connection Pool<br/>WAL & Foreign Keys"]
-            DB[("SQLite Database")]
-            FileStore["Local Dataset & Backup Storage"]
+            Pool["SQLx Connection Pool<br/>WAL Mode & Foreign Keys"]
+            DB[("SQLite Database<br/>mechon.db")]
+            FileStore["Local Dataset, Backup & Manifest Store"]
         end
     end
 
-    UI_Dashboard --> Bridge
-    UI_SFT --> Bridge
-    UI_DPO --> Bridge
-    UI_Story --> Bridge
-    UI_Corpus --> Bridge
+    MobileNet <--> DiscoveryBeacon
+    MobileNet <--> TailscaleProbe
+    MobileNet <--> AxumServer
+    AxumServer --> DeviceAuth
+    AxumServer --> Svc_Conversation
+    AxumServer --> Router
+
+    UI_CoreStudios --> Bridge
+    UI_EngSuite --> Bridge
     UI_Export --> Bridge
     UI_Providers --> Bridge
-    UI_Engineering --> Bridge
     UI_Layout --> Bridge
 
     Bridge --> Svc_SFT
@@ -121,6 +159,11 @@ graph TD
     Bridge --> Translation
     Bridge --> Export
     Bridge --> Validation
+    Bridge --> ReadinessEng
+    Bridge --> TemplateEng
+    Bridge --> PersonaEng
+    Bridge --> SplitEng
+    Bridge --> DedupEng
     Bridge --> Diagnostics
 
     Svc_Story --> Planner
@@ -152,9 +195,9 @@ graph TD
     Registry --> Capabilities
     Registry --> Mock
     Registry --> Ollama
-    Registry --> Groq
-    Registry --> OpenAI
+    Registry --> Gemini
     Registry --> Anthropic
+    Registry --> OpenAI
 
     Registry --> Streaming
     Router --> Retry
@@ -165,8 +208,12 @@ graph TD
     Svc_Conversation --> Dataset
     Svc_Revision --> Dataset
     Dataset --> Validation
-    Dataset --> Dedup
-    Dataset --> Analytics
+    Dataset --> ReadinessEng
+    Dataset --> TemplateEng
+    Dataset --> PersonaEng
+    Dataset --> SplitEng
+    Dataset --> DedupEng
+    Dataset --> AnalyticsEng
     Dataset --> Versioning
     Dataset --> Export
 
@@ -184,6 +231,10 @@ graph TD
     Dataset --> Pool
     Translation --> Pool
     Versioning --> Pool
+    ReadinessEng --> Pool
+    PersonaEng --> Pool
+    SplitEng --> Pool
+    DeviceAuth --> Pool
     Pool --> DB
 
     Vault --> Secret
