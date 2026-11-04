@@ -375,6 +375,8 @@ pub struct MobileGatewayStatus {
     pub is_running: bool,
     pub port: u16,
     pub local_ip: String,
+    #[serde(default)]
+    pub tailscale_ip: Option<String>,
     pub pairing_code: Option<String>,
     pub pairing_uri: Option<String>,
     pub connected_devices_count: i64,

@@ -41,6 +41,11 @@ data class PairingUiState(
     val manualIp: String = "192.168.1.100",
     val manualPort: String = "38475",
     val manualKey: String = "",
+    val manualTailscaleHost: String = "",
+    val manualTailscalePort: String = "38475",
+    val manualTailscaleKey: String = "",
+    val isTailscaleTesting: Boolean = false,
+    val tailscaleTestResult: String? = null,
     val isPairing: Boolean = false,
     val isScanning: Boolean = false,
     val successMessage: String? = null,
@@ -92,8 +97,9 @@ class PairingViewModel(
         _uiState.update { it.copy(isScanning = false) }
     }
 
-    fun connectWorkstation(ws: DiscoveredWorkstation) {
-        val targetUrl = "http://${ws.lanIp}:${ws.port}"
+    fun connectWorkstation(ws: DiscoveredWorkstation, useTailscale: Boolean = false) {
+        val targetIp = if (useTailscale && !ws.tailscaleIp.isNullOrBlank()) ws.tailscaleIp else ws.lanIp
+        val targetUrl = "http://$targetIp:${ws.port}"
         _uiState.update {
             it.copy(
                 flowState = PairingFlowState.CONNECTING,
@@ -191,6 +197,94 @@ class PairingViewModel(
 
     fun updateManualKey(key: String) {
         _uiState.update { it.copy(manualKey = key.uppercase()) }
+    }
+
+    fun updateManualTailscaleHost(host: String) {
+        _uiState.update { it.copy(manualTailscaleHost = host.trim()) }
+    }
+
+    fun updateManualTailscalePort(port: String) {
+        _uiState.update { it.copy(manualTailscalePort = port.trim()) }
+    }
+
+    fun updateManualTailscaleKey(key: String) {
+        _uiState.update { it.copy(manualTailscaleKey = key.trim().uppercase()) }
+    }
+
+    fun testTailscaleConnection() {
+        val host = _uiState.value.manualTailscaleHost.trim()
+        val port = _uiState.value.manualTailscalePort.trim()
+        if (host.isBlank()) {
+            _uiState.update { it.copy(tailscaleTestResult = "Please enter Tailscale 100.x.y.z IP or MagicDNS hostname") }
+            return
+        }
+        val url = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port"
+        _uiState.update { it.copy(isTailscaleTesting = true, tailscaleTestResult = null) }
+
+        viewModelScope.launch {
+            val pingOk = desktopApiClient.ping(url)
+            _uiState.update {
+                it.copy(
+                    isTailscaleTesting = false,
+                    tailscaleTestResult = if (pingOk) "Mesh Online: Mechon Gateway is reachable via Tailscale!" else "Offline: Could not connect to $url"
+                )
+            }
+        }
+    }
+
+    fun pairWithTailscale(useApproval: Boolean = false) {
+        val host = _uiState.value.manualTailscaleHost.trim()
+        val port = _uiState.value.manualTailscalePort.trim()
+        val key = _uiState.value.manualTailscaleKey.trim().uppercase()
+
+        if (host.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Please enter Tailscale IP or MagicDNS") }
+            return
+        }
+
+        val url = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port"
+
+        if (useApproval) {
+            _uiState.update {
+                it.copy(
+                    flowState = PairingFlowState.CONNECTING,
+                    isPairing = true,
+                    errorMessage = null,
+                    successMessage = null
+                )
+            }
+            viewModelScope.launch {
+                val result = desktopApiClient.requestApprovalPairing(url)
+                result.fold(
+                    onSuccess = { initResp ->
+                        _uiState.update {
+                            it.copy(
+                                flowState = PairingFlowState.APPROVAL_PENDING,
+                                isPairing = false,
+                                pendingRequestId = initResp.requestId,
+                                successMessage = "Approval request sent over Tailscale! Click Approve on Mechon Desktop."
+                            )
+                        }
+                        startPollingApprovalStatus(url, initResp.requestId)
+                    },
+                    onFailure = { err ->
+                        _uiState.update {
+                            it.copy(
+                                flowState = PairingFlowState.FAILED,
+                                isPairing = false,
+                                errorMessage = err.message ?: "Failed to initiate Tailscale approval handshake"
+                            )
+                        }
+                    }
+                )
+            }
+        } else {
+            if (key.isBlank()) {
+                _uiState.update { it.copy(errorMessage = "Please enter pairing key or use approval handshake") }
+                return
+            }
+            pairWithKey(url, key)
+        }
     }
 
     fun pairWithManualKey() {

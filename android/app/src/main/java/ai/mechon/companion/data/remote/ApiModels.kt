@@ -43,13 +43,15 @@ data class ApprovalPairingStatusResponse(
     @SerializedName("error") val error: String? = null
 )
 
-// LAN Auto-Discovery Workstation Beacon
+// LAN / Tailscale Auto-Discovery Workstation Beacon
 data class DiscoveredWorkstation(
     @SerializedName("service") val service: String = "mechon-gateway",
     @SerializedName("name") val name: String = "Mechon Desktop",
     @SerializedName("lan_ip") val lanIp: String,
+    @SerializedName("tailscale_ip") val tailscaleIp: String? = null,
     @SerializedName("port") val port: Int = 38475,
     @SerializedName("version") val version: String = "1.2.7",
+    @SerializedName("is_tailscale") val isTailscale: Boolean = false,
     val lastSeenTimestamp: Long = System.currentTimeMillis()
 )
 
@@ -57,10 +59,12 @@ data class DiscoveredWorkstation(
 data class DesktopStatusResponse(
     @SerializedName("is_running") val isRunning: Boolean,
     @SerializedName("lan_ip") val lanIp: String,
+    @SerializedName("tailscale_ip") val tailscaleIp: String? = null,
     @SerializedName("port") val port: Int,
     @SerializedName("endpoint") val endpoint: String,
     @SerializedName("version") val version: String,
-    @SerializedName("connected_devices_count") val connectedDevicesCount: Int
+    @SerializedName("connected_devices_count") val connectedDevicesCount: Int,
+    @SerializedName("is_tailscale_active") val isTailscaleActive: Boolean = false
 )
 
 // Providers & Models

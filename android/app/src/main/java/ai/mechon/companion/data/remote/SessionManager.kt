@@ -62,6 +62,14 @@ class SessionManager(context: Context) {
     val isPaired: Boolean
         get() = !authToken.isNullOrBlank()
 
+    val isTailscale: Boolean
+        get() {
+            val url = desktopUrl.lowercase()
+            return url.contains(".ts.net") ||
+                   url.contains("://100.") ||
+                   (desktopName?.contains("Tailscale", ignoreCase = true) == true)
+        }
+
     fun clearPairing() {
         prefs.edit()
             .remove(KEY_AUTH_TOKEN)

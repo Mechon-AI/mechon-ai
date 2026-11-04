@@ -390,3 +390,41 @@ async fn test_approval_based_pairing_workflow() {
     let models_resp = app.clone().oneshot(models_req).await.unwrap();
     assert_eq!(models_resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_gateway_tailscale_ip_detection() {
+    let pool = setup_test_db().await;
+    let vault: Arc<dyn CredentialStore> = Arc::new(InMemoryCredentialStore::new());
+    let internal = Arc::new(RwLock::new(GatewayInternalState {
+        is_running: true,
+        port: 38475,
+        local_ip: "192.168.1.50".to_string(),
+        tailscale_ip: Some("100.127.109.78".to_string()),
+        pairing_code: Some("MCH-TEST-TS01".to_string()),
+        pairing_expires_at: Some(chrono::Utc::now().timestamp() + 900),
+        ..Default::default()
+    }));
+
+    let state = GatewayAppState {
+        pool: pool.clone(),
+        vault: vault.clone(),
+        internal,
+    };
+    let app = create_gateway_router(state);
+
+    // Call /api/v1/status
+    let status_req = Request::builder()
+        .uri("/api/v1/status")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.clone().oneshot(status_req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+    let body_json: Value = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(body_json["tailscale_ip"], "100.127.109.78");
+    assert_eq!(body_json["network"]["is_tailscale_active"], true);
+    assert_eq!(body_json["network"]["tailscale_ip"], "100.127.109.78");
+}

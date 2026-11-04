@@ -198,20 +198,26 @@ fun PairingScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Auto LAN Discovery") },
-                    icon = { Icon(Icons.Default.Lan, contentDescription = null) }
+                    text = { Text("Auto LAN", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.Lan, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Manual Key") },
-                    icon = { Icon(Icons.Default.Key, contentDescription = null) }
+                    text = { Text("Tailscale", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.VpnLock, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("QR Code") },
-                    icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }
+                    text = { Text("Manual Key", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    text = { Text("QR Code", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
 
@@ -337,21 +343,44 @@ fun PairingScreen(
                                                     Text(ws.name, fontWeight = FontWeight.Bold, color = TextPrimary)
                                                 }
                                                 Text(
-                                                    text = "http://${ws.lanIp}:${ws.port} • v${ws.version}",
+                                                    text = "LAN: http://${ws.lanIp}:${ws.port} • v${ws.version}",
                                                     fontFamily = FontFamily.Monospace,
                                                     fontSize = 11.sp,
                                                     color = TextMuted,
                                                     modifier = Modifier.padding(top = 2.dp)
                                                 )
+                                                if (!ws.tailscaleIp.isNullOrBlank()) {
+                                                    Text(
+                                                        text = "Tailscale Mesh: ${ws.tailscaleIp}",
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 10.5.sp,
+                                                        color = SoftLavender,
+                                                        modifier = Modifier.padding(top = 1.dp)
+                                                    )
+                                                }
                                             }
 
-                                            Button(
-                                                onClick = { viewModel.connectWorkstation(ws) },
-                                                enabled = !uiState.isPairing && !uiState.isPaired,
-                                                colors = ButtonDefaults.buttonColors(containerColor = MechonBlue),
-                                                shape = RoundedCornerShape(8.dp)
-                                            ) {
-                                                Text("Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Button(
+                                                    onClick = { viewModel.connectWorkstation(ws, useTailscale = false) },
+                                                    enabled = !uiState.isPairing && !uiState.isPaired,
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MechonBlue),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                                ) {
+                                                    Text("LAN", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                if (!ws.tailscaleIp.isNullOrBlank()) {
+                                                    Button(
+                                                        onClick = { viewModel.connectWorkstation(ws, useTailscale = true) },
+                                                        enabled = !uiState.isPairing && !uiState.isPaired,
+                                                        colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                                    ) {
+                                                        Text("Mesh", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -362,8 +391,126 @@ fun PairingScreen(
                 }
             }
 
-            // Tab 1: Manual Key Fallback
+            // Tab 1: Tailscale Mesh Connectivity
             if (selectedTab == 1) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MechonSurface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.VpnLock, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Tailscale Mesh Connectivity",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Connect remotely to Mechon Desktop over Tailscale CGNAT IP (100.64.0.0/10) or MagicDNS (*.ts.net) without port forwarding.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            fontSize = 11.5.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = uiState.manualTailscaleHost,
+                            onValueChange = { viewModel.updateManualTailscaleHost(it) },
+                            label = { Text("Tailscale IP or MagicDNS") },
+                            placeholder = { Text("100.127.109.78 or my-pc.ts.net") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = ElectricViolet,
+                                unfocusedBorderColor = MechonBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = uiState.manualTailscalePort,
+                            onValueChange = { viewModel.updateManualTailscalePort(it) },
+                            label = { Text("Gateway Port (Default 38475)") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = ElectricViolet,
+                                unfocusedBorderColor = MechonBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = uiState.manualTailscaleKey,
+                            onValueChange = { viewModel.updateManualTailscaleKey(it) },
+                            label = { Text("Pairing Key (Optional if using Approval)") },
+                            placeholder = { Text("MCH-XXXX-YYYY") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = ElectricViolet,
+                                unfocusedBorderColor = MechonBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (uiState.tailscaleTestResult != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = uiState.tailscaleTestResult ?: "",
+                                fontSize = 11.5.sp,
+                                color = if (uiState.tailscaleTestResult?.startsWith("Mesh Online") == true) StatusConnected else StatusError,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { viewModel.testTailscaleConnection() },
+                                enabled = !uiState.isTailscaleTesting && !uiState.isPairing,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) {
+                                if (uiState.isTailscaleTesting) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = SoftLavender)
+                                } else {
+                                    Icon(Icons.Default.NetworkPing, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Ping Mesh", fontSize = 12.sp)
+                                }
+                            }
+
+                            Button(
+                                onClick = { viewModel.pairWithTailscale(useApproval = true) },
+                                enabled = !uiState.isPairing,
+                                colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) {
+                                Text("Pair Device", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Tab 2: Manual Key Fallback
+            if (selectedTab == 2) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MechonSurface,
@@ -451,8 +598,8 @@ fun PairingScreen(
                 }
             }
 
-            // Tab 2: QR Code Guidance
-            if (selectedTab == 2) {
+            // Tab 3: QR Code Guidance
+            if (selectedTab == 3) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MechonSurface,

@@ -175,6 +175,31 @@ fun SettingsScreen(
                         color = if (sessionManager.authToken != null) SoftLavender else StatusError,
                         fontSize = 11.5.sp
                     )
+
+                    if (sessionManager.isTailscale) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ElectricViolet.copy(alpha = 0.2f),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(ElectricViolet)
+                            ),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.VpnLock, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(13.dp))
+                                Text(
+                                    text = "Tailscale Mesh: Active (${sessionManager.desktopUrl.removePrefix("http://").removePrefix("https://")})",
+                                    color = SoftLavender,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
 
                 if (pingResult != null) {

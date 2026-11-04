@@ -35,6 +35,7 @@ pub struct GatewayInternalState {
     pub is_running: bool,
     pub port: u16,
     pub local_ip: String,
+    pub tailscale_ip: Option<String>,
     pub pairing_code: Option<String>,
     pub pairing_expires_at: Option<i64>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
@@ -48,6 +49,7 @@ impl Default for GatewayInternalState {
             is_running: false,
             port: 38475,
             local_ip: get_local_lan_ip(),
+            tailscale_ip: get_tailscale_ip(),
             pairing_code: None,
             pairing_expires_at: None,
             shutdown_tx: None,
@@ -69,6 +71,20 @@ pub fn get_local_lan_ip() -> String {
         }
     }
     "127.0.0.1".to_string()
+}
+
+pub fn get_tailscale_ip() -> Option<String> {
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("100.100.100.100:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                let ip = addr.ip().to_string();
+                if ip.starts_with("100.") {
+                    return Some(ip);
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn hash_token(token: &str) -> String {
@@ -127,6 +143,7 @@ impl MobileGatewayService {
             is_running: state.is_running,
             port: state.port,
             local_ip: state.local_ip.clone(),
+            tailscale_ip: state.tailscale_ip.clone(),
             pairing_code: active_code,
             pairing_uri,
             connected_devices_count: devices_count,
@@ -169,6 +186,7 @@ impl MobileGatewayService {
         let target_port = port.unwrap_or(state.port);
         state.port = target_port;
         state.local_ip = get_local_lan_ip();
+        state.tailscale_ip = get_tailscale_ip();
 
         let (_code, _) = {
             let rand_num = rand_u32();
@@ -207,6 +225,7 @@ impl MobileGatewayService {
         let (beacon_tx, mut beacon_rx) = oneshot::channel::<()>();
         state.beacon_shutdown_tx = Some(beacon_tx);
         let b_ip = state.local_ip.clone();
+        let b_tailscale_ip = state.tailscale_ip.clone();
         let b_port = target_port;
 
         tokio::spawn(async move {
@@ -222,8 +241,10 @@ impl MobileGatewayService {
                 "service": "mechon-gateway",
                 "name": "Mechon Desktop",
                 "lan_ip": b_ip,
+                "tailscale_ip": b_tailscale_ip,
                 "port": b_port,
-                "version": "1.2.7"
+                "version": "1.2.7",
+                "is_tailscale": b_tailscale_ip.is_some()
             }).to_string();
 
             let mut buf = [0u8; 1024];
@@ -569,8 +590,14 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
             "status": "online",
             "version": "1.2.7",
             "local_ip": internal.local_ip,
+            "tailscale_ip": internal.tailscale_ip,
             "port": internal.port,
-            "workstation_name": "Mechon AI Workstation"
+            "workstation_name": "Mechon AI Workstation",
+            "network": {
+                "lan_ip": internal.local_ip,
+                "tailscale_ip": internal.tailscale_ip,
+                "is_tailscale_active": internal.tailscale_ip.is_some()
+            }
         }).to_string(),
     )
 }
