@@ -43,7 +43,7 @@ class MechonApplication : Application() {
         database = AppDatabase.getInstance(this)
         sessionManager = SessionManager(this)
         desktopApiClient = DesktopApiClient(sessionManager)
-        lanDiscoveryService = LanDiscoveryService()
+        lanDiscoveryService = LanDiscoveryService(this)
         webSearchManager = WebSearchManager(this)
 
         chatRepository = ChatRepository(

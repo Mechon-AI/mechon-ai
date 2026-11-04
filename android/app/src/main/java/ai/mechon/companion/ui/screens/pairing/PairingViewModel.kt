@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.mechon.companion.data.remote.DesktopApiClient
 import ai.mechon.companion.data.remote.DiscoveredWorkstation
+import ai.mechon.companion.data.remote.DiscoveryDiagnostics
 import ai.mechon.companion.data.remote.LanDiscoveryService
 import ai.mechon.companion.data.remote.SessionManager
 import com.google.gson.Gson
@@ -46,6 +47,7 @@ data class PairingUiState(
     val manualTailscaleKey: String = "",
     val isTailscaleTesting: Boolean = false,
     val tailscaleTestResult: String? = null,
+    val discoveryDiagnostics: DiscoveryDiagnostics = DiscoveryDiagnostics(),
     val isPairing: Boolean = false,
     val isScanning: Boolean = false,
     val successMessage: String? = null,
@@ -83,6 +85,36 @@ class PairingViewModel(
                     )
                 }
             }
+        }
+        viewModelScope.launch {
+            lanDiscoveryService.diagnostics.collectLatest { diag ->
+                _uiState.update { it.copy(discoveryDiagnostics = diag) }
+            }
+        }
+    }
+
+    fun probeDirectHost(host: String, port: Int = 38475) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isScanning = true, errorMessage = null) }
+            val res = lanDiscoveryService.probeDirect(host, port)
+            res.fold(
+                onSuccess = { ws ->
+                    _uiState.update {
+                        it.copy(
+                            isScanning = false,
+                            successMessage = "Found ${ws.name} at ${ws.lanIp}:${ws.port}!"
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    _uiState.update {
+                        it.copy(
+                            isScanning = false,
+                            errorMessage = "Direct probe failed: ${err.message ?: "Host unreachable"}"
+                        )
+                    }
+                }
+            )
         }
     }
 

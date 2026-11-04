@@ -237,13 +237,21 @@ impl MobileGatewayService {
                 }
             };
             let _ = socket.set_broadcast(true);
+            let server_id = uuid::Uuid::new_v4().to_string();
+            let b_subnet = if let Some(last_dot) = b_ip.rfind('.') {
+                format!("{}.255:38476", &b_ip[..last_dot])
+            } else {
+                "255.255.255.255:38476".to_string()
+            };
+
             let beacon_payload = serde_json::json!({
                 "service": "mechon-gateway",
                 "name": "Mechon Desktop",
+                "server_id": server_id,
                 "lan_ip": b_ip,
                 "tailscale_ip": b_tailscale_ip,
                 "port": b_port,
-                "version": "1.2.7",
+                "version": "1.2.8",
                 "is_tailscale": b_tailscale_ip.is_some()
             }).to_string();
 
@@ -258,11 +266,13 @@ impl MobileGatewayService {
                     }
                     _ = interval.tick() => {
                         let _ = socket.send_to(beacon_payload.as_bytes(), "255.255.255.255:38476").await;
+                        let _ = socket.send_to(beacon_payload.as_bytes(), b_subnet.as_str()).await;
+                        let _ = socket.send_to(beacon_payload.as_bytes(), "239.255.255.250:38476").await;
                     }
                     recv_res = socket.recv_from(&mut buf) => {
                         if let Ok((len, src)) = recv_res {
                             let msg = String::from_utf8_lossy(&buf[..len]);
-                            if msg.contains("MECHON_DISCOVER") {
+                            if msg.contains("MECHON_DISCOVER") || msg.contains("MECHON") {
                                 let _ = socket.send_to(beacon_payload.as_bytes(), src).await;
                             }
                         }

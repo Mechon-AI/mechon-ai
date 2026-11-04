@@ -47,10 +47,11 @@ data class ApprovalPairingStatusResponse(
 data class DiscoveredWorkstation(
     @SerializedName("service") val service: String = "mechon-gateway",
     @SerializedName("name") val name: String = "Mechon Desktop",
+    @SerializedName("server_id") val server_id: String? = null,
     @SerializedName("lan_ip") val lanIp: String,
     @SerializedName("tailscale_ip") val tailscaleIp: String? = null,
     @SerializedName("port") val port: Int = 38475,
-    @SerializedName("version") val version: String = "1.2.7",
+    @SerializedName("version") val version: String = "1.2.8",
     @SerializedName("is_tailscale") val isTailscale: Boolean = false,
     val lastSeenTimestamp: Long = System.currentTimeMillis()
 )
