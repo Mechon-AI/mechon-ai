@@ -1,9 +1,10 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use axum::{
+    body::Body,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -1055,13 +1056,14 @@ struct InferenceChatPayload {
     top_p: Option<f64>,
     #[serde(alias = "maxTokens")]
     max_tokens: Option<i64>,
+    stream: Option<bool>,
 }
 
 async fn handle_inference_chat(
     State(state): State<GatewayAppState>,
     headers: HeaderMap,
     Json(payload): Json<InferenceChatPayload>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<Response, (StatusCode, String)> {
     authenticate_device(&headers, &state.pool).await?;
 
     let p_id_opt = payload.provider_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
@@ -1106,6 +1108,50 @@ async fn handle_inference_chat(
         provider.timeout_seconds,
     );
 
+    let is_streaming = payload.stream.unwrap_or(false);
+
+    if is_streaming {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let chat_req = ChatRequest {
+            model: selected_model.clone(),
+            messages,
+            temperature: payload.temperature,
+            top_p: payload.top_p,
+            max_tokens: payload.max_tokens,
+            stream: true,
+        };
+
+        tokio::spawn(async move {
+            let _ = instance.chat_stream(chat_req, tx).await;
+        });
+
+        let stream = futures_util::stream::unfold((rx, false), |(mut rx, done)| async move {
+            if done {
+                return None;
+            }
+            match rx.recv().await {
+                Some(chunk) => {
+                    let sse = format!("data: {}\n\n", json!({ "chunk": chunk, "finish_reason": null }));
+                    Some((Ok::<_, std::convert::Infallible>(sse), (rx, false)))
+                }
+                None => {
+                    let done_msg = "data: [DONE]\n\n".to_string();
+                    Some((Ok::<_, std::convert::Infallible>(done_msg), (rx, true)))
+                }
+            }
+        });
+
+        let body = Body::from_stream(stream);
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Connection", "keep-alive")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(body)
+            .unwrap());
+    }
+
     let chat_req = ChatRequest {
         model: selected_model.clone(),
         messages,
@@ -1118,18 +1164,19 @@ async fn handle_inference_chat(
     let resp = instance.chat(chat_req).await
         .map_err(|e| (StatusCode::BAD_GATEWAY, json!({ "error": e.message }).to_string()))?;
 
-    Ok((
-        StatusCode::OK,
-        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
-        json!({
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/json")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(Body::from(json!({
             "role": resp.role,
             "content": resp.content,
             "model": resp.model,
             "provider_id": provider.id,
             "provider_name": provider.name,
             "finish_reason": resp.finish_reason
-        }).to_string(),
-    ))
+        }).to_string()))
+        .unwrap())
 }
 
 #[derive(Deserialize)]

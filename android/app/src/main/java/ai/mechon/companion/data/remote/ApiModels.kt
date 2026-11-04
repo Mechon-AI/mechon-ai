@@ -161,7 +161,8 @@ data class ChatInferenceRequest(
     @SerializedName("system_prompt") val systemPrompt: String? = null,
     @SerializedName("temperature") val temperature: Double = 0.7,
     @SerializedName("max_tokens") val maxTokens: Int = 2048,
-    @SerializedName("web_search_enabled") val webSearchEnabled: Boolean = false
+    @SerializedName("web_search_enabled") val webSearchEnabled: Boolean = false,
+    @SerializedName("stream") val stream: Boolean = false
 )
 
 data class ChatInferenceResponse(

@@ -127,7 +127,8 @@ class ChatRepository(
         conversationId: String,
         userContent: String,
         attachments: List<AttachmentPayload> = emptyList(),
-        webSearchResults: List<WebSearchResult>? = null
+        webSearchResults: List<WebSearchResult>? = null,
+        onTokenChunk: ((String) -> Unit)? = null
     ): Result<MessageEntity> {
         val conv = conversationDao.getConversationById(conversationId)
             ?: return Result.failure(IllegalStateException("Conversation not found"))
@@ -152,12 +153,13 @@ class ChatRepository(
             conversationDao.updateConversation(conv.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
         }
 
-        return executeInference(conv, allExisting, userContent, webSearchResults)
+        return executeInference(conv, allExisting, userContent, webSearchResults, onTokenChunk)
     }
 
     suspend fun regenerateResponse(
         conversationId: String,
-        webSearchResults: List<WebSearchResult>? = null
+        webSearchResults: List<WebSearchResult>? = null,
+        onTokenChunk: ((String) -> Unit)? = null
     ): Result<MessageEntity> {
         val conv = conversationDao.getConversationById(conversationId)
             ?: return Result.failure(IllegalStateException("Conversation not found"))
@@ -173,14 +175,15 @@ class ChatRepository(
         val remaining = messageDao.getMessages(conversationId)
         val lastUserText = remaining.lastOrNull { it.role == "user" }?.content ?: ""
 
-        return executeInference(conv, remaining, lastUserText, webSearchResults)
+        return executeInference(conv, remaining, lastUserText, webSearchResults, onTokenChunk)
     }
 
     private suspend fun executeInference(
         conv: ConversationEntity,
         contextMessages: List<MessageEntity>,
         lastPrompt: String,
-        webSearchResults: List<WebSearchResult>? = null
+        webSearchResults: List<WebSearchResult>? = null,
+        onTokenChunk: ((String) -> Unit)? = null
     ): Result<MessageEntity> {
         val messagePayloads = mutableListOf<ChatMessagePayload>()
         for (m in contextMessages) {
@@ -218,22 +221,46 @@ class ChatRepository(
             systemPrompt = conv.systemPrompt.ifBlank { null },
             temperature = 0.7,
             maxTokens = 2048,
-            webSearchEnabled = !webSearchResults.isNullOrEmpty()
+            webSearchEnabled = !webSearchResults.isNullOrEmpty(),
+            stream = onTokenChunk != null
         )
 
-        val inferenceResult = desktopApiClient.chatInference(inferenceReq)
-        return inferenceResult.mapCatching { resp ->
-            val assistantMsg = MessageEntity(
-                id = UUID.randomUUID().toString(),
-                conversationId = conv.id,
-                role = "assistant",
-                content = resp.content,
-                searchMetadataJson = searchMetaJson,
-                timestamp = System.currentTimeMillis()
-            )
-            messageDao.insertMessage(assistantMsg)
-            conversationDao.updateConversation(conv.copy(updatedAt = System.currentTimeMillis()))
-            assistantMsg
+        return try {
+            if (onTokenChunk != null) {
+                val fullResponse = StringBuilder()
+                desktopApiClient.chatInferenceStream(inferenceReq).collect { chunk ->
+                    fullResponse.append(chunk)
+                    onTokenChunk(chunk)
+                }
+                val assistantMsg = MessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    conversationId = conv.id,
+                    role = "assistant",
+                    content = fullResponse.toString(),
+                    searchMetadataJson = searchMetaJson,
+                    timestamp = System.currentTimeMillis()
+                )
+                messageDao.insertMessage(assistantMsg)
+                conversationDao.updateConversation(conv.copy(updatedAt = System.currentTimeMillis()))
+                Result.success(assistantMsg)
+            } else {
+                val inferenceResult = desktopApiClient.chatInference(inferenceReq)
+                inferenceResult.mapCatching { resp ->
+                    val assistantMsg = MessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        conversationId = conv.id,
+                        role = "assistant",
+                        content = resp.content,
+                        searchMetadataJson = searchMetaJson,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    messageDao.insertMessage(assistantMsg)
+                    conversationDao.updateConversation(conv.copy(updatedAt = System.currentTimeMillis()))
+                    assistantMsg
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

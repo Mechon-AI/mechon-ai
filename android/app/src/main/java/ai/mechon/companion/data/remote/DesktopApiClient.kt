@@ -2,6 +2,9 @@ package ai.mechon.companion.data.remote
 
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -335,6 +338,71 @@ class DesktopApiClient(
 
         Result.failure(lastErr ?: IOException("Inference failed: endpoint unreachable"))
     }
+
+    fun chatInferenceStream(inferenceRequest: ChatInferenceRequest): Flow<String> = flow {
+        val token = sessionManager.authToken ?: throw IllegalStateException("Device is not paired")
+        val base = sessionManager.desktopUrl.trimEnd('/')
+
+        val streamReq = inferenceRequest.copy(stream = true)
+        val body = gson.toJson(streamReq).toRequestBody(jsonMediaType)
+        val endpoints = listOf("$base/api/mobile/v1/inference", "$base/api/v1/inference/chat")
+
+        var connected = false
+        for (endpoint in endpoints) {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $token")
+                .header("Accept", "text/event-stream")
+                .post(body)
+                .build()
+
+            var response: okhttp3.Response? = null
+            try {
+                response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val contentType = response.header("Content-Type") ?: ""
+                    if (contentType.contains("text/event-stream")) {
+                        connected = true
+                        val source = response.body?.source() ?: break
+                        while (!source.exhausted()) {
+                            val line = source.readUtf8Line() ?: break
+                            if (line.startsWith("data: ")) {
+                                val data = line.removePrefix("data: ").trim()
+                                if (data == "[DONE]") {
+                                    break
+                                }
+                                try {
+                                    val chunkMap = gson.fromJson(data, Map::class.java)
+                                    val chunk = chunkMap["chunk"]?.toString()
+                                    if (!chunk.isNullOrEmpty()) {
+                                        emit(chunk)
+                                    }
+                                } catch (e: Exception) {
+                                    emit(data)
+                                }
+                            }
+                        }
+                        break
+                    } else {
+                        val bodyStr = response.body?.string() ?: ""
+                        val chatResp = gson.fromJson(bodyStr, ChatInferenceResponse::class.java)
+                        emit(chatResp.content)
+                        connected = true
+                        break
+                    }
+                }
+            } catch (e: Exception) {
+                if (connected) throw e
+            } finally {
+                response?.close()
+            }
+        }
+
+        if (!connected) {
+            val regular = chatInference(inferenceRequest).getOrThrow()
+            emit(regular.content)
+        }
+    }.flowOn(Dispatchers.IO)
 
     suspend fun webSearch(query: String, maxResults: Int = 5): Result<WebSearchResponse> = withContext(Dispatchers.IO) {
         val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired"))
