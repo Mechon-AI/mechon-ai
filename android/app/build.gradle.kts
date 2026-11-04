@@ -21,6 +21,35 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = project.findProperty("KEYSTORE_FILE")?.toString()
+                ?: System.getenv("ANDROID_KEYSTORE_PATH")
+                ?: "${project.rootDir}/release.keystore"
+            val keystorePassword = project.findProperty("KEYSTORE_PASSWORD")?.toString()
+                ?: System.getenv("KEYSTORE_PASSWORD")
+            val keyAlias = project.findProperty("KEY_ALIAS")?.toString()
+                ?: System.getenv("KEY_ALIAS")
+            val keyPassword = project.findProperty("KEY_PASSWORD")?.toString()
+                ?: System.getenv("KEY_PASSWORD")
+
+            if (file(keystoreFile).exists() && !keystorePassword.isNullOrBlank()) {
+                storeFile = file(keystoreFile)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            } else {
+                val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+                if (debugKeystore.exists()) {
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    this.keyAlias = "androiddebugkey"
+                    this.keyPassword = "android"
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -28,9 +57,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releaseConfig = signingConfigs.getByName("release")
+            if (releaseConfig.storeFile != null) {
+                signingConfig = releaseConfig
+            }
         }
         debug {
-            applicationIdSuffix = ".debug"
             isDebuggable = true
         }
     }
