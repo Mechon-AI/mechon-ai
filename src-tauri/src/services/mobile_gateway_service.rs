@@ -223,7 +223,7 @@ impl MobileGatewayService {
                 "name": "Mechon Desktop",
                 "lan_ip": b_ip,
                 "port": b_port,
-                "version": "1.2.6"
+                "version": "1.2.7"
             }).to_string();
 
             let mut buf = [0u8; 1024];
@@ -553,7 +553,7 @@ async fn handle_ping() -> impl IntoResponse {
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.6",
+            "version": "1.2.7",
             "workstation": "Mechon AI Desktop",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }).to_string(),
@@ -567,7 +567,7 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "online",
-            "version": "1.2.6",
+            "version": "1.2.7",
             "local_ip": internal.local_ip,
             "port": internal.port,
             "workstation_name": "Mechon AI Workstation"
@@ -641,7 +641,7 @@ async fn handle_pairing_status(
                     "token": req.token,
                     "device_id": req.device_id,
                     "desktop_name": "Mechon Workstation",
-                    "version": "1.2.6"
+                    "version": "1.2.7"
                 }).to_string(),
             ))
         }

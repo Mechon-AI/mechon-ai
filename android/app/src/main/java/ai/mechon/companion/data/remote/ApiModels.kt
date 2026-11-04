@@ -49,7 +49,7 @@ data class DiscoveredWorkstation(
     @SerializedName("name") val name: String = "Mechon Desktop",
     @SerializedName("lan_ip") val lanIp: String,
     @SerializedName("port") val port: Int = 38475,
-    @SerializedName("version") val version: String = "1.2.6",
+    @SerializedName("version") val version: String = "1.2.7",
     val lastSeenTimestamp: Long = System.currentTimeMillis()
 )
 

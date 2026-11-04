@@ -364,7 +364,7 @@ fun SettingsScreen(
                             )
                         }
                         Text(
-                            text = "Version 1.2.6 (Build 126) • Obsidian Edition",
+                            text = "Version 1.2.7 (Build 127) • Obsidian Edition",
                             color = TextMuted,
                             fontSize = 11.sp
                         )
