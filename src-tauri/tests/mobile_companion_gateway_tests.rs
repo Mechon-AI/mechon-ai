@@ -7,10 +7,12 @@ use axum::{
 };
 use tower::ServiceExt; // for oneshot()
 
+use tokio::sync::RwLock;
+
 use mechon_ai::credentials::{CredentialStore, InMemoryCredentialStore};
 use mechon_ai::models::ProjectCreateInput;
 use mechon_ai::services::mobile_gateway_service::{
-    create_gateway_router, GatewayAppState, MobileGatewayService,
+    create_gateway_router, GatewayAppState, GatewayInternalState, MobileGatewayService,
 };
 use mechon_ai::services::project_service::ProjectService;
 
@@ -57,13 +59,17 @@ async fn test_gateway_pairing_and_token_authentication() {
     let pool = setup_test_db().await;
     let vault: Arc<dyn CredentialStore> = Arc::new(InMemoryCredentialStore::new());
 
-    let (code, _uri) = MobileGatewayService::generate_pairing_code().await.unwrap();
-    assert!(!code.is_empty());
+    let code = "MCH-TEST-AUTH".to_string();
+    let internal = Arc::new(RwLock::new(GatewayInternalState {
+        pairing_code: Some(code.clone()),
+        pairing_expires_at: Some(chrono::Utc::now().timestamp() + 900),
+        ..Default::default()
+    }));
 
     let state = GatewayAppState {
         pool: pool.clone(),
         vault: vault.clone(),
-        internal: MobileGatewayService::get_state(),
+        internal,
     };
     let app = create_gateway_router(state);
 
@@ -199,11 +205,16 @@ async fn test_gateway_conversation_sync_and_sft_pipeline() {
         settings: None,
     }).await.unwrap();
 
-    let (code, _) = MobileGatewayService::generate_pairing_code().await.unwrap();
+    let code = "MCH-TEST-SYNC".to_string();
+    let internal = Arc::new(RwLock::new(GatewayInternalState {
+        pairing_code: Some(code.clone()),
+        pairing_expires_at: Some(chrono::Utc::now().timestamp() + 900),
+        ..Default::default()
+    }));
     let state = GatewayAppState {
         pool: pool.clone(),
         vault: vault.clone(),
-        internal: MobileGatewayService::get_state(),
+        internal,
     };
     let app = create_gateway_router(state);
 
