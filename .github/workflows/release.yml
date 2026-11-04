@@ -33,6 +33,13 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
       - name: Build Frontend
         run: |
           cd frontend
@@ -43,6 +50,13 @@ jobs:
         run: |
           cd src-tauri
           cargo build --release --locked --bin mechon-ai
+
+      - name: Build Android Companion Release APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew testDebugUnitTest
+          ./gradlew assembleRelease assembleDebug
 
       - name: Prepare Release Packages and Artifacts
         run: |
@@ -66,12 +80,16 @@ jobs:
           # 2. Standalone binary
           cp mechon-ai-${TAG_NAME}-linux-x86_64/mechon-ai mechon-ai-linux-x86_64
           
-          # 3. Packaging manifests
+          # 3. Android Companion APKs
+          cp ../android/app/build/outputs/apk/release/app-release.apk mechon-mobile-${TAG_NAME}.apk
+          cp ../android/app/build/outputs/apk/debug/app-debug.apk mechon-mobile-${TAG_NAME}-debug.apk
+
+          # 4. Packaging manifests
           cp ../packaging/arch/PKGBUILD .
           cp ../packaging/arch/mechon-ai.desktop .
           
-          # 4. Generate SHA-256 Checksums
-          sha256sum mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-linux-x86_64 PKGBUILD mechon-ai.desktop > SHA256SUMS.txt
+          # 5. Generate SHA-256 Checksums
+          sha256sum mechon-ai-${TAG_NAME}-linux-x86_64.tar.gz mechon-ai-linux-x86_64 mechon-mobile-${TAG_NAME}.apk mechon-mobile-${TAG_NAME}-debug.apk PKGBUILD mechon-ai.desktop > SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -85,6 +103,7 @@ jobs:
           files: |
             release-dist/mechon-ai-*-linux-x86_64.tar.gz
             release-dist/mechon-ai-linux-x86_64
+            release-dist/mechon-mobile-*.apk
             release-dist/PKGBUILD
             release-dist/mechon-ai.desktop
             release-dist/SHA256SUMS.txt
