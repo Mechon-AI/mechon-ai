@@ -1,11 +1,11 @@
 # Mechon AI Android Companion & Local Gateway Protocol
-**Target Release: Mechon AI v1.2.6**
+**Target Release: Mechon AI v1.2.7**
 
 ---
 
 ## 1. Overview & Architecture
 
-Mechon AI v1.2.6 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
+Mechon AI v1.2.7 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
 
 ### Remote Provider Ownership & Inference Pipeline
 When paired with the Mechon AI Desktop Workstation:
@@ -13,15 +13,20 @@ When paired with the Mechon AI Desktop Workstation:
 - **Desktop owns Model Discovery**: `/api/v1/providers/models` returns canonical providers and discovered models.
 - **Desktop owns Inference Routing**: `/api/v1/inference/chat` resolves provider aliases (`google` -> `gemini`, `claude` -> `anthropic`, `chatgpt` -> `openai`, `local` -> `ollama`) and queries credentials securely from the desktop vault.
 - **Android acts as a Remote Client**: Conversations select discovered models through a searchable Material 3 model selector dialog with visual availability indicators, vision support badges, and context window lengths.
+- **Tailscale Mesh Connectivity**: Automatically detects and pairs over Tailscale mesh IPs (`100.64.0.0/10`) or MagicDNS (`*.ts.net`), enabling seamless secure remote access from anywhere without port forwarding.
+- **Standalone Android Web Search**: Operates 100% independently on mobile with Android Keystore AES-256 GCM credential isolation, multi-provider adapters (Tavily, Brave, SerpAPI, SearXNG), `@Web Search <query>` composer command, and expandable Obsidian Black source citation cards.
 
 ```
 +-------------------------------------------------------------+
 |               Mechon AI Android Companion                   |
 |  - Jetpack Compose + Material 3 Conversational UI           |
+|  - Standalone Mobile Web Search Engine (Tavily/Brave/Serp)  |
+|  - @Web Search Command & Autocomplete                       |
+|  - Expandable Obsidian Source Citation Cards                |
 |  - Searchable Model & Provider Selector Dialog              |
-|  - Strict Connection Lifecycle (LAN Discovery & Approval)   |
+|  - Tailscale Mesh & LAN Discovery & Approval Lifecycle      |
 |  - Message Controls: Copy, Edit, Regenerate, Delete, Stop   |
-|  - Expandable Composer: Vision attachments, Web Search      |
+|  - Expandable Composer: Vision attachments                  |
 |  - Advanced Roleplay Studio: 10 Modular Sections + Custom   |
 |  - Character Library with avatars, presets & prompt history |
 |  - 16 KB Page-Size Compatible (Pure JVM / Zero JNI .so)     |
@@ -29,6 +34,7 @@ When paired with the Mechon AI Desktop Workstation:
 +------------------------------+------------------------------+
                                |
               Encrypted Bearer Authentication (SHA-256)
+              Tailscale Mesh (100.64.0.0/10 & MagicDNS)
               Local Network Discovery (UDP Port 38476)
               Authenticated Gateway (TCP Port 38475)
                                |

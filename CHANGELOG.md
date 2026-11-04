@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.7] - 2026-11-04
+
+### Added
+- **Tailscale Mesh Connectivity for Remote Companion Access:**
+  - Integrated UDP Quad-100 MagicDNS probe (`get_tailscale_ip()`) on desktop gateway to automatically detect Tailscale CGNAT IPs (`100.64.0.0/10`).
+  - Workstation status payload (`GET /api/v1/status`) and UDP discovery beacons now expose `tailscale_ip` and `is_tailscale_active`.
+  - Android companion introduces a dedicated **Tailscale Mesh** tab in `PairingScreen` supporting direct Tailscale IPs (e.g. `100.127.109.78`) and `*.ts.net` MagicDNS hostnames.
+  - Added dedicated Tailscale Mesh active status badge and connection ping diagnostic in Settings.
+- **Standalone Android Web Search Engine & Provider Adapters:**
+  - 100% independent mobile web search engine operating directly on Android without workstation gateway or LLM provider dependencies.
+  - Multi-provider support with dedicated adapters:
+    - **Tavily AI Search**: AI-tailored contextual search API.
+    - **Brave Search**: Independent web index with subscription token auth.
+    - **SerpAPI**: Direct Google organic search result extraction.
+    - **SearXNG**: Privacy-focused self-hosted metasearch with custom endpoint configuration.
+  - Encrypted credential isolation: Web search API keys are encrypted with Android Keystore AES-256 GCM in a dedicated secure store (`mechon_web_search_secure_prefs`), completely separated from workstation bearer tokens and LLM credentials.
+- **`@Web Search` Conversational Command & Autocomplete:**
+  - Replaced legacy always-on toggle button with conversational `@Web Search <query>` command invocation.
+  - Real-time autocomplete suggestions trigger on `@` or `@w`.
+  - In-flight search progress indicator (*"Searching the web for '...' "*).
+- **Expandable Obsidian Black Source Cards & Context Grounding:**
+  - Assistant messages render expandable source citation trays displaying domain badges, titles, snippets, publication dates, and one-tap external browser intent.
+  - External factual grounding dynamically injected into LLM context while preserving character persona and roleplay system prompts.
+  - SFT dataset sync pipeline preserves complete hygiene: search tokens and keys are never serialized into training datasets.
+- **Unit & Regression Test Suites:**
+  - Added `WebSearchCommandParserTest` and `WebSearchAdaptersTest` covering command parsing, MockWebServer adapter responses, domain extraction, and grounding prompt formatting.
+  - Added desktop gateway Tailscale IP detection integration test in `mobile_companion_gateway_tests.rs`.
+
+---
+
 ## [1.2.6] - 2026-11-04
 
 ### Fixed
