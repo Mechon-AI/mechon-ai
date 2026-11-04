@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.8] - 2026-11-04
+
+### Fixed
+- **LAN Discovery & Zero-Configuration Server Advertisement:**
+  - Acquired explicit Android `WifiManager.MulticastLock` on `LanDiscoveryManager` to unblock broadcast and mDNS reception on power-saving devices.
+  - Upgraded Rust server discovery broadcaster to multi-target UDP (broadcast `255.255.255.255:38476` + SSDP multicast `239.255.255.250:38476`).
+  - Added dynamic local subnet calculation and parallel direct-host probe (`/api/v1/health`) across local `/24` subnets as fallback.
+- **Strict Application-Level Verification & Pairing State Machine:**
+  - Implemented 14-state verified connection state machine (`ConnectionStateMachine`) enforcing: `APPROVED != CONNECTED; CONNECTED != READY`.
+  - Replaced placebo status indicators with a 7-stage verification checklist (TCP, Session Token, Machine Identity, Health, Capabilities, Active Providers, Available Models).
+  - Desktop gateway `/api/v1/devices/authenticate` now returns HTTP 403 Forbidden for unapproved/revoked tokens and HTTP 401 Unauthorized for expired tokens.
+- **Unified Mobile-Desktop API (`/api/mobile/v1/*`):**
+  - Standardized all companion endpoints: `/api/mobile/v1/health`, `/api/mobile/v1/capabilities`, `/api/mobile/v1/providers`, `/api/mobile/v1/models`, `/api/mobile/v1/providers/{provider_id}/models`, `/api/mobile/v1/inference`.
+  - Fixed critical provider resolution bug (`Inference failed (400): {"error":"Not found: Provider google not found"}`):
+    - Added canonical alias normalization (`google` -> `gemini`) in `ProviderService` with fallback to `ProviderRegistry::global()`.
+    - Seeded default Google Gemini configuration in the workstation database.
+- **Remote Chat Inference & SSE Streaming:**
+  - Axum mobile inference gateway now supports standard Server-Sent Events (`text/event-stream` with `data: [DONE]`) for real-time token streaming.
+  - Android companion `DesktopApiClient` and `ChatRepository` consume SSE streams directly into the active chat bubble with live token counts.
+- **Tailscale Mesh Reachability Validation:**
+  - Enforced 5-stage validation for Tailscale links: VPN interface check, port parsing (e.g. `*.ts.net:38475`), ping, `/api/v1/health`, and session auth token validation.
+  - Added dedicated connection diagnostics dialog with real-time stage-by-stage status indicators and actionable troubleshooting advice.
+- **OkHttp Connection & Memory Optimization:**
+  - Configured shared OkHttp connection pool (`maxIdleConnections = 5`, `keepAliveDuration = 5m`) with automatic retry on failure.
+  - Enforced structured request cancellation tied to Compose UI lifecycle and exponential backoff reconnection.
+
 ## [1.2.7] - 2026-11-04
 
 ### Added

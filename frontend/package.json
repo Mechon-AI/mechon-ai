@@ -2,7 +2,7 @@
   "name": "mechon-ai",
   "description": "Mechon AI — Native Cross-Platform Desktop Workstation for SFT and DPO Dataset Engineering",
   "private": true,
-  "version": "1.2.7",
+  "version": "1.2.8",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -41,10 +41,10 @@ class RoleplayRepositoryTest {
 
     @Test
     fun testVersionAlignment() {
-        val expectedVersion = "1.2.7"
-        val expectedBuild = 127
+        val expectedVersion = "1.2.8"
+        val expectedBuild = 128
 
-        assertEquals("1.2.7", expectedVersion)
-        assertEquals(127, expectedBuild)
+        assertEquals("1.2.8", expectedVersion)
+        assertEquals(128, expectedBuild)
     }
 }
