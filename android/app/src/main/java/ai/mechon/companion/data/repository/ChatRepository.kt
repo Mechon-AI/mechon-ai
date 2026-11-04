@@ -215,7 +215,6 @@ class ChatRepository(
 
         val inferenceReq = ChatInferenceRequest(
             model = conv.modelId,
-            modelId = conv.modelId,
             providerId = conv.providerId,
             messages = messagePayloads,
             systemPrompt = conv.systemPrompt.ifBlank { null },

@@ -177,16 +177,24 @@ impl ProviderService {
                 }
             }
 
-            // 3. Search DB case-insensitively by id, provider_type, or name
+            // 3. Search DB case-insensitively by id, provider_type, or name.
+            // Also search using the alias_target so that e.g. "google" → alias "gemini"
+            // matches a provider whose provider_type is "gemini".
             let needle_lower = needle.to_lowercase();
+            let alias_lower = alias_target.to_lowercase();
             let row = sqlx::query_as::<_, (String,)>(
-                "SELECT id FROM providers 
-                 WHERE lower(id) = ? OR lower(provider_type) = ? OR lower(name) = ?
+                "SELECT id FROM providers
+                 WHERE lower(id) IN (?, ?)
+                    OR lower(provider_type) IN (?, ?)
+                    OR lower(name) IN (?, ?)
                  ORDER BY is_active DESC, updated_at DESC LIMIT 1"
             )
             .bind(&needle_lower)
+            .bind(&alias_lower)
             .bind(&needle_lower)
+            .bind(&alias_lower)
             .bind(&needle_lower)
+            .bind(&alias_lower)
             .fetch_optional(pool)
             .await?;
 

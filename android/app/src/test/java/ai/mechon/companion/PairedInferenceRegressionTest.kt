@@ -12,10 +12,11 @@ class PairedInferenceRegressionTest {
     private val gson = Gson()
 
     @Test
-    fun testChatInferenceRequestContainsBothModelAndModelId() {
+    fun testChatInferenceRequestSerializesCorrectly() {
+        // ChatInferenceRequest now sends only "model" (no duplicate "model_id") to avoid
+        // HTTP 422 "duplicate field `model`" on the Rust gateway side.
         val req = ChatInferenceRequest(
             model = "gemini-2.5-flash",
-            modelId = "gemini-2.5-flash",
             providerId = "gemini",
             messages = listOf(
                 ChatMessagePayload(role = "user", content = "Test prompt")
@@ -28,9 +29,10 @@ class PairedInferenceRegressionTest {
 
         val json = gson.toJson(req)
         assertTrue("Must include model field", json.contains("\"model\":\"gemini-2.5-flash\""))
-        assertTrue("Must include model_id field", json.contains("\"model_id\":\"gemini-2.5-flash\""))
         assertTrue("Must include provider_id field", json.contains("\"provider_id\":\"gemini\""))
         assertTrue("Must include user message", json.contains("Test prompt"))
+        // Verify no duplicate model_id key that caused HTTP 422
+        assertFalse("Must NOT send duplicate model_id field", json.contains("\"model_id\""))
     }
 
     @Test

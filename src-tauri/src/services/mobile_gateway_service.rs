@@ -1046,9 +1046,9 @@ async fn handle_get_provider_models(
 struct InferenceChatPayload {
     #[serde(alias = "providerId")]
     provider_id: Option<String>,
-    #[serde(alias = "model_id")]
-    #[serde(alias = "modelId")]
     model: Option<String>,
+    #[serde(alias = "modelId")]
+    model_id: Option<String>,
     #[serde(alias = "systemPrompt")]
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
@@ -1067,7 +1067,10 @@ async fn handle_inference_chat(
     authenticate_device(&headers, &state.pool).await?;
 
     let p_id_opt = payload.provider_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let model_opt = payload.model.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let model_opt = payload.model.as_deref()
+        .or(payload.model_id.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     let provider = ProviderService::resolve(&state.pool, p_id_opt, model_opt, state.vault.as_ref())
         .await

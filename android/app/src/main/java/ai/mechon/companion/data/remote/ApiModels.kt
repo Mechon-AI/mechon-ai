@@ -155,7 +155,6 @@ data class ChatMessagePayload(
 
 data class ChatInferenceRequest(
     @SerializedName("model") val model: String,
-    @SerializedName("model_id") val modelId: String = model,
     @SerializedName("provider_id") val providerId: String,
     @SerializedName("messages") val messages: List<ChatMessagePayload>,
     @SerializedName("system_prompt") val systemPrompt: String? = null,

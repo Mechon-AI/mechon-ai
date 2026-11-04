@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.local.ConversationEntity
@@ -336,8 +337,24 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Model Selector Chip (Displays actual remote desktop model)
+                            // Resolve a human-readable provider label from the available models list
+                            val chipConvProviderId = uiState.conversation?.providerId ?: ""
+                            val chipConvModelId = uiState.conversation?.modelId ?: "gemini-2.5-flash"
+                            val chipProviderLabel = uiState.availableModels
+                                .firstOrNull { it.modelId == chipConvModelId && it.providerId == chipConvProviderId }
+                                ?.let { item ->
+                                    item.providerName.ifBlank { item.providerType.ifBlank { item.providerId } }
+                                }
+                                ?: uiState.availableModels
+                                    .firstOrNull { it.modelId == chipConvModelId }
+                                    ?.let { item ->
+                                        item.providerName.ifBlank { item.providerType.ifBlank { item.providerId } }
+                                    }
+                                ?: chipConvProviderId.takeIf { it.length <= 20 }
+                                ?: "desktop"
                             Row(
                                 modifier = Modifier
+                                    .widthIn(max = 220.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(ElevatedSurfaceHighlight)
                                     .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
@@ -353,15 +370,19 @@ fun ChatScreen(
                                         .background(ElectricViolet)
                                 )
                                 Text(
-                                    text = (uiState.conversation?.modelId ?: "gemini-2.5-flash"),
+                                    text = chipConvModelId,
                                     color = TextPrimary,
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "• ${uiState.conversation?.providerId ?: "gemini"}",
+                                    text = "• $chipProviderLabel",
                                     color = TextMuted,
-                                    fontSize = 10.sp
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Icon(
                                     imageVector = Icons.Default.ArrowDropDown,
