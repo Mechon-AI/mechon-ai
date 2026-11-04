@@ -1,4 +1,5 @@
 # Mechon AI: Dataset Formats & Schema Specification
+**Version 1.2.8 | Mechon AI Fine-Tuning Workstation**
 
 This document provides the definitive specification for datasets created, curated, validated, and exported by **Mechon AI**.
 

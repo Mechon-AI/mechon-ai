@@ -1,4 +1,5 @@
 # Architecture Specification: Mechon AI
+**Version 1.2.8 | Mechon AI Fine-Tuning Workstation**
 
 ## 1. Architectural Philosophy
 

@@ -1,75 +1,112 @@
 # User Guide: Mechon AI
+**Version 1.2.8 | AI Dataset Engineering Workstation**
 
-Welcome to **Mechon AI** — the native desktop workstation for language model Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO) dataset engineering.
+Welcome to **Mechon AI** — the local-first engineering workstation for creating, curating, translating, evaluating, and exporting high-quality training datasets for language model Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO).
 
-Tagline: **Engineer the Data. Shape the Intelligence.**
-
----
-
-## 1. Projects & Workspaces
-All datasets are partitioned by project:
-- Switch active projects using the sidebar dropdown.
-- Manage projects via the **Projects** view in the sidebar.
-- You can create, duplicate, archive, or delete projects at any time.
+**Tagline**: *Engineer the Data. Shape the Intelligence.*
 
 ---
 
-## 2. Mechon SFT: Interactive Multi-Turn Authoring
+## 1. Projects & Workspace Partitioning
 
-Mechon SFT allows human curators to converse directly with local or remote models to build high-quality multi-turn demonstrations:
+All datasets, sessions, and configuration settings in Mechon AI are partitioned into distinct project workspaces:
+- **Switch Projects**: Use the workspace selector in the top toolbar or Explorer sidebar.
+- **Project Isolation**: SFT sessions, Story Architect campaigns, Corpus records, and DPO tasks remain strictly isolated within their respective project boundaries.
+- **Project Settings**: Configure project-specific tags, target languages, and export targets.
 
-1. **Start a Chat Session**:
-   - Click **New Chat** in the Mechon SFT sidebar.
-   - Configure the **System Instructions** by toggling the header button.
-2. **Interact with the Model**:
-   - Type user prompts in the bottom input bar.
-   - Press `Enter` to send; press `Shift+Enter` for a newline.
-   - The selected model responds in real time.
-3. **Edit Any Turn**:
-   - Hover over any message to click the **Edit** icon.
-   - Make corrections, refine tone, or improve factual accuracy.
-4. **Truncate Downstream**:
-   - If a conversation took a wrong turn, truncate all messages after a specific point and re-prompt.
-5. **Commit to Dataset**:
+---
+
+## 2. SFT Studio: Interactive Multi-Turn Authoring
+
+SFT Studio enables human engineers to converse directly with local or cloud models to construct multi-turn training demonstrations:
+
+1. **Initialize Session**:
+   - Open **SFT Studio** from the sidebar.
+   - Configure **System Instructions** to establish character persona, reasoning protocols, or formatting boundaries.
+   - Select your preferred **Provider** (Ollama, Gemini, Claude, OpenAI, Groq, etc.) and model.
+2. **Interactive Multi-Turn Dialogue**:
+   - Converse freely across multiple turns.
+   - Test complex instruction adherence, step-by-step logic, or storytelling.
+3. **In-Flight Curation**:
+   - **Edit Message**: Click the edit button on any message bubble to polish wording or fix errors.
+   - **Regenerate**: Re-roll any model response with altered parameters.
+   - **Truncate Downstream**: Remove unwanted dialogue trajectories from any point.
+4. **Multilingual Translation Engine**:
+   - Open the **Translate** modal from the toolbar.
+   - Select a secondary target language and translation model.
+   - Review translated turns side-by-side; edit or regenerate individual turns.
+5. **Commit to Mechon Corpus**:
    - Click **Commit to SFT Dataset**.
-   - The entire conversation is saved as **one atomic multi-turn SFT record**.
+   - The entire multi-turn conversation is saved as **one atomic record** in Mechon Corpus.
 
 ---
 
-## 3. Mechon DPO: Preference Pair Engineering
+## 3. Story Architect: Agentic Conversation Engineering
 
-Mechon DPO streamlines pairwise comparison for preference alignment:
+Story Architect automates deep narrative and roleplay conversation generation using a **Tri-Agent architecture**:
 
-1. **Create Task**:
-   - Enter your prompt and optional system instructions.
-2. **Generate Candidates**:
-   - Click **Generate A & B** to invoke parallel inference.
-   - Alternatively, write or paste candidate responses manually.
-3. **Compare Side-by-Side**:
-   - Inspect markdown formatting, code blocks, and token counts.
-4. **Annotate**:
-   - Press `A` to choose Response A.
-   - Press `B` to choose Response B.
-   - Press `T` to mark as Tie.
-   - Press `X` to Flag for low quality.
-   - Press `S` to Skip.
-   - Add optional rationales in the reasoning box.
+1. **Configure Tri-Agent Models**:
+   - **Planning Agent** (e.g. Claude 3.5 Haiku / Groq LLaMA): Ingests story lore and generates the next conversational prompt or user turn.
+   - **Inference Model** (e.g. Gemini 2.5 Flash / LLaMA 70B): Generates the story progression or character response.
+   - **Evaluation Agent** (e.g. Claude 3.5 Haiku): Real-time scoring of Persona Consistency, Objective Progress, and Synthesis Quality.
+2. **Execution Modes**:
+   - **Manual Mode**: Review and approve each prompt generated by the Planning Agent before the Inference Model executes.
+   - **Auto-Allow Mode**: Enable continuous generation loops where prompts are automatically approved until milestones are reached.
+3. **Commit & Bridge to SFT Studio**:
+   - Commit completed story conversations to Mechon Corpus.
+   - Use **Load from Corpus** in SFT Studio to open story sessions for multilingual translation and extension.
 
 ---
 
-## 4. Mechon Corpus: Unified Dataset Explorer
+## 4. Mechon Corpus: The Central Dataset Workspace
 
-- Switch between **SFT Records** and **DPO Pairs**.
-- Filter by search keywords, regex, or metadata tags.
-- Toggle between **Rendered View** and **Raw JSON View**.
-- Inspect token metrics and message counts per record.
+Mechon Corpus is your central dataset repository:
+- **Inspect Records**: Browse complete multi-turn conversations, token counts, and language translations.
+- **Filter & Search**: Query by keyword, language tag, or milestone.
+- **Two-Way Studio Bridge**: Select any record in Corpus and click **Load into SFT Studio** to continue dialogue turns, edit responses, and recommit the updated record.
+- **Selective Exporting**: Select specific rows with checkboxes to export only targeted records.
 
 ---
 
 ## 5. Export Center
 
-Export your datasets in standard formats:
-- **ShareGPT JSONL**: Standard multi-turn format (`conversations` array).
-- **Alpaca JSONL**: Single-turn instruction-input-output format.
-- **Hugging Face TRL DPO JSONL**: Standard `prompt`, `chosen`, and `rejected` keys.
-- **Apache Parquet**: Compressed columnar binary format for large-scale training pipelines.
+Export clean training datasets formatted for popular training frameworks (Axolotl, Unsloth, LLaMA-Factory, TRL):
+- **JSONL (ShareGPT)**: Multi-turn conversations (`conversations: [{from, value}]`).
+- **JSONL (Alpaca)**: Instruction-input-output structure.
+- **JSON & CSV**: Standard formats for custom data ingestion and tabular analysis.
+- **Multilingual Modes**: Export primary language only, translated language only, or dual parallel records.
+- **Cryptographic Checksums**: Automatically generates SHA-256 manifests to verify dataset integrity on GPU training clusters.
+
+---
+
+## 6. DPO Studio: Preference Pair Engineering
+
+Create paired preference datasets for RLHF and DPO:
+1. **Define Prompt**: Enter the instruction or query.
+2. **Dual-Model Generation**: Configure independent providers/models for Candidate A and Candidate B, then generate responses in parallel.
+3. **Side-by-Side Review**: Compare outputs diff-style.
+4. **Annotate**: Choose Winner (A or B), mark a Tie, or Flag poor completions.
+5. **Human Rationale**: Document the justification for the preference decision.
+6. **Commit & Export**: Export standard DPO JSONL (`prompt`, `chosen`, `rejected`, `rationale`).
+
+---
+
+## 7. Dataset Forge (Document Parser)
+
+Transform unstructured source materials into structured SFT datasets:
+1. **Upload Documents**: Provide source text, code snippets, or reference documents.
+2. **Chunking & Analysis**: The parser splits documents into semantic chunks with estimated token counts.
+3. **Prompt-Response Synthesis**: Configured LLMs identify salient questions and synthesize conversational SFT pairs.
+4. **Audit & Commit**: Review generated pairs and commit approved records directly to Mechon Corpus.
+
+---
+
+## 8. Mechon Mobile Companion
+
+Create conversational datasets away from your desk:
+1. **Enable Mobile Gateway**: Start the gateway from Desktop Settings (port 38475).
+2. **Connect Mobile**: Launch Mechon Mobile on Android. Discover desktop automatically over LAN (port 38476) or connect via Tailscale Mesh.
+3. **Desktop Authorization**: Approve the pairing request on desktop to grant an authenticated session token.
+4. **Chat with Desktop Models**: Access all providers and models configured on desktop directly from Android.
+5. **Standalone `@Web Search`**: Query real-time web sources on mobile independently.
+6. **Transfer to Desktop**: Select conversations on Android and tap **Transfer to Desktop** to import them into Mechon Corpus for fine-tuning curation.

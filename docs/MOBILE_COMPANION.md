@@ -1,11 +1,11 @@
 # Mechon AI Android Companion & Local Gateway Protocol
-**Target Release: Mechon AI v1.2.7**
+**Version 1.2.8 | See also [MECHON_MOBILE.md](MECHON_MOBILE.md)**
 
 ---
 
 ## 1. Overview & Architecture
 
-Mechon AI v1.2.7 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
+Mechon AI v1.2.8 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
 
 ### Remote Provider Ownership & Inference Pipeline
 When paired with the Mechon AI Desktop Workstation:
