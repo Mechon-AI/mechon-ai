@@ -1,5 +1,5 @@
 # Mechon AI Android Companion (`ai.mechon.companion`)
-**Target Release: v1.2.5 (Build 125)**
+**Target Release: v1.2.6 (Build 126)**
 
 Native Android conversational AI client, structured roleplay studio, and dataset engineering companion for Mechon AI.
 

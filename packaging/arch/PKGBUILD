@@ -1,7 +1,7 @@
 # Maintainer: Mechon AI Team <cemetery394@gmail.com>
 pkgname=mechon-ai-git
 _pkgname=mechon-ai
-pkgver=1.2.5
+pkgver=1.2.6
 pkgrel=1
 pkgdesc="Local-first desktop workstation for SFT and DPO dataset engineering (always tracks and builds latest release tag)"
 arch=('x86_64')
