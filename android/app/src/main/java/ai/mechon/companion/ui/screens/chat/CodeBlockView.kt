@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,10 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.mechon.companion.ui.theme.CodeBlockBg
-import ai.mechon.companion.ui.theme.MechonBorder
-import ai.mechon.companion.ui.theme.TextMuted
-import ai.mechon.companion.ui.theme.TextPrimary
+import ai.mechon.companion.ui.theme.*
 
 @Composable
 fun CodeBlockView(
@@ -36,30 +34,31 @@ fun CodeBlockView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(CodeBlockBg)
+            .border(1.dp, CodeBlockBorder, RoundedCornerShape(14.dp))
     ) {
         // Code Header Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MechonBorder.copy(alpha = 0.5f))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(ElevatedSurface)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = language.ifBlank { "code" },
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted,
-                fontFamily = FontFamily.Monospace
+                color = SoftLavender,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp
             )
             IconButton(
                 onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
-                    Toast.makeText(context, "Code copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.size(24.dp)
             ) {
@@ -67,7 +66,7 @@ fun CodeBlockView(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = "Copy code",
                     tint = TextMuted,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
@@ -77,14 +76,14 @@ fun CodeBlockView(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(12.dp)
+                .padding(14.dp)
         ) {
             Text(
                 text = code,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
+                fontSize = 12.5.sp,
                 color = TextPrimary,
-                lineHeight = 18.sp
+                lineHeight = 19.sp
             )
         }
     }
