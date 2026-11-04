@@ -125,6 +125,9 @@ fun ConversationsScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = onNavigateToPairing) {
+                            Icon(Icons.Default.Lan, contentDescription = "Pairing", tint = SoftLavender)
+                        }
                         IconButton(onClick = { isSearchVisible = !isSearchVisible }) {
                             Icon(Icons.Default.Search, contentDescription = "Search", tint = SoftLavender)
                         }

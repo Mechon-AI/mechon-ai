@@ -53,7 +53,6 @@ fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var editDialogText by remember { mutableStateOf("") }
     val context = LocalContext.current
