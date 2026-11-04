@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.6] - 2026-11-04
+
+### Fixed
+- **Resolved Remote Provider Resolution Bug (HTTP 400):**
+  - Eliminated `"Provider google not found"` errors by implementing `ProviderService::resolve` on the desktop backend, supporting exact IDs, case-insensitive lookups, model ownership fallback, and common alias mappings (`google` -> `gemini`, `claude` -> `anthropic`, `chatgpt` -> `openai`, `local` -> `ollama`).
+  - Standardized canonical desktop provider IDs across Android companion (`gemini` default).
+  - Desktop `/api/v1/providers/models` now exports a flattened canonical `models: [...]` array with provider attribution, vision indicators, and default configurations alongside `providers: [...]`.
+- **Eliminated Android Model Selector Crash on Desktop Pairing:**
+  - Implemented safe JSON deserialization and fallback model synthesis (`getNormalizedModels()`) in Android's `DesktopApiClient` and `ModelSelectorDialog`, preventing `NullPointerException` when parsing desktop model discovery payloads.
+- **Fixed `INSTALL_FAILED_UPDATE_INCOMPATIBLE` on Release Upgrades:**
+  - Standardized APK signing configuration across debug and release builds with persistent keystore integration and v1/v2/v3 signature scheme support.
+
+### Added
+- **Searchable Material 3 Model & Provider Selector:**
+  - Interactive search bar with instant client-side filtering across model names, model IDs, and provider names.
+  - Provider filter chips (All, Google Gemini, Anthropic, OpenAI, Groq, Ollama).
+  - Visual status indicator dots and context window / multimodal vision badges (`Vision`, `1M context`, `128K context`).
+  - Top app bar desktop connectivity status icon (`Lan` / `CloudOff`) with instant pairing shortcut.
+- **Strict Connection Lifecycle State Machine:**
+  - Formally implemented states: `DISCONNECTED`, `DISCOVERING`, `PAIRING_REQUESTED`, `AWAITING_APPROVAL`, `CONNECTED`, `RECONNECTING`, `CONNECTION_LOST`, and `ERROR`.
+- **Regression & Compatibility Test Suites:**
+  - Added Android unit tests: `ProviderModelDiscoveryTest` and `PairedInferenceRegressionTest`.
+  - Added desktop gateway integration assertions in `mobile_companion_gateway_tests.rs`.
+- **16 KB Memory Page-Size Compatibility:**
+  - Audited and verified APK packaging with zero unaligned `.so` native shared libraries.
+
+### Changed
+- Synchronized all workstation and companion components to version `1.2.6` (Android `versionCode = 126`).
+- Optimized conversation rendering and database transactions to run strictly off the main thread on `Dispatchers.IO`.
+
+---
+
 ## [1.2.5] - 2026-11-04
 
 ### Added

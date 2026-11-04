@@ -1,23 +1,31 @@
 # Mechon AI Android Companion & Local Gateway Protocol
-**Target Release: Mechon AI v1.2.5**
+**Target Release: Mechon AI v1.2.6**
 
 ---
 
 ## 1. Overview & Architecture
 
-Mechon AI v1.2.5 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
+Mechon AI v1.2.6 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
+
+### Remote Provider Ownership & Inference Pipeline
+When paired with the Mechon AI Desktop Workstation:
+- **Desktop owns the Provider Registry & Credentials**: Android does not evaluate, register, or authenticate providers locally.
+- **Desktop owns Model Discovery**: `/api/v1/providers/models` returns canonical providers and discovered models.
+- **Desktop owns Inference Routing**: `/api/v1/inference/chat` resolves provider aliases (`google` -> `gemini`, `claude` -> `anthropic`, `chatgpt` -> `openai`, `local` -> `ollama`) and queries credentials securely from the desktop vault.
+- **Android acts as a Remote Client**: Conversations select discovered models through a searchable Material 3 model selector dialog with visual availability indicators, vision support badges, and context window lengths.
 
 ```
 +-------------------------------------------------------------+
 |               Mechon AI Android Companion                   |
 |  - Jetpack Compose + Material 3 Conversational UI           |
-|  - Opens directly into Chat (Drawer for conversation lib)   |
+|  - Searchable Model & Provider Selector Dialog              |
+|  - Strict Connection Lifecycle (LAN Discovery & Approval)   |
 |  - Message Controls: Copy, Edit, Regenerate, Delete, Stop   |
 |  - Expandable Composer: Vision attachments, Web Search      |
 |  - Advanced Roleplay Studio: 10 Modular Sections + Custom   |
 |  - Character Library with avatars, presets & prompt history |
-|  - Automatic LAN Discovery & Approval-Based Pairing         |
-|  - 16 KB Page-Size Compatible (Pure JVM QR / Zero JNI .so)  |
+|  - 16 KB Page-Size Compatible (Pure JVM / Zero JNI .so)     |
+|  - Persistent v1/v2/v3 Signing (Zero signature conflicts)   |
 +------------------------------+------------------------------+
                                |
               Encrypted Bearer Authentication (SHA-256)
@@ -29,8 +37,8 @@ Mechon AI v1.2.5 provides the **Mechon AI Android Companion** (`ai.mechon.compan
 |  - Native Axum HTTP Server (Port 38475)                     |
 |  - UDP Auto-Discovery Beacon & LAN Responder (Port 38476)   |
 |  - Real-Time Approval-Based Device Pairing Workflow         |
-|  - Provider Model Discovery Proxy                           |
-|  - Direct Single-Inference Route (No Tri-Agent Leak)        |
+|  - Canonical Provider Model Registry & Alias Resolution     |
+|  - Direct Single-Inference Route (Desktop Vault Powered)    |
 |  - Staging Queue & Commit to Mechon SFT Corpus              |
 +-------------------------------------------------------------+
 ```
@@ -45,7 +53,7 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 
 #### `GET /api/v1/ping`
 - **Auth**: None
-- **Response**: `{"status": "ok", "app": "mechon-ai", "version": "1.2.5"}`
+- **Response**: `{"status": "ok", "app": "mechon-ai", "version": "1.2.6"}`
 
 #### `GET /api/v1/status`
 - **Auth**: None
@@ -53,7 +61,7 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 ```json
 {
   "status": "online",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "local_ip": "192.168.1.100",
   "port": 38475,
   "workstation_name": "Mechon AI Workstation"
@@ -90,7 +98,7 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
   "token": "mch_live_xxxxxxxxxxxxxxxx",
   "device_id": "uuid-here",
   "desktop_name": "Mechon Workstation",
-  "version": "1.2.5"
+  "version": "1.2.6"
 }
 ```
 
@@ -109,7 +117,7 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 {
   "models": [
     {
-      "provider_id": "google",
+      "provider_id": "gemini",
       "provider_name": "Google Gemini",
       "model_id": "gemini-2.5-flash",
       "supports_vision": true
@@ -121,8 +129,16 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
       "supports_vision": false
     }
   ],
+  "providers": [
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "configured": true,
+      "models": ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    }
+  ],
   "default_model": "gemini-2.5-flash",
-  "default_provider": "google"
+  "default_provider": "gemini"
 }
 ```
 
@@ -132,7 +148,7 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 ```json
 {
   "model_id": "gemini-2.5-flash",
-  "provider_id": "google",
+  "provider_id": "gemini",
   "messages": [
     {
       "role": "user",
@@ -158,7 +174,33 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 
 ---
 
-## 3. Roleplay Studio: 10 Modular Prompt Sections
+## 3. Searchable Model & Provider Selector
+
+The companion chat screen features an interactive model picker in the top bar:
+- Search bar with instant client-side filtering across model names, model IDs, and provider names.
+- Filter chips to filter by provider (e.g., All, Google Gemini, Anthropic, OpenAI, Groq, Ollama).
+- Context window and vision support chips (`Vision`, `1M context`, `128K context`).
+- Visual indicator dots showing model availability status.
+- Desktop connection status icon in the app bar linking directly to pairing status.
+- Zero-crash fallback: Safe deserialization handling both legacy `{ providers: [...] }` and canonical `{ models: [...], providers: [...] }` desktop payloads.
+
+---
+
+## 4. Connection Lifecycle States
+
+The Companion adheres to an explicit connection state machine:
+- `DISCONNECTED`: Not connected to any desktop workstation.
+- `DISCOVERING`: Scanning local network UDP broadcast beacons (Port 38476).
+- `PAIRING_REQUESTED`: Sent connection request to desktop workstation.
+- `AWAITING_APPROVAL`: Polling approval status while user approves prompt on desktop.
+- `CONNECTED`: Successfully authenticated with SHA-256 bearer token.
+- `RECONNECTING`: Attempting reconnection after transient network drop.
+- `CONNECTION_LOST`: Reconnection attempts timed out.
+- `ERROR`: Network or pairing error.
+
+---
+
+## 5. Roleplay Studio: 10 Modular Prompt Sections
 
 The Android companion includes an advanced prompt architect with ten modular sections:
 
@@ -181,19 +223,39 @@ Plus **Dynamic Custom Sections**: Users can add unlimited custom sections with p
 
 ---
 
-## 4. 16 KB Memory Page Size Compatibility
+## 6. 16 KB Memory Page Size Compatibility
 
-To ensure compatibility with Android 15+ 16 KB memory page sizes:
-- Replaced legacy C++ JNI barcode scanning (`libbarhopper_v3.so`, `libimage_processing_util_jni.so`) with pure JVM ZXing byte-code.
-- Configured Android Gradle Plugin packaging with `jniLibs { useLegacyPackaging = false }` to ensure all native libraries are 16 KB page aligned uncompressed in the APK.
+To ensure full compatibility with Android 15+ 16 KB memory page sizes:
+- Zero unaligned C++ native libraries in packaging (`unzip -l *.apk | grep '\.so'` returns zero entries).
+- Pure JVM ZXing barcode generation for pairing.
+- Configured Android Gradle Plugin packaging with `jniLibs { useLegacyPackaging = false }` so that any future native shared libraries are strictly 16 KB page-aligned.
 
 ---
 
-## 5. Local Build Instructions
+## 7. Persistent Release Signing & Update Compatibility
+
+To resolve `INSTALL_FAILED_UPDATE_INCOMPATIBLE` during upgrades:
+- Configured persistent signing configuration in `android/app/build.gradle.kts` supporting APK Signature Scheme v1, v2, and v3.
+- Both debug and release builds use consistent signing identities, allowing seamless over-the-top updates without requiring `adb uninstall`.
+
+---
+
+## 8. Local Build & Test Instructions
 
 ```bash
 cd android
+
+# Run Android Companion unit tests
 ./gradlew testDebugUnitTest
+
+# Build debug APK
 ./gradlew assembleDebug
+# Output: android/app/build/outputs/apk/debug/app-debug.apk
+
+# Build signed release APK
+./gradlew assembleRelease
+# Output: android/app/build/outputs/apk/release/app-release.apk
+
+# Verify 16 KB compliance (should output 0 .so files)
+unzip -l app/build/outputs/apk/release/app-release.apk | grep '\.so'
 ```
-Output APK is located at `android/app/build/outputs/apk/debug/app-debug.apk`.
