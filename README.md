@@ -64,6 +64,24 @@ Modern foundation models are shaped by the quality, consistency, and alignment o
 
 ### Implemented & Stable Features
 
+- **Mechon AI Android Companion & Local Gateway Staging Pipeline (v1.2.4)**:
+  - **Native Android Application (`ai.mechon.companion`)**:
+    - Production-grade Jetpack Compose + Material 3 client designed for mobile conversational exploration and SFT data gathering.
+    - Local Room persistence for conversation threads, messages, and roleplay presets with complete offline resilience.
+    - Multi-session chat interface with real-time markdown rendering and syntax-highlighted code blocks with one-tap copy actions.
+    - Multimodal vision support with base64 attachment ingestion and optional web search grounding.
+    - Multi-select conversation batch export and one-tap **"Send to Mechon Desktop"** workflow with idempotency.
+  - **Structured Roleplay Studio (9 Modular Sections)**:
+    - Modular prompt sections: *Character Identity*, *Appearance & Physicality*, *Personality & Psychology*, *Speech & Voice*, *World Setting & Lore*, *Scenario & Context*, *User Persona*, *Interaction Rules & Guardrails*, and *Custom Directives*.
+    - Live prompt preview composer and preset management (save, load, activate, delete).
+  - **Secure Desktop Local Network Gateway**:
+    - Embedded high-performance Axum HTTP server running on LAN port 38475.
+    - Dynamic LAN IP detection and QR code pairing protocol with rotating 15-minute codes and SHA-256 bearer tokens.
+    - Isolated provider model discovery proxy and single-inference chat execution without invoking desktop Tri-Agent steps.
+    - Mobile synchronization staging queue in SQLite (`paired_devices`, `mobile_sync_transfers`, `mobile_imported_conversations`).
+    - Native desktop SFT draft conversion and atomic commit to Mechon Corpus.
+  - **Android CI/CD Automation**: Dedicated `.github/workflows/android-ci.yml` with JDK 17, Android SDK setup, unit testing, and debug APK artifact packaging.
+
 - **Fine-Tuning Engineering & Certification Suite ("Let the Engineers Control the Quality")**:
   - **Core Engineering Philosophy**: AI can draft, translate, and synthesize, but human engineers retain definitive control over dataset acceptance, truncation policy, and training boundaries.
   - **Model-Aware Chat Template Validation**:

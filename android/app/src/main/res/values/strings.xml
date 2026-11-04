@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Mechon AI</string>
+    <string name="app_full_name">Mechon AI Android Companion</string>
+    <string name="version_display">v1.2.4 (Build 124)</string>
+</resources>

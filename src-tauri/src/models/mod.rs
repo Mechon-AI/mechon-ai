@@ -319,3 +319,51 @@ pub struct AnalyticsResponse {
     pub model_usage: Value,
     pub timeline_growth: Vec<Value>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairedDevice {
+    pub id: String,
+    pub device_name: String,
+    pub device_platform: String,
+    pub is_approved: bool,
+    pub last_active_at: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MobileSyncTransfer {
+    pub id: String,
+    pub device_id: Option<String>,
+    pub transfer_id: String,
+    pub conversation_count: i64,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MobileImportedConversation {
+    pub id: String,
+    pub transfer_id: String,
+    pub original_session_id: String,
+    pub title: String,
+    pub system_prompt: Option<String>,
+    pub model_id: Option<String>,
+    pub provider_id: Option<String>,
+    pub messages: Value,
+    pub metadata: Value,
+    pub status: String,
+    pub converted_sft_session_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MobileGatewayStatus {
+    pub is_running: bool,
+    pub port: u16,
+    pub local_ip: String,
+    pub pairing_code: Option<String>,
+    pub pairing_uri: Option<String>,
+    pub connected_devices_count: i64,
+    pub pending_imports_count: i64,
+}

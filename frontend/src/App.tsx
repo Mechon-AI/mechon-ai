@@ -43,6 +43,7 @@ const RouteSync: React.FC = () => {
       'engineering/dedup': { type: 'engineering/dedup', title: 'Deduplication' },
       'engineering/persona': { type: 'engineering/persona', title: 'Persona Audit' },
       'engineering/splits': { type: 'engineering/splits', title: 'Partition Splits' },
+      mobile: { type: 'mobile', title: 'Mobile Companion' },
     }
 
     if (routeMap[path]) {

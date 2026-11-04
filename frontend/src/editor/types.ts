@@ -20,6 +20,7 @@ export type EditorTabType =
   | 'engineering/splits'
   | 'readiness'
   | 'record-editor'
+  | 'mobile'
 
 export interface EditorTab {
   id: string

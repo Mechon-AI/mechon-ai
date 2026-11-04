@@ -23,7 +23,8 @@ import {
   GitFork,
   BarChart2,
   X,
-  Plus
+  Plus,
+  Smartphone
 } from 'lucide-react'
 import { useEditorStore } from '../stores/useEditorStore'
 import { useProjectStore } from '../../stores/useProjectStore'
@@ -58,6 +59,7 @@ const ENGINEERING_TOOLS: ExplorerItem[] = [
 ]
 
 const DELIVERY_TOOLS: ExplorerItem[] = [
+  { id: 'mobile', label: 'Mobile Companion', type: 'mobile', icon: Smartphone, highlight: true },
   { id: 'quality', label: 'Quality Control', type: 'quality', icon: ShieldCheck },
   { id: 'analytics', label: 'Analytics', type: 'analytics', icon: BarChart3 },
   { id: 'versions', label: 'Dataset Snapshots', type: 'versions', icon: History },

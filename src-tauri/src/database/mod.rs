@@ -50,6 +50,11 @@ pub async fn init_pool() -> Result<SqlitePool, AppError> {
         .execute(&pool)
         .await?;
 
+    let mobile_schema_sql = include_str!("../../migrations/20261104000000_mobile_companion.sql");
+    sqlx::raw_sql(mobile_schema_sql)
+        .execute(&pool)
+        .await?;
+
     // Story Architect Revision History and Invalidation Tracking
     let _ = sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS story_architect_message_revisions (

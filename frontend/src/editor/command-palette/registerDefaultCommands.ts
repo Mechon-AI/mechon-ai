@@ -51,6 +51,13 @@ export function initializeDefaultCommands(callbacks: {
       description: 'Open application settings and configuration',
       handler: () => store().openTab({ type: 'settings', title: 'Settings' })
     },
+    {
+      id: 'file.mobile-companion',
+      title: 'Mobile Companion',
+      category: 'File',
+      description: 'Open Mobile Companion and local network gateway',
+      handler: () => store().openTab({ type: 'mobile', title: 'Mobile Companion' })
+    },
 
     // View
     {

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.4] - 2026-11-04
+
+### Added
+- **Mechon AI Android Companion (`ai.mechon.companion`):**
+  - Native Android application built with Jetpack Compose, Material 3, and Kotlin Coroutines.
+  - Room local database persistence for chat sessions, messages, and roleplay prompt configurations.
+  - **Structured Roleplay Studio:** 9 modular prompt sections (Character Identity, Appearance, Personality, Speech & Voice, World Setting, Scenario, User Persona, Interaction Rules, Custom Directives) with live prompt assembly and preset management.
+  - Multi-session chat interface with real-time markdown rendering and syntax-highlighted code blocks with copy actions.
+  - Multimodal vision support with base64 attachment pipeline and optional web search grounding.
+  - Multi-select conversation batch export and one-tap "Send to Mechon Desktop" workflow with idempotency.
+- **Desktop Local Network Gateway:**
+  - Embedded high-performance Axum HTTP server running on LAN port 38475.
+  - Secure QR code pairing protocol with rotating 15-minute codes and SHA-256 token authentication.
+  - Isolated provider model discovery proxy and single-inference chat execution without invoking desktop Tri-Agent steps.
+  - Mobile synchronization staging queue in SQLite (`paired_devices`, `mobile_sync_transfers`, `mobile_imported_conversations`).
+  - Native desktop SFT draft conversion and atomic commit to Mechon Corpus.
+- **Android CI/CD Automation:**
+  - Added `.github/workflows/android-ci.yml` with JDK 17, Android SDK setup, version validation, unit tests, and debug APK artifact packaging.
+
+---
+
 ## [1.1.3] - 2026-11-03
 
 ### Added

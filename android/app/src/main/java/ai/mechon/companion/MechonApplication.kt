@@ -1,0 +1,61 @@
+package ai.mechon.companion
+
+import android.app.Application
+import ai.mechon.companion.data.local.AppDatabase
+import ai.mechon.companion.data.remote.DesktopApiClient
+import ai.mechon.companion.data.remote.SessionManager
+import ai.mechon.companion.data.repository.ChatRepository
+import ai.mechon.companion.data.repository.RoleplayRepository
+import ai.mechon.companion.data.repository.SyncRepository
+
+class MechonApplication : Application() {
+
+    lateinit var database: AppDatabase
+        private set
+
+    lateinit var sessionManager: SessionManager
+        private set
+
+    lateinit var desktopApiClient: DesktopApiClient
+        private set
+
+    lateinit var chatRepository: ChatRepository
+        private set
+
+    lateinit var roleplayRepository: RoleplayRepository
+        private set
+
+    lateinit var syncRepository: SyncRepository
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+
+        database = AppDatabase.getInstance(this)
+        sessionManager = SessionManager(this)
+        desktopApiClient = DesktopApiClient(sessionManager)
+
+        chatRepository = ChatRepository(
+            conversationDao = database.conversationDao(),
+            messageDao = database.messageDao(),
+            desktopApiClient = desktopApiClient,
+            sessionManager = sessionManager
+        )
+
+        roleplayRepository = RoleplayRepository(
+            presetDao = database.promptPresetDao()
+        )
+
+        syncRepository = SyncRepository(
+            conversationDao = database.conversationDao(),
+            messageDao = database.messageDao(),
+            desktopApiClient = desktopApiClient
+        )
+    }
+
+    companion object {
+        lateinit var instance: MechonApplication
+            private set
+    }
+}

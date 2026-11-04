@@ -4,8 +4,8 @@
 *.db-shm
 *.sqlite
 *.sqlite3
-data/
-config/
+/data/
+/config/
 
 # Node / Frontend
 node_modules/
@@ -44,3 +44,12 @@ packaging/arch/src/
 packaging/arch/mechon-ai/
 packaging/arch/*.pkg.tar.*
 packaging/arch/*.tar.gz
+
+# Android
+.gradle/
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
+*.apk
+*.aab

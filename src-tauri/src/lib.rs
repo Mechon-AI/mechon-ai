@@ -187,6 +187,19 @@ pub fn run() {
             commands::story_architect::list_message_revisions,
             commands::story_architect::restore_message_revision,
             commands::story_architect::regenerate_story_turn,
+
+            // Mobile Companion & Local Network Gateway
+            commands::mobile::get_mobile_gateway_status,
+            commands::mobile::start_mobile_gateway,
+            commands::mobile::stop_mobile_gateway,
+            commands::mobile::generate_pairing_code,
+            commands::mobile::list_paired_devices,
+            commands::mobile::approve_paired_device,
+            commands::mobile::revoke_paired_device,
+            commands::mobile::list_mobile_imports,
+            commands::mobile::convert_mobile_import_to_sft_draft,
+            commands::mobile::commit_mobile_import_to_corpus,
+            commands::mobile::delete_mobile_import,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Mechon AI");

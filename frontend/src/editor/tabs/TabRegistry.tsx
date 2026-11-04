@@ -23,6 +23,7 @@ import { PersonaAuditView } from '../../features/engineering/PersonaAuditView'
 import { SplitManagerView } from '../../features/engineering/SplitManagerView'
 import { TrainingReadinessView } from '../../features/readiness/TrainingReadinessView'
 import { RecordEditorView } from './RecordEditorView'
+import { MobileCompanionView } from '../../features/mobile/MobileCompanionView'
 
 interface TabContentRendererProps {
   tab: EditorTab
@@ -73,6 +74,8 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = React.memo(
         return <TrainingReadinessView />
       case 'record-editor':
         return <RecordEditorView tabId={tab.id} params={tab.params as any} />
+      case 'mobile':
+        return <MobileCompanionView />
       default:
         return (
           <div className="flex items-center justify-center h-full text-muted-foreground text-xs">

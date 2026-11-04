@@ -804,4 +804,83 @@ export const restoreMessageRevision = (data: RestoreRevisionInput): Promise<Stor
 export const regenerateStoryTurn = (data: RegenerateAssistantTurnInput): Promise<ExecutionTurnResult> =>
   invoke<ExecutionTurnResult>('regenerate_story_turn', { data })
 
+// -------------------------------------------------------------
+// Mobile Companion & Local Gateway API
+// -------------------------------------------------------------
+
+export interface MobileGatewayStatus {
+  is_running: boolean
+  port: number
+  local_ip: string
+  pairing_code: string | null
+  pairing_uri: string | null
+  connected_devices_count: number
+  pending_imports_count: number
+}
+
+export interface PairedDevice {
+  id: string
+  device_name: string
+  device_platform: string
+  is_approved: boolean
+  last_active_at: string
+  created_at: string
+}
+
+export interface MobileImportedConversation {
+  id: string
+  transfer_id: string
+  original_session_id: string
+  title: string
+  system_prompt?: string | null
+  model_id?: string | null
+  provider_id?: string | null
+  messages: Array<{ role: string; content: string; model?: string }>
+  metadata: Record<string, any>
+  status: 'pending' | 'converted_to_draft' | 'committed' | 'rejected'
+  converted_sft_session_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const getMobileGatewayStatus = (): Promise<MobileGatewayStatus> =>
+  invoke<MobileGatewayStatus>('get_mobile_gateway_status')
+
+export const startMobileGateway = (port?: number): Promise<MobileGatewayStatus> =>
+  invoke<MobileGatewayStatus>('start_mobile_gateway', { port })
+
+export const stopMobileGateway = (): Promise<MobileGatewayStatus> =>
+  invoke<MobileGatewayStatus>('stop_mobile_gateway')
+
+export const generatePairingCode = (): Promise<{ code: string; uri: string }> =>
+  invoke<{ code: string; uri: string }>('generate_pairing_code')
+
+export const listPairedDevices = (): Promise<PairedDevice[]> =>
+  invoke<PairedDevice[]>('list_paired_devices')
+
+export const approvePairedDevice = (deviceId: string): Promise<void> =>
+  invoke<void>('approve_paired_device', { deviceId })
+
+export const revokePairedDevice = (deviceId: string): Promise<void> =>
+  invoke<void>('revoke_paired_device', { deviceId })
+
+export const listMobileImports = (): Promise<MobileImportedConversation[]> =>
+  invoke<MobileImportedConversation[]>('list_mobile_imports')
+
+export const convertMobileImportToSftDraft = (
+  importId: string,
+  targetProjectId?: string
+): Promise<string> =>
+  invoke<string>('convert_mobile_import_to_sft_draft', { importId, targetProjectId })
+
+export const commitMobileImportToCorpus = (
+  importId: string,
+  targetProjectId?: string
+): Promise<string> =>
+  invoke<string>('commit_mobile_import_to_corpus', { importId, targetProjectId })
+
+export const deleteMobileImport = (importId: string): Promise<void> =>
+  invoke<void>('delete_mobile_import', { importId })
+
+
 
