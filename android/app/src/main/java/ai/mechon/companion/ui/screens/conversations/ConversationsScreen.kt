@@ -26,6 +26,7 @@ fun ConversationsScreen(
     onConversationSelected: (String) -> Unit,
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToChat: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()

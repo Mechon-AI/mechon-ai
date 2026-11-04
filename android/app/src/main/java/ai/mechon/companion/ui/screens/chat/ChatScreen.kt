@@ -8,9 +8,12 @@ import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,17 +27,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.local.ConversationEntity
 import ai.mechon.companion.data.remote.AttachmentPayload
+import ai.mechon.companion.ui.components.*
 import ai.mechon.companion.ui.theme.*
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,16 +48,14 @@ fun ChatScreen(
     onNavigateToRoleplay: () -> Unit,
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var editDialogText by remember { mutableStateOf("") }
-    var renameDialogTarget by remember { mutableStateOf<ConversationEntity?>(null) }
-    var renameInputText by remember { mutableStateOf("") }
     val context = LocalContext.current
 
     LaunchedEffect(conversationId) {
@@ -66,7 +68,7 @@ fun ChatScreen(
         }
     }
 
-    // File / Image Picker Launchers
+    // File / Image Picker Launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -79,7 +81,7 @@ fun ChatScreen(
                 inputStream?.close()
 
                 val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                val name = uri.lastPathSegment ?: "file"
+                val name = uri.lastPathSegment ?: "attachment"
 
                 viewModel.addAttachment(
                     AttachmentPayload(
@@ -90,433 +92,429 @@ fun ChatScreen(
                     )
                 )
             } catch (e: Exception) {
-                Toast.makeText(context, "Failed to load file: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Failed to load attachment: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MechonSurface,
-                modifier = Modifier.width(320.dp)
-            ) {
-                ConversationDrawerContent(
-                    conversations = uiState.conversationsList,
-                    activeConversationId = uiState.conversation?.id,
-                    searchQuery = uiState.searchQuery,
-                    selectedForSyncIds = uiState.selectedForSyncIds,
-                    isSyncing = uiState.isSyncing,
-                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSelectConversation = { id ->
-                        viewModel.loadConversation(id)
-                        coroutineScope.launch { drawerState.close() }
-                    },
-                    onNewConversation = {
-                        viewModel.createNewConversation {
-                            coroutineScope.launch { drawerState.close() }
-                        }
-                    },
-                    onRename = { conv ->
-                        renameDialogTarget = conv
-                        renameInputText = conv.title
-                    },
-                    onDuplicate = { conv -> viewModel.duplicateConversation(conv.id) },
-                    onArchive = { conv -> viewModel.archiveConversation(conv.id) },
-                    onDelete = { conv -> viewModel.deleteConversation(conv.id) },
-                    onToggleSyncSelection = { conv -> viewModel.toggleSyncSelection(conv.id) },
-                    onSyncSelected = { viewModel.syncSelectedConversations() },
-                    onNavigateToRoleplay = {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToRoleplay()
-                    },
-                    onNavigateToPairing = {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToPairing()
-                    },
-                    onNavigateToSettings = {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToSettings()
-                    }
-                )
-            }
-        }
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = uiState.conversation?.title ?: "Mechon Chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
-                                maxLines = 1
-                            )
-                            // Model & Provider Pill
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MechonSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(top = 2.dp)
-                                    .clickable { viewModel.setModelDialogOpen(true) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${uiState.conversation?.modelId ?: "Select Model"} • ${uiState.conversation?.providerId ?: "auto"}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MechonBlueLight,
-                                        fontSize = 11.sp
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = MechonBlueLight,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
+    Scaffold(
+        topBar = {
+            MechonMobileHeader(
+                isPaired = uiState.isPaired,
+                workstationName = "Mechon Workstation",
+                onPairingClick = onNavigateToPairing
+            )
+        },
+        bottomBar = {
+            MechonFloatingBottomNav(
+                currentTab = NavTab.CHAT,
+                onTabSelected = { tab ->
+                    when (tab) {
+                        NavTab.CHAT -> {
+                            // Already on chat; if not on blank chat, can start new
+                            if (uiState.messages.isNotEmpty()) {
+                                viewModel.createNewConversation()
                             }
                         }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Open Conversation Drawer",
-                                tint = TextPrimary
+                        NavTab.HISTORY -> onNavigateToHistory()
+                        NavTab.SETTINGS -> onNavigateToSettings()
+                    }
+                }
+            )
+        },
+        containerColor = ObsidianBlack
+    ) { paddingValues ->
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(ObsidianBlack)
+                .padding(paddingValues)
+        ) {
+            // Subtle Ambient Top Violet Glow
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                AmbientGlowDeep,
+                                Color.Transparent
                             )
-                        }
-                    },
-                    actions = {
-                        // Desktop Connection Indicator / Shortcut
-                        IconButton(onClick = onNavigateToPairing) {
-                            Icon(
-                                imageVector = if (uiState.isPaired) Icons.Default.Lan else Icons.Default.CloudOff,
-                                contentDescription = if (uiState.isPaired) "Desktop Paired" else "Desktop Disconnected",
-                                tint = if (uiState.isPaired) MechonGreen else TextMuted
-                            )
-                        }
-                        // Web Search Toggle Action
-                        IconButton(onClick = { viewModel.toggleWebSearch() }) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = "Toggle Web Search",
-                                tint = if (uiState.webSearchEnabled) MechonCyan else TextMuted
-                            )
-                        }
-                        // Roleplay Studio Shortcut
-                        IconButton(onClick = onNavigateToRoleplay) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "Roleplay Studio",
-                                tint = MechonPurple
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MechonDarkBg
+                        )
                     )
-                )
-            },
-            containerColor = MechonDarkBg
-        ) { paddingValues ->
+            )
+
             Column(
-                modifier = modifier
+                modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .imePadding()
             ) {
                 // Feedback Banners (Error or Sync Success)
-                if (uiState.syncSuccessMessage != null) {
+                AnimatedVisibility(
+                    visible = uiState.syncSuccessMessage != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
                     Surface(
-                        color = MechonGreen.copy(alpha = 0.2f),
-                        modifier = Modifier.fillMaxWidth()
+                        color = StatusConnected.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, StatusConnected.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = uiState.syncSuccessMessage ?: "",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MechonGreen,
+                                color = StatusConnected,
                                 fontWeight = FontWeight.SemiBold
                             )
                             IconButton(
                                 onClick = { viewModel.clearFeedback() },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(18.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = null, tint = MechonGreen, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = StatusConnected, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
                 }
 
-                if (uiState.error != null) {
+                AnimatedVisibility(
+                    visible = uiState.error != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
                     Surface(
-                        color = MechonRed.copy(alpha = 0.2f),
-                        modifier = Modifier.fillMaxWidth()
+                        color = StatusError.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, StatusError.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = uiState.error ?: "",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MechonRed,
+                                color = StatusError,
+                                fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = { viewModel.regenerateLastResponse() }) {
-                                Text("Retry", color = MechonRed, fontWeight = FontWeight.Bold)
-                            }
-                            IconButton(
-                                onClick = { viewModel.clearError() },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = null, tint = MechonRed, modifier = Modifier.size(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = { viewModel.regenerateLastResponse() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Retry", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                IconButton(
+                                    onClick = { viewModel.clearFeedback() },
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = StatusError, modifier = Modifier.size(14.dp))
+                                }
                             }
                         }
                     }
                 }
 
-                // Messages Viewport
-                LazyColumn(
-                    state = listState,
+                // Chat Message Stream or Minimalist Welcome Center
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                        .fillMaxWidth()
                 ) {
                     if (uiState.messages.isEmpty() && !uiState.isInferring) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 80.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChatBubbleOutline,
-                                        contentDescription = null,
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(54.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(
-                                        text = "Mechon Conversational Companion",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextSecondary
-                                    )
-                                    Text(
-                                        text = "Engage in multi-turn dialogue, experiment with roleplay, and send select sessions to Mechon Desktop for SFT engineering.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextMuted,
-                                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 6.dp),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    items(uiState.messages, key = { it.id }) { msg ->
-                        MessageBubble(
-                            message = msg,
-                            onActionClick = { viewModel.openMessageAction(it) }
+                        MechonAtmosphericWelcome(
+                            onPromptClick = { prompt ->
+                                inputText = prompt
+                            },
+                            modifier = Modifier.align(Alignment.Center)
                         )
-                    }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(uiState.messages, key = { it.id }) { msg ->
+                                MessageBubble(
+                                    message = msg,
+                                    onActionClick = { viewModel.openMessageAction(it) }
+                                )
+                            }
 
-                    if (uiState.isInferring) {
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MechonCyan
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Generating response...",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextMuted
-                                    )
-                                }
-                                OutlinedButton(
-                                    onClick = { viewModel.stopGeneration() },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MechonRed),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp)
-                                ) {
-                                    Text("Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            if (uiState.isInferring) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 2.dp,
+                                                color = ElectricViolet
+                                            )
+                                            Text(
+                                                text = "Mechon is generating...",
+                                                color = TextSecondary,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(ElevatedSurface)
+                                                .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+                                                .clickable { viewModel.stopGeneration() }
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "Stop",
+                                                color = StatusError,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Attachment Tray
-                AttachmentTray(
-                    attachments = uiState.selectedAttachments,
-                    onRemoveAttachment = { viewModel.removeAttachment(it) }
-                )
+                // Attachment Preview Tray
+                if (uiState.selectedAttachments.isNotEmpty()) {
+                    AttachmentTray(
+                        attachments = uiState.selectedAttachments,
+                        onRemoveAttachment = { viewModel.removeAttachment(it) }
+                    )
+                }
 
-                // Composer Context Toolbar (Roleplay pill, search toggle, model pill)
-                Surface(
-                    color = MechonSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
+                // Floating Glass Composer
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .shadow(16.dp, shape = RoundedCornerShape(26.dp), spotColor = ElectricViolet.copy(alpha = 0.2f))
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(GlassSurface)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(26.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
-                        // Roleplay Context Indicator Pill
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MechonPurple.copy(alpha = 0.2f),
-                            modifier = Modifier.clickable { onNavigateToRoleplay() }
+                        // Top Context Toolbar inside Composer: Model Selector & Capabilities
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Model Selector Chip (Displays actual remote desktop model)
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(ElevatedSurfaceHighlight)
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+                                    .clickable { viewModel.setModelDialogOpen(true) }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(Icons.Default.TheaterComedy, contentDescription = null, tint = MechonPurple, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Roleplay Context", color = MechonPurple, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        // Web Search Pill Toggle
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (uiState.webSearchEnabled) MechonCyan.copy(alpha = 0.2f) else MechonSurface,
-                            modifier = Modifier.clickable { viewModel.toggleWebSearch() }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Language, contentDescription = null, tint = if (uiState.webSearchEnabled) MechonCyan else TextMuted, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(ElectricViolet)
+                                )
                                 Text(
-                                    text = if (uiState.webSearchEnabled) "Search: ON" else "Search: OFF",
-                                    color = if (uiState.webSearchEnabled) MechonCyan else TextMuted,
+                                    text = (uiState.conversation?.modelId ?: "gemini-2.5-flash"),
+                                    color = TextPrimary,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                            }
-                        }
-                    }
-                }
-
-                // Expandable Composer Input Bar
-                Surface(
-                    color = MechonSurface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        // Attachment Action Button
-                        IconButton(
-                            onClick = { filePickerLauncher.launch("*/*") }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AttachFile,
-                                contentDescription = "Attach File",
-                                tint = TextSecondary
-                            )
-                        }
-
-                        // Multiline Auto-Expanding TextField
-                        TextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            placeholder = {
                                 Text(
-                                    text = if (uiState.webSearchEnabled) "Ask with web search..." else "Write a message...",
+                                    text = "• ${uiState.conversation?.providerId ?: "gemini"}",
                                     color = TextMuted,
-                                    fontSize = 14.sp
+                                    fontSize = 10.sp
                                 )
-                            },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MechonDarkBg,
-                                unfocusedContainerColor = MechonDarkBg,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                                cursorColor = MechonBlueLight,
-                                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp, max = 130.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Send or Stop Generation Button
-                        if (uiState.isInferring) {
-                            IconButton(
-                                onClick = { viewModel.stopGeneration() },
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(MechonRed)
-                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "Stop generation",
-                                    tint = TextPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select Model",
+                                    tint = SoftLavender,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
-                        } else {
-                            val canSend = (inputText.isNotBlank() || uiState.selectedAttachments.isNotEmpty())
+
+                            // Secondary Controls: Roleplay Studio & Web Search Pills
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Roleplay Studio Pill
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(ElevatedSurfaceHighlight)
+                                        .clickable { onNavigateToRoleplay() }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = "Roleplay Context",
+                                        tint = SoftLavender,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = "Roleplay",
+                                        color = SoftLavender,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                // Web Search Toggle Pill
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(if (uiState.webSearchEnabled) ElectricViolet.copy(alpha = 0.25f) else ElevatedSurfaceHighlight)
+                                        .clickable { viewModel.toggleWebSearch() }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = "Web Search",
+                                        tint = if (uiState.webSearchEnabled) SoftLavender else TextMuted,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = if (uiState.webSearchEnabled) "Search ON" else "Search",
+                                        color = if (uiState.webSearchEnabled) TextPrimary else TextMuted,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        // Input Field Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            // Attachment Button
                             IconButton(
-                                onClick = {
-                                    if (canSend) {
-                                        val text = inputText
-                                        inputText = ""
-                                        viewModel.sendMessage(text)
-                                    }
-                                },
-                                enabled = canSend,
+                                onClick = { filePickerLauncher.launch("*/*") },
                                 modifier = Modifier
-                                    .size(42.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(if (canSend) MechonBlue else MechonSurfaceVariant)
+                                    .background(ElevatedSurfaceHighlight)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Send,
-                                    contentDescription = "Send",
-                                    tint = if (canSend) TextPrimary else TextMuted,
+                                    imageVector = Icons.Default.AttachFile,
+                                    contentDescription = "Attach File",
+                                    tint = SoftLavender,
                                     modifier = Modifier.size(18.dp)
                                 )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Multiline Message Input
+                            TextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                placeholder = {
+                                    Text(
+                                        text = if (uiState.webSearchEnabled) "Search the web and ask..." else "Message MECHON...",
+                                        color = TextMuted,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    cursorColor = ElectricViolet,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 40.dp, max = 120.dp)
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Send or Stop Generation Button
+                            if (uiState.isInferring) {
+                                IconButton(
+                                    onClick = { viewModel.stopGeneration() },
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(StatusError)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = "Stop generation",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else {
+                                val canSend = (inputText.isNotBlank() || uiState.selectedAttachments.isNotEmpty())
+                                val sendBrush = if (canSend) VioletGlowBrush else Brush.linearGradient(listOf(ElevatedSurfaceHighlight, ElevatedSurfaceHighlight))
+
+                                IconButton(
+                                    onClick = {
+                                        if (canSend) {
+                                            val text = inputText
+                                            inputText = ""
+                                            viewModel.sendMessage(text)
+                                        }
+                                    },
+                                    enabled = canSend,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(sendBrush)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowUpward,
+                                        contentDescription = "Send",
+                                        tint = if (canSend) Color.White else TextMuted,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -525,183 +523,146 @@ fun ChatScreen(
         }
     }
 
-    // Message Actions Bottom Sheet / Dialog
+    // Message Actions Sheet / Dialog
     if (uiState.activeActionMessage != null && !uiState.isEditingMessage) {
         val msg = uiState.activeActionMessage!!
         AlertDialog(
             onDismissRequest = { viewModel.closeMessageAction() },
+            containerColor = ElevatedSurface,
             title = {
                 Text(
-                    text = if (msg.role == "user") "Your Message" else "Assistant Response",
+                    text = if (msg.role == "user") "Your Message" else "Mechon Response",
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Copy
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MechonSurfaceVariant,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ElevatedSurfaceHighlight)
                             .clickable {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("message", msg.content))
                                 Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                                 viewModel.closeMessageAction()
                             }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MechonBlueLight, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Copy Message Text", color = TextPrimary)
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Copy Text", color = TextPrimary, fontSize = 14.sp)
+                    }
+
+                    // Edit (User only)
+                    if (msg.role == "user") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ElevatedSurfaceHighlight)
+                                .clickable {
+                                    editDialogText = msg.content
+                                    viewModel.startEditingMessage(msg)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Edit Message", color = TextPrimary, fontSize = 14.sp)
                         }
                     }
 
-                    // Edit
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MechonSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                editDialogText = msg.content
-                                viewModel.startEditingMessage(msg)
-                            }
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = MechonCyan, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Edit Message Content", color = TextPrimary)
-                        }
-                    }
-
-                    // Regenerate (if assistant or user)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MechonSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                viewModel.closeMessageAction()
-                                viewModel.regenerateLastResponse()
-                            }
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, tint = MechonPurple, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Regenerate Response", color = TextPrimary)
+                    // Regenerate (Assistant only)
+                    if (msg.role == "assistant") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ElevatedSurfaceHighlight)
+                                .clickable {
+                                    viewModel.regenerateLastResponse()
+                                    viewModel.closeMessageAction()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Regenerate Response", color = TextPrimary, fontSize = 14.sp)
                         }
                     }
 
                     // Delete
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MechonSurfaceVariant,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ElevatedSurfaceHighlight)
                             .clickable {
                                 viewModel.deleteMessage(msg.id)
+                                viewModel.closeMessageAction()
                             }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = MechonRed, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Delete Message", color = MechonRed)
-                        }
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = StatusError, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Delete Message", color = StatusError, fontSize = 14.sp)
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.closeMessageAction() }) {
-                    Text("Close", color = TextMuted)
+                    Text("Close", color = TextSecondary)
                 }
-            },
-            containerColor = MechonSurface
+            }
         )
     }
 
-    // Edit Message Dialog
-    if (uiState.isEditingMessage) {
+    // Edit User Message Dialog
+    if (uiState.isEditingMessage && uiState.activeActionMessage != null) {
+        val targetMsg = uiState.activeActionMessage!!
         AlertDialog(
             onDismissRequest = { viewModel.closeMessageAction() },
-            title = { Text("Edit Message", color = TextPrimary) },
+            containerColor = ElevatedSurface,
+            title = { Text("Edit Message", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
+                TextField(
                     value = editDialogText,
                     onValueChange = { editDialogText = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 100.dp, max = 220.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = ObsidianBlack,
+                        unfocusedContainerColor = ObsidianBlack,
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = MechonBlueLight,
-                        unfocusedBorderColor = MechonBorder
-                    )
+                        cursorColor = ElectricViolet
+                    ),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 200.dp)
                 )
             },
             confirmButton = {
                 Button(
                     onClick = { viewModel.saveEditedMessage(editDialogText) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MechonBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
                 ) {
-                    Text("Save")
+                    Text("Save & Branch", color = TextPrimary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.closeMessageAction() }) {
-                    Text("Cancel", color = TextMuted)
+                    Text("Cancel", color = TextSecondary)
                 }
-            },
-            containerColor = MechonSurface
+            }
         )
     }
 
-    // Rename Conversation Dialog
-    if (renameDialogTarget != null) {
-        AlertDialog(
-            onDismissRequest = { renameDialogTarget = null },
-            title = { Text("Rename Conversation", color = TextPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = renameInputText,
-                    onValueChange = { renameInputText = it },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = MechonBlueLight,
-                        unfocusedBorderColor = MechonBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val target = renameDialogTarget
-                        if (target != null && renameInputText.isNotBlank()) {
-                            viewModel.renameConversation(target.id, renameInputText.trim())
-                        }
-                        renameDialogTarget = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MechonBlue)
-                ) {
-                    Text("Rename")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameDialogTarget = null }) {
-                    Text("Cancel", color = TextMuted)
-                }
-            },
-            containerColor = MechonSurface
-        )
-    }
-
-    // Model Selector Dialog
+    // Searchable Remote Model Selector Dialog
     if (uiState.isModelDialogOpen) {
         ModelSelectorDialog(
             models = uiState.availableModels,
@@ -710,258 +671,15 @@ fun ChatScreen(
             isLoading = uiState.isModelLoading,
             errorMessage = uiState.modelFetchError,
             searchQuery = uiState.modelSearchQuery,
-            onSearchQueryChange = { q -> viewModel.setModelSearchQuery(q) },
+            onSearchQueryChange = { viewModel.setModelSearchQuery(it) },
             onRefresh = { viewModel.fetchAvailableModels(forceRefresh = true) },
-            onModelSelect = { item -> viewModel.selectModel(item) },
-            onDismiss = { viewModel.setModelDialogOpen(false) }
+            onModelSelect = { item ->
+                viewModel.selectModel(item)
+                viewModel.setModelDialogOpen(false)
+            },
+            onDismiss = {
+                viewModel.setModelDialogOpen(false)
+            }
         )
-    }
-}
-
-@Composable
-fun ConversationDrawerContent(
-    conversations: List<ConversationEntity>,
-    activeConversationId: String?,
-    searchQuery: String,
-    selectedForSyncIds: Set<String>,
-    isSyncing: Boolean,
-    onSearchQueryChange: (String) -> Unit,
-    onSelectConversation: (String) -> Unit,
-    onNewConversation: () -> Unit,
-    onRename: (ConversationEntity) -> Unit,
-    onDuplicate: (ConversationEntity) -> Unit,
-    onArchive: (ConversationEntity) -> Unit,
-    onDelete: (ConversationEntity) -> Unit,
-    onToggleSyncSelection: (ConversationEntity) -> Unit,
-    onSyncSelected: () -> Unit,
-    onNavigateToRoleplay: () -> Unit,
-    onNavigateToPairing: () -> Unit,
-    onNavigateToSettings: () -> Unit
-) {
-    val dateFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Drawer Header with "New Chat"
-        Surface(
-            color = MechonSurfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Conversations",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Button(
-                        onClick = onNewConversation,
-                        colors = ButtonDefaults.buttonColors(containerColor = MechonBlue),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("New Chat", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Search field
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    placeholder = { Text("Search chats...", color = TextMuted, fontSize = 12.sp) },
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp)) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = MechonBlue,
-                        unfocusedBorderColor = MechonBorder,
-                        focusedContainerColor = MechonDarkBg,
-                        unfocusedContainerColor = MechonDarkBg
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                )
-            }
-        }
-
-        // Conversation List
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(conversations, key = { it.id }) { conv ->
-                val isActive = conv.id == activeConversationId
-                val isSelectedForSync = selectedForSyncIds.contains(conv.id)
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isActive) MechonSurfaceVariant else MechonSurface,
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(
-                            if (isActive) MechonBlue else MechonBorder
-                        )
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelectConversation(conv.id) }
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = conv.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isActive) MechonBlueLight else TextPrimary,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Checkbox(
-                                checked = isSelectedForSync,
-                                onCheckedChange = { onToggleSyncSelection(conv) },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = MechonGreen,
-                                    checkmarkColor = TextPrimary
-                                ),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${conv.modelId} • ${dateFormat.format(Date(conv.updatedAt))}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextMuted,
-                                fontSize = 10.sp
-                            )
-
-                            // Quick Actions: Rename, Duplicate, Archive, Delete
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { onRename(conv) },
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Rename", tint = TextMuted, modifier = Modifier.size(12.dp))
-                                }
-                                IconButton(
-                                    onClick = { onDuplicate(conv) },
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate", tint = TextMuted, modifier = Modifier.size(12.dp))
-                                }
-                                IconButton(
-                                    onClick = { onDelete(conv) },
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MechonRed, modifier = Modifier.size(12.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Batch Sync Bar if selected
-        if (selectedForSyncIds.isNotEmpty()) {
-            Surface(
-                color = MechonSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(
-                    onClick = onSyncSelected,
-                    enabled = !isSyncing,
-                    colors = ButtonDefaults.buttonColors(containerColor = MechonGreen),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp)
-                        .height(40.dp)
-                ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = TextPrimary)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Sending to Desktop...")
-                    } else {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Send to Desktop (${selectedForSyncIds.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        // Drawer Bottom Links
-        Surface(
-            color = MechonDarkBg,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Surface(
-                    color = MechonSurface,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToRoleplay() }
-                ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.TheaterComedy, contentDescription = null, tint = MechonPurple, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Roleplay Configuration Studio", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-
-                Surface(
-                    color = MechonSurface,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToPairing() }
-                ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Lan, contentDescription = null, tint = MechonBlueLight, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Desktop Pairing & LAN Discovery", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-
-                Surface(
-                    color = MechonSurface,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToSettings() }
-                ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Settings, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Settings & Diagnostics", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
     }
 }

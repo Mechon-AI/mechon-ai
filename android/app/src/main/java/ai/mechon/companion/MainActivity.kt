@@ -17,6 +17,8 @@ import androidx.navigation.navArgument
 import ai.mechon.companion.ui.navigation.Screen
 import ai.mechon.companion.ui.screens.chat.ChatScreen
 import ai.mechon.companion.ui.screens.chat.ChatViewModel
+import ai.mechon.companion.ui.screens.conversations.ConversationsScreen
+import ai.mechon.companion.ui.screens.conversations.ConversationsViewModel
 import ai.mechon.companion.ui.screens.pairing.PairingScreen
 import ai.mechon.companion.ui.screens.pairing.PairingViewModel
 import ai.mechon.companion.ui.screens.roleplay.RoleplayStudioScreen
@@ -74,6 +76,44 @@ class MainActivity : ComponentActivity() {
                                 conversationId = convId,
                                 onNavigateToRoleplay = {
                                     navController.navigate(Screen.Roleplay.route)
+                                },
+                                onNavigateToPairing = {
+                                    navController.navigate(Screen.Pairing.route)
+                                },
+                                onNavigateToSettings = {
+                                    navController.navigate(Screen.Settings.route)
+                                },
+                                onNavigateToHistory = {
+                                    navController.navigate(Screen.Conversations.route)
+                                }
+                            )
+                        }
+
+                        // Conversation History Screen
+                        composable(Screen.Conversations.route) {
+                            val vm: ConversationsViewModel = viewModel(
+                                factory = object : ViewModelProvider.Factory {
+                                    @Suppress("UNCHECKED_CAST")
+                                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                                        return ConversationsViewModel(
+                                            chatRepository = app.chatRepository,
+                                            syncRepository = app.syncRepository,
+                                            sessionManager = app.sessionManager
+                                        ) as T
+                                    }
+                                }
+                            )
+                            ConversationsScreen(
+                                viewModel = vm,
+                                onConversationSelected = { id ->
+                                    navController.navigate(Screen.Chat.createRoute(id)) {
+                                        popUpTo(Screen.Chat.route) { inclusive = true }
+                                    }
+                                },
+                                onNavigateToChat = {
+                                    navController.navigate(Screen.Chat.createRoute(null)) {
+                                        popUpTo(Screen.Chat.route) { inclusive = true }
+                                    }
                                 },
                                 onNavigateToPairing = {
                                     navController.navigate(Screen.Pairing.route)
