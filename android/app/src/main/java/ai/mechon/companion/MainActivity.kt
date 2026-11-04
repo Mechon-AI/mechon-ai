@@ -17,8 +17,6 @@ import androidx.navigation.navArgument
 import ai.mechon.companion.ui.navigation.Screen
 import ai.mechon.companion.ui.screens.chat.ChatScreen
 import ai.mechon.companion.ui.screens.chat.ChatViewModel
-import ai.mechon.companion.ui.screens.conversations.ConversationsScreen
-import ai.mechon.companion.ui.screens.conversations.ConversationsViewModel
 import ai.mechon.companion.ui.screens.pairing.PairingScreen
 import ai.mechon.companion.ui.screens.pairing.PairingViewModel
 import ai.mechon.companion.ui.screens.roleplay.RoleplayStudioScreen
@@ -43,37 +41,9 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(
                         navController = navController,
-                        startDestination = Screen.Conversations.route
+                        startDestination = "chat"
                     ) {
-                        // Conversations Screen (Home)
-                        composable(Screen.Conversations.route) {
-                            val vm: ConversationsViewModel = viewModel(
-                                factory = object : ViewModelProvider.Factory {
-                                    @Suppress("UNCHECKED_CAST")
-                                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                                        return ConversationsViewModel(
-                                            chatRepository = app.chatRepository,
-                                            syncRepository = app.syncRepository,
-                                            sessionManager = app.sessionManager
-                                        ) as T
-                                    }
-                                }
-                            )
-                            ConversationsScreen(
-                                viewModel = vm,
-                                onConversationSelected = { convId ->
-                                    navController.navigate("chat?conversationId=$convId")
-                                },
-                                onNavigateToPairing = {
-                                    navController.navigate(Screen.Pairing.route)
-                                },
-                                onNavigateToSettings = {
-                                    navController.navigate(Screen.Settings.route)
-                                }
-                            )
-                        }
-
-                        // Chat Screen
+                        // Main Chat Screen (Primary UI)
                         composable(
                             route = Screen.Chat.route,
                             arguments = listOf(
@@ -92,6 +62,7 @@ class MainActivity : ComponentActivity() {
                                         return ChatViewModel(
                                             chatRepository = app.chatRepository,
                                             roleplayRepository = app.roleplayRepository,
+                                            syncRepository = app.syncRepository,
                                             desktopApiClient = app.desktopApiClient,
                                             sessionManager = app.sessionManager
                                         ) as T
@@ -104,8 +75,11 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToRoleplay = {
                                     navController.navigate(Screen.Roleplay.route)
                                 },
-                                onNavigateToConversations = {
-                                    navController.popBackStack(Screen.Conversations.route, inclusive = false)
+                                onNavigateToPairing = {
+                                    navController.navigate(Screen.Pairing.route)
+                                },
+                                onNavigateToSettings = {
+                                    navController.navigate(Screen.Settings.route)
                                 }
                             )
                         }
@@ -132,7 +106,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // Desktop Pairing Screen
+                        // Desktop Pairing Screen (Auto LAN Discovery + Approval + QR Fallback)
                         composable(Screen.Pairing.route) {
                             val vm: PairingViewModel = viewModel(
                                 factory = object : ViewModelProvider.Factory {
@@ -140,7 +114,8 @@ class MainActivity : ComponentActivity() {
                                     override fun <T : ViewModel> create(modelClass: Class<T>): T {
                                         return PairingViewModel(
                                             sessionManager = app.sessionManager,
-                                            desktopApiClient = app.desktopApiClient
+                                            desktopApiClient = app.desktopApiClient,
+                                            lanDiscoveryService = app.lanDiscoveryService
                                         ) as T
                                     }
                                 }

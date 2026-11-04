@@ -1,82 +1,102 @@
 # Mechon AI Android Companion & Local Gateway Protocol
-**Target Release: Mechon AI v1.2.4**
+**Target Release: Mechon AI v1.2.5**
 
 ---
 
 ## 1. Overview & Architecture
 
-Mechon AI v1.2.4 introduces the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile application designed for conversational AI, roleplay exploration, and mobile-to-workstation dataset generation.
+Mechon AI v1.2.5 provides the **Mechon AI Android Companion** (`ai.mechon.companion`), a native mobile AI chat client designed for conversational immersion, structured roleplay, and mobile-to-workstation SFT dataset engineering.
 
 ```
-+--------------------------------------------------------+
-|             Mechon AI Android Companion                |
-|  - Jetpack Compose + Material 3 UI                     |
-|  - Room Local Persistence (Conversations, Presets)     |
-|  - Roleplay Studio (9 Modular Prompt Sections)         |
-|  - Vision Model Support & Web Search Grounding         |
-|  - One-Tap "Send to Mechon Desktop" Sync               |
-+---------------------------+----------------------------+
-                            |
-           Encrypted Bearer Authentication (SHA-256)
-           Local Network (Wi-Fi / LAN)
-                            |
-+---------------------------v----------------------------+
-|             Mechon AI Desktop Gateway                  |
-|  - Native Axum HTTP Server (Port 38475)                |
-|  - Dynamic LAN IP Detection & QR Pairing Service       |
-|  - Secure Provider Model Discovery Proxy               |
-|  - Direct Single-Inference Route (No Tri-Agent Leak)   |
-|  - Conversation Staging & SFT Dataset Commit Pipeline  |
-+--------------------------------------------------------+
++-------------------------------------------------------------+
+|               Mechon AI Android Companion                   |
+|  - Jetpack Compose + Material 3 Conversational UI           |
+|  - Opens directly into Chat (Drawer for conversation lib)   |
+|  - Message Controls: Copy, Edit, Regenerate, Delete, Stop   |
+|  - Expandable Composer: Vision attachments, Web Search      |
+|  - Advanced Roleplay Studio: 10 Modular Sections + Custom   |
+|  - Character Library with avatars, presets & prompt history |
+|  - Automatic LAN Discovery & Approval-Based Pairing         |
+|  - 16 KB Page-Size Compatible (Pure JVM QR / Zero JNI .so)  |
++------------------------------+------------------------------+
+                               |
+              Encrypted Bearer Authentication (SHA-256)
+              Local Network Discovery (UDP Port 38476)
+              Authenticated Gateway (TCP Port 38475)
+                               |
++------------------------------v------------------------------+
+|                Mechon AI Desktop Gateway                    |
+|  - Native Axum HTTP Server (Port 38475)                     |
+|  - UDP Auto-Discovery Beacon & LAN Responder (Port 38476)   |
+|  - Real-Time Approval-Based Device Pairing Workflow         |
+|  - Provider Model Discovery Proxy                           |
+|  - Direct Single-Inference Route (No Tri-Agent Leak)        |
+|  - Staging Queue & Commit to Mechon SFT Corpus              |
++-------------------------------------------------------------+
 ```
 
 ---
 
 ## 2. Desktop Gateway REST API Specification
 
-The desktop workstation runs an embedded Axum HTTP server on port `38475` (default). All endpoints under `/api/v1/` require an `Authorization: Bearer <token>` header, except `/api/v1/ping`, `/api/v1/status`, and `/api/v1/pair`.
+The desktop workstation runs an embedded Axum HTTP server on port `38475`.
 
-### 2.1 Health & Pairing Endpoints
+### 2.1 Health & Discovery Endpoints
 
 #### `GET /api/v1/ping`
 - **Auth**: None
-- **Response**: `{"status": "ok", "app": "mechon-ai", "version": "1.2.4"}`
+- **Response**: `{"status": "ok", "app": "mechon-ai", "version": "1.2.5"}`
 
 #### `GET /api/v1/status`
 - **Auth**: None
 - **Response**:
 ```json
 {
-  "is_running": true,
-  "lan_ip": "192.168.1.100",
+  "status": "online",
+  "version": "1.2.5",
+  "local_ip": "192.168.1.100",
   "port": 38475,
-  "endpoint": "http://192.168.1.100:38475",
-  "version": "1.2.4",
-  "connected_devices_count": 1
+  "workstation_name": "Mechon AI Workstation"
 }
 ```
 
-#### `POST /api/v1/pair`
+#### `POST /api/v1/pairing/request`
 - **Auth**: None
 - **Body**:
 ```json
 {
-  "device_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-  "device_name": "Google Pixel 8",
-  "device_type": "android",
-  "pairing_key": "MCH-8A2F-9C14"
+  "device_id": "uuid-here",
+  "device_name": "Pixel 9 Pro",
+  "device_platform": "android",
+  "client_nonce": "1730700000000"
 }
 ```
 - **Response**:
 ```json
 {
-  "success": true,
-  "token": "mch_live_xxxxxxxxxxxxxxxx",
-  "device_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-  "desktop_name": "Mechon Workstation",
-  "version": "1.2.4"
+  "request_id": "req-9b1deb4d",
+  "status": "pending",
+  "message": "Connection request submitted. Awaiting approval on Mechon Desktop."
 }
 ```
+
+#### `GET /api/v1/pairing/status/{request_id}`
+- **Auth**: None
+- **Response (Approved)**:
+```json
+{
+  "request_id": "req-9b1deb4d",
+  "status": "approved",
+  "token": "mch_live_xxxxxxxxxxxxxxxx",
+  "device_id": "uuid-here",
+  "desktop_name": "Mechon Workstation",
+  "version": "1.2.5"
+}
+```
+
+#### `POST /api/v1/pair` (Legacy QR Fallback)
+- **Auth**: None
+- Validates 15-minute rotating pairing key (`MCH-XXXX-YYYY`).
 
 ---
 
@@ -126,19 +146,6 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475` (defau
   "web_search_enabled": false
 }
 ```
-- **Response**:
-```json
-{
-  "role": "assistant",
-  "content": "The Shattered Spire of Aethelgard looms through perpetual cloud-seas...",
-  "provider_id": "google",
-  "model_id": "gemini-2.5-flash",
-  "search_results": null,
-  "prompt_tokens": 128,
-  "completion_tokens": 420,
-  "latency_ms": 612
-}
-```
 
 ---
 
@@ -146,65 +153,47 @@ The desktop workstation runs an embedded Axum HTTP server on port `38475` (defau
 
 #### `POST /api/v1/sync/conversations`
 - **Auth**: Bearer token
-- **Body**:
-```json
-{
-  "idempotency_key": "SYNC-40e1b6f0-d3e9-4e76-8806-03a15c329b3a",
-  "conversations": [
-    {
-      "mobile_session_id": "session-1234",
-      "title": "Aethelgard Cartography Exploration",
-      "system_prompt": "You are Elena Vance, Arcane Cartographer...",
-      "tags": ["roleplay", "mobile-chat", "fantasy"],
-      "messages": [
-        { "role": "user", "content": "Where are we?", "timestamp": "2026-11-04T10:00:00Z" },
-        { "role": "assistant", "content": "Inside the clockwork observatory.", "timestamp": "2026-11-04T10:00:05Z" }
-      ],
-      "created_at": "2026-11-04T09:58:00Z",
-      "updated_at": "2026-11-04T10:05:00Z"
-    }
-  ]
-}
-```
-- **Response**:
-```json
-{
-  "success": true,
-  "transfer_id": "xfer-7b8c9d0e",
-  "received_count": 1,
-  "message": "Successfully imported 1 conversation(s) into mobile staging queue."
-}
-```
+- **Idempotency**: Requests with identical `idempotency_key` are acknowledged without creating duplicate records.
+- **Payload**: Contains conversation metadata, model IDs, system prompt snapshots, and ordered turns.
 
 ---
 
-## 3. Roleplay Studio: 9 Modular Prompt Sections
+## 3. Roleplay Studio: 10 Modular Prompt Sections
 
-The Android companion includes a structured prompt architect composed of nine modular sections:
+The Android companion includes an advanced prompt architect with ten modular sections:
 
 1. **Character Identity**: Name, archetype, age, core identity and role.
-2. **Appearance & Physicality**: Clothing, physical features, sensory details.
-3. **Personality & Psychology**: Traits, flaws, motivations, quirks.
-4. **Speech & Voice**: Tone, vocabulary, catchphrases, pacing.
-5. **World Setting & Lore**: Universe rules, era, technology/magic, environment.
-6. **Scenario & Context**: Opening scene, immediate dilemma, stakes.
+2. **Appearance**: Clothing, physical features, sensory details.
+3. **Personality**: Traits, flaws, motivations, quirks.
+4. **Character Voice**: Tone, vocabulary, catchphrases, pacing.
+5. **World Building**: Universe rules, era, technology/magic, environment.
+6. **Scenario**: Opening scene, immediate dilemma, stakes.
 7. **User Persona**: User name, role, relationship to character.
-8. **Interaction Rules & Guardrails**: POV, forbidden tropes, format rules.
-9. **Custom Directives**: Raw system prompt overrides.
+8. **Interaction Rules**: POV, formatting, forbidden tropes.
+9. **Narrative Style**: Prose atmosphere, sensory descriptions.
+10. **Additional Instructions**: Custom system overrides.
 
-Presets can be created, saved, deleted, and activated with one tap to start new chat sessions.
+Plus **Dynamic Custom Sections**: Users can add unlimited custom sections with personalized headers.
+
+### Character Library
+- Create, duplicate, edit, and delete characters with custom avatars (emojis/icons) and descriptions.
+- Each conversation preserves its original system prompt snapshot, guaranteeing reproducible dataset provenance.
 
 ---
 
-## 4. Android Build & CI Instructions
+## 4. 16 KB Memory Page Size Compatibility
 
-To build the companion app locally:
+To ensure compatibility with Android 15+ 16 KB memory page sizes:
+- Replaced legacy C++ JNI barcode scanning (`libbarhopper_v3.so`, `libimage_processing_util_jni.so`) with pure JVM ZXing byte-code.
+- Configured Android Gradle Plugin packaging with `jniLibs { useLegacyPackaging = false }` to ensure all native libraries are 16 KB page aligned uncompressed in the APK.
+
+---
+
+## 5. Local Build Instructions
 
 ```bash
 cd android
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 ```
-
-Output APK will be generated at:
-`android/app/build/outputs/apk/debug/app-debug.apk`
+Output APK is located at `android/app/build/outputs/apk/debug/app-debug.apk`.

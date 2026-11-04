@@ -16,8 +16,8 @@ use tracing::{info, warn};
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
 use crate::models::{
-    MobileGatewayStatus, MobileImportedConversation, PairedDevice, SFTCommitInput,
-    SFTMessageCreateInput, SFTSessionCreateInput,
+    MobileGatewayStatus, MobileImportedConversation, PairedDevice, PairingRequestItem,
+    SFTCommitInput, SFTMessageCreateInput, SFTSessionCreateInput,
 };
 use crate::providers::{ChatMessage, ChatRequest};
 use crate::providers::factory::ProviderFactory;
@@ -38,17 +38,21 @@ pub struct GatewayInternalState {
     pub pairing_code: Option<String>,
     pub pairing_expires_at: Option<i64>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
+    pub beacon_shutdown_tx: Option<oneshot::Sender<()>>,
+    pub pairing_requests: Vec<PairingRequestItem>,
 }
 
 impl Default for GatewayInternalState {
     fn default() -> Self {
         Self {
             is_running: false,
-            port: 8088,
+            port: 38475,
             local_ip: get_local_lan_ip(),
             pairing_code: None,
             pairing_expires_at: None,
             shutdown_tx: None,
+            beacon_shutdown_tx: None,
+            pairing_requests: Vec::new(),
         }
     }
 }
@@ -199,6 +203,53 @@ impl MobileGatewayService {
 
         info!("Mechon Local Gateway listening on http://{}:{}", state.local_ip, target_port);
 
+        // UDP Discovery Beacon on 38476
+        let (beacon_tx, mut beacon_rx) = oneshot::channel::<()>();
+        state.beacon_shutdown_tx = Some(beacon_tx);
+        let b_ip = state.local_ip.clone();
+        let b_port = target_port;
+
+        tokio::spawn(async move {
+            let socket = match tokio::net::UdpSocket::bind("0.0.0.0:38476").await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Could not bind UDP discovery socket on 38476: {}", e);
+                    return;
+                }
+            };
+            let _ = socket.set_broadcast(true);
+            let beacon_payload = serde_json::json!({
+                "service": "mechon-gateway",
+                "name": "Mechon Desktop",
+                "lan_ip": b_ip,
+                "port": b_port,
+                "version": "1.2.5"
+            }).to_string();
+
+            let mut buf = [0u8; 1024];
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+
+            loop {
+                tokio::select! {
+                    _ = &mut beacon_rx => {
+                        info!("UDP discovery beacon stopped.");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        let _ = socket.send_to(beacon_payload.as_bytes(), "255.255.255.255:38476").await;
+                    }
+                    recv_res = socket.recv_from(&mut buf) => {
+                        if let Ok((len, src)) = recv_res {
+                            let msg = String::from_utf8_lossy(&buf[..len]);
+                            if msg.contains("MECHON_DISCOVER") {
+                                let _ = socket.send_to(beacon_payload.as_bytes(), src).await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         tokio::spawn(async move {
             if let Err(e) = axum::serve(listener, app)
                 .with_graceful_shutdown(async {
@@ -219,6 +270,9 @@ impl MobileGatewayService {
         let mut state = state_arc.write().await;
 
         if let Some(tx) = state.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = state.beacon_shutdown_tx.take() {
             let _ = tx.send(());
         }
         state.is_running = false;
@@ -261,6 +315,61 @@ impl MobileGatewayService {
             .bind(device_id)
             .execute(pool)
             .await?;
+        Ok(())
+    }
+
+    // --- Approval-Based Pairing Requests ---
+    pub async fn list_pending_pairing_requests() -> Vec<PairingRequestItem> {
+        let state_arc = Self::get_state();
+        let state = state_arc.read().await;
+        state.pairing_requests.iter().filter(|r| r.status == "pending").cloned().collect()
+    }
+
+    pub async fn list_all_pairing_requests() -> Vec<PairingRequestItem> {
+        let state_arc = Self::get_state();
+        let state = state_arc.read().await;
+        state.pairing_requests.clone()
+    }
+
+    pub async fn approve_pairing_request(pool: &SqlitePool, request_id: &str) -> Result<String, AppError> {
+        let state_arc = Self::get_state();
+        let mut state = state_arc.write().await;
+
+        let req = state.pairing_requests.iter_mut().find(|r| r.request_id == request_id)
+            .ok_or_else(|| AppError::NotFound(format!("Pairing request {} not found", request_id)))?;
+
+        let token_raw = format!("mch_live_{}_{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        let token_hash = hash_token(&token_raw);
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            "INSERT INTO paired_devices (id, device_name, device_platform, auth_token_hash, is_approved, last_active_at, created_at)
+             VALUES (?, ?, ?, ?, 1, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET is_approved = 1, auth_token_hash = excluded.auth_token_hash, last_active_at = excluded.last_active_at"
+        )
+        .bind(&req.device_id)
+        .bind(&req.device_name)
+        .bind(&req.device_platform)
+        .bind(&token_hash)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        req.status = "approved".to_string();
+        req.token = Some(token_raw.clone());
+
+        Ok(token_raw)
+    }
+
+    pub async fn reject_pairing_request(request_id: &str) -> Result<(), AppError> {
+        let state_arc = Self::get_state();
+        let mut state = state_arc.write().await;
+
+        let req = state.pairing_requests.iter_mut().find(|r| r.request_id == request_id)
+            .ok_or_else(|| AppError::NotFound(format!("Pairing request {} not found", request_id)))?;
+
+        req.status = "rejected".to_string();
         Ok(())
     }
 
@@ -425,6 +534,8 @@ pub fn create_gateway_router(state: GatewayAppState) -> Router {
         .route("/api/v1/ping", get(handle_ping))
         .route("/api/v1/status", get(handle_status))
         .route("/api/v1/pair", post(handle_pair))
+        .route("/api/v1/pairing/request", post(handle_pairing_request))
+        .route("/api/v1/pairing/status/{request_id}", get(handle_pairing_status))
         // Authenticated endpoints
         .route("/api/v1/providers/models", get(handle_get_providers_models))
         .route("/api/v1/inference/chat", post(handle_inference_chat))
@@ -442,7 +553,7 @@ async fn handle_ping() -> impl IntoResponse {
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.4",
+            "version": "1.2.5",
             "workstation": "Mechon AI Desktop",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }).to_string(),
@@ -456,12 +567,107 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "online",
-            "version": "1.2.4",
+            "version": "1.2.5",
             "local_ip": internal.local_ip,
             "port": internal.port,
             "workstation_name": "Mechon AI Workstation"
         }).to_string(),
     )
+}
+
+#[derive(Deserialize)]
+struct PairingRequestPayload {
+    device_id: String,
+    device_name: String,
+    device_platform: Option<String>,
+    client_nonce: Option<String>,
+}
+
+async fn handle_pairing_request(
+    State(state): State<GatewayAppState>,
+    Json(payload): Json<PairingRequestPayload>,
+) -> impl IntoResponse {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let mut internal = state.internal.write().await;
+
+    // Retain only requests that don't match this device_id if pending
+    internal.pairing_requests.retain(|r| r.device_id != payload.device_id || r.status != "pending");
+
+    let req = PairingRequestItem {
+        request_id: request_id.clone(),
+        device_id: payload.device_id,
+        device_name: payload.device_name,
+        device_platform: payload.device_platform.unwrap_or_else(|| "android".to_string()),
+        client_ip: "LAN".to_string(),
+        client_nonce: payload.client_nonce.unwrap_or_default(),
+        status: "pending".to_string(),
+        token: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    internal.pairing_requests.push(req);
+
+    (
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+        json!({
+            "request_id": request_id,
+            "status": "pending",
+            "message": "Connection request submitted. Awaiting approval on Mechon Desktop."
+        }).to_string(),
+    )
+}
+
+async fn handle_pairing_status(
+    State(state): State<GatewayAppState>,
+    Path(request_id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let internal = state.internal.read().await;
+
+    let req = internal.pairing_requests.iter().find(|r| r.request_id == request_id)
+        .ok_or_else(|| (
+            StatusCode::NOT_FOUND,
+            json!({ "error": "Pairing request not found or expired" }).to_string(),
+        ))?;
+
+    match req.status.as_str() {
+        "approved" => {
+            Ok((
+                StatusCode::OK,
+                [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+                json!({
+                    "request_id": req.request_id,
+                    "status": "approved",
+                    "token": req.token,
+                    "device_id": req.device_id,
+                    "desktop_name": "Mechon Workstation",
+                    "version": "1.2.5"
+                }).to_string(),
+            ))
+        }
+        "rejected" => {
+            Ok((
+                StatusCode::OK,
+                [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+                json!({
+                    "request_id": req.request_id,
+                    "status": "rejected",
+                    "error": "Connection request was rejected by Mechon Desktop user."
+                }).to_string(),
+            ))
+        }
+        _ => {
+            Ok((
+                StatusCode::OK,
+                [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+                json!({
+                    "request_id": req.request_id,
+                    "status": "pending",
+                    "message": "Awaiting desktop user approval..."
+                }).to_string(),
+            ))
+        }
+    }
 }
 
 #[derive(Deserialize)]

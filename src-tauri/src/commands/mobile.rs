@@ -4,8 +4,33 @@ use tauri::State;
 
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
-use crate::models::{MobileGatewayStatus, MobileImportedConversation, PairedDevice};
+use crate::models::{MobileGatewayStatus, MobileImportedConversation, PairedDevice, PairingRequestItem};
 use crate::services::mobile_gateway_service::MobileGatewayService;
+
+#[tauri::command]
+pub async fn list_pending_pairing_requests() -> Result<Vec<PairingRequestItem>, AppError> {
+    Ok(MobileGatewayService::list_pending_pairing_requests().await)
+}
+
+#[tauri::command]
+pub async fn list_all_pairing_requests() -> Result<Vec<PairingRequestItem>, AppError> {
+    Ok(MobileGatewayService::list_all_pairing_requests().await)
+}
+
+#[tauri::command]
+pub async fn approve_pairing_request(
+    pool: State<'_, SqlitePool>,
+    request_id: String,
+) -> Result<String, AppError> {
+    MobileGatewayService::approve_pairing_request(&pool, &request_id).await
+}
+
+#[tauri::command]
+pub async fn reject_pairing_request(
+    request_id: String,
+) -> Result<(), AppError> {
+    MobileGatewayService::reject_pairing_request(&request_id).await
+}
 
 #[tauri::command]
 pub async fn get_mobile_gateway_status(

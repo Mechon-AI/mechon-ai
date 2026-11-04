@@ -252,3 +252,87 @@ async fn test_gateway_conversation_sync_and_sft_pipeline() {
     let final_imports = MobileGatewayService::list_mobile_imports(&pool).await.unwrap();
     assert_eq!(final_imports[0].status, "committed");
 }
+
+#[tokio::test]
+async fn test_approval_based_pairing_workflow() {
+    let pool = setup_test_db().await;
+    let vault = Arc::new(InMemoryCredentialStore::new());
+
+    let internal_state = MobileGatewayService::get_state();
+
+    let app_state = GatewayAppState {
+        pool: pool.clone(),
+        vault: vault.clone(),
+        internal: internal_state.clone(),
+    };
+
+    let app = create_gateway_router(app_state);
+
+    // 1. Android requests pairing
+    let req_body = json!({
+        "device_id": "pixel-9-pro",
+        "device_name": "Google Pixel 9 Pro",
+        "device_platform": "android",
+        "client_nonce": "nonce_12345"
+    });
+
+    let pair_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/pairing/request")
+        .header("Content-Type", "application/json")
+        .body(Body::from(req_body.to_string()))
+        .unwrap();
+
+    let pair_resp = app.clone().oneshot(pair_req).await.unwrap();
+    assert_eq!(pair_resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(pair_resp.into_body(), 1024 * 16).await.unwrap();
+    let res: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(res["status"], "pending");
+    let request_id = res["request_id"].as_str().unwrap().to_string();
+
+    // 2. Mobile checks status before desktop approval
+    let status_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/pairing/status/{}", request_id))
+        .body(Body::empty())
+        .unwrap();
+
+    let status_resp = app.clone().oneshot(status_req).await.unwrap();
+    assert_eq!(status_resp.status(), StatusCode::OK);
+    let s_bytes = axum::body::to_bytes(status_resp.into_body(), 1024 * 16).await.unwrap();
+    let s_res: Value = serde_json::from_slice(&s_bytes).unwrap();
+    assert_eq!(s_res["status"], "pending");
+
+    // 3. Desktop user approves pairing request
+    let pending = MobileGatewayService::list_pending_pairing_requests().await;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].device_id, "pixel-9-pro");
+
+    let token = MobileGatewayService::approve_pairing_request(&pool, &request_id).await.unwrap();
+    assert!(token.starts_with("mch_live_"));
+
+    // 4. Mobile checks status after approval -> receives token!
+    let status_req2 = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/pairing/status/{}", request_id))
+        .body(Body::empty())
+        .unwrap();
+
+    let status_resp2 = app.clone().oneshot(status_req2).await.unwrap();
+    assert_eq!(status_resp2.status(), StatusCode::OK);
+    let s_bytes2 = axum::body::to_bytes(status_resp2.into_body(), 1024 * 16).await.unwrap();
+    let s_res2: Value = serde_json::from_slice(&s_bytes2).unwrap();
+    assert_eq!(s_res2["status"], "approved");
+    assert_eq!(s_res2["token"].as_str().unwrap(), token);
+
+    // 5. Test authenticated model discovery with approved token
+    let models_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/providers/models")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let models_resp = app.clone().oneshot(models_req).await.unwrap();
+    assert_eq!(models_resp.status(), StatusCode::OK);
+}

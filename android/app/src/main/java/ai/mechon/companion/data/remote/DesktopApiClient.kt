@@ -95,6 +95,64 @@ class DesktopApiClient(
         }
     }
 
+    suspend fun requestApprovalPairing(
+        baseUrl: String
+    ): Result<ApprovalPairingInitResponse> = withContext(Dispatchers.IO) {
+        val cleanUrl = baseUrl.trimEnd('/')
+        val reqPayload = ApprovalPairingRequest(
+            deviceId = sessionManager.deviceId,
+            deviceName = sessionManager.deviceName,
+            devicePlatform = "android",
+            clientNonce = System.currentTimeMillis().toString()
+        )
+        val body = gson.toJson(reqPayload).toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$cleanUrl/api/v1/pairing/request")
+            .post(body)
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                val respStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val initResp = gson.fromJson(respStr, ApprovalPairingInitResponse::class.java)
+                    sessionManager.desktopUrl = cleanUrl
+                    Result.success(initResp)
+                } else {
+                    Result.failure(IOException("Pairing request failed (${response.code}): $respStr"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun checkPairingStatus(
+        baseUrl: String,
+        requestId: String
+    ): Result<ApprovalPairingStatusResponse> = withContext(Dispatchers.IO) {
+        val cleanUrl = baseUrl.trimEnd('/')
+        val request = Request.Builder()
+            .url("$cleanUrl/api/v1/pairing/status/$requestId")
+            .get()
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                val respStr = response.body?.string() ?: ""
+                val statusResp = gson.fromJson(respStr, ApprovalPairingStatusResponse::class.java)
+                if (response.isSuccessful && statusResp.status == "approved" && statusResp.token != null) {
+                    sessionManager.desktopUrl = cleanUrl
+                    sessionManager.authToken = statusResp.token
+                    sessionManager.desktopName = statusResp.desktopName ?: "Mechon Desktop"
+                }
+                Result.success(statusResp)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getProviderModels(): Result<ProviderModelsResponse> = withContext(Dispatchers.IO) {
         val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired"))
         val base = sessionManager.desktopUrl.trimEnd('/')

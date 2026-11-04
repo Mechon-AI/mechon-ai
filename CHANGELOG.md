@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.5] - 2026-11-04
+
+### Added
+- **Android Companion Conversational UI Redesign:**
+  - Launch directly into primary chat interface with a dedicated conversation navigation drawer.
+  - Message action sheet: Copy message, Edit message, Regenerate response, Delete message, Stop generation, and Retry.
+  - Sophisticated expandable composer with multiline auto-expand, vision attachment tray, web search toggle pill, active character pill, and model selector shortcut.
+  - Conversation drawer library: Search chats, new chat, rename, duplicate, archive, delete, and multi-select batch transfer.
+- **Advanced Roleplay Configuration Studio:**
+  - **10 Modular Prompt Sections**: Character Identity, Appearance, Personality, Character Voice, World Building, Scenario, User Persona, Interaction Rules, Narrative Style, and Additional Instructions.
+  - **Dynamic Custom Sections**: Add unlimited custom sections with personalized headers.
+  - **Character Library**: Create, edit, duplicate, and delete characters with custom avatars, descriptions, and presets.
+  - System prompt snapshots stored per session to preserve historical prompt provenance for dataset curation.
+- **Automatic Local Network Discovery & Approval-Based Pairing:**
+  - UDP discovery beacon responder on port 38476 (`MECHON_DISCOVER` / beacon broadcast).
+  - Lifecycle-aware scanning on Android; displays discovered workstations with IP, port, and version.
+  - Real-time approval-based device pairing handshake (`/api/v1/pairing/request` & `/api/v1/pairing/status/{request_id}`).
+  - Desktop Mobile Companion panel alerts with incoming requests and instant Approve / Reject controls.
+  - Maintained manual IP/Port and 15-minute QR code pairing as fallback.
+- **Android 16 KB Page Size Compatibility:**
+  - Replaced legacy C++ JNI barcode scanning (`libbarhopper_v3.so`, `libimage_processing_util_jni.so`) with pure JVM ZXing byte-code.
+  - Enabled uncompressed 16 KB page-aligned native library packaging via `useLegacyPackaging = false`.
+
+---
+
 ## [1.2.4] - 2026-11-04
 
 ### Added

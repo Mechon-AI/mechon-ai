@@ -879,6 +879,30 @@ export const commitMobileImportToCorpus = (
 ): Promise<string> =>
   invoke<string>('commit_mobile_import_to_corpus', { importId, targetProjectId })
 
+export interface PairingRequestItem {
+  request_id: string
+  device_id: string
+  device_name: string
+  device_platform: string
+  client_ip: string
+  client_nonce: string
+  status: 'pending' | 'approved' | 'rejected'
+  token?: string | null
+  created_at: string
+}
+
+export const listPendingPairingRequests = (): Promise<PairingRequestItem[]> =>
+  invoke<PairingRequestItem[]>('list_pending_pairing_requests')
+
+export const listAllPairingRequests = (): Promise<PairingRequestItem[]> =>
+  invoke<PairingRequestItem[]>('list_all_pairing_requests')
+
+export const approvePairingRequest = (requestId: string): Promise<string> =>
+  invoke<string>('approve_pairing_request', { requestId })
+
+export const rejectPairingRequest = (requestId: string): Promise<void> =>
+  invoke<void>('reject_pairing_request', { requestId })
+
 export const deleteMobileImport = (importId: string): Promise<void> =>
   invoke<void>('delete_mobile_import', { importId })
 

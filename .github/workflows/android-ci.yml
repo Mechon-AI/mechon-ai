@@ -36,11 +36,11 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x android/gradlew
 
-      - name: Verify Version Alignment (1.2.4)
+      - name: Verify Version Alignment (1.2.5)
         run: |
-          grep 'versionName = "1.2.4"' android/app/build.gradle.kts || { echo "versionName mismatch"; exit 1; }
-          grep 'versionCode = 124' android/app/build.gradle.kts || { echo "versionCode mismatch"; exit 1; }
-          echo "Android Companion version 1.2.4 (124) verified."
+          grep 'versionName = "1.2.5"' android/app/build.gradle.kts || { echo "versionName mismatch"; exit 1; }
+          grep 'versionCode = 125' android/app/build.gradle.kts || { echo "versionCode mismatch"; exit 1; }
+          echo "Android Companion version 1.2.5 (125) verified."
 
       - name: Run Unit Tests
         run: |

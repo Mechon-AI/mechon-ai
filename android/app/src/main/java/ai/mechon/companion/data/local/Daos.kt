@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ConversationDao {
-    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM conversations WHERE isArchived = 0 ORDER BY updatedAt DESC")
     fun getAllConversationsFlow(): Flow<List<ConversationEntity>>
 
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
@@ -21,11 +21,20 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE id = :id")
     fun getConversationFlow(id: String): Flow<ConversationEntity?>
 
+    @Query("SELECT * FROM conversations WHERE isArchived = 0 AND (title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%') ORDER BY updatedAt DESC")
+    fun searchConversationsFlow(query: String): Flow<List<ConversationEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConversation(conversation: ConversationEntity)
 
     @Update
     suspend fun updateConversation(conversation: ConversationEntity)
+
+    @Query("UPDATE conversations SET title = :newTitle, updatedAt = :timestamp WHERE id = :id")
+    suspend fun renameConversation(id: String, newTitle: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE conversations SET isArchived = :archived, updatedAt = :timestamp WHERE id = :id")
+    suspend fun setArchived(id: String, archived: Boolean, timestamp: Long = System.currentTimeMillis())
 
     @Query("UPDATE conversations SET isSynced = 1, syncTransferId = :transferId, updatedAt = :timestamp WHERE id IN (:ids)")
     suspend fun markAsSynced(ids: List<String>, transferId: String, timestamp: Long = System.currentTimeMillis())
@@ -35,6 +44,24 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations WHERE id IN (:ids)")
     suspend fun deleteConversations(ids: List<String>)
+}
+
+@Dao
+interface CharacterDao {
+    @Query("SELECT * FROM characters ORDER BY updatedAt DESC")
+    fun getAllCharactersFlow(): Flow<List<CharacterEntity>>
+
+    @Query("SELECT * FROM characters WHERE id = :id")
+    suspend fun getCharacterById(id: String): CharacterEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCharacter(character: CharacterEntity)
+
+    @Update
+    suspend fun updateCharacter(character: CharacterEntity)
+
+    @Query("DELETE FROM characters WHERE id = :id")
+    suspend fun deleteCharacter(id: String)
 }
 
 @Dao

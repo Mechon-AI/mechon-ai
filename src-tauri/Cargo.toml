@@ -1,6 +1,6 @@
 [package]
 name = "mechon-ai"
-version = "1.2.4"
+version = "1.2.5"
 description = "Mechon AI — Native Desktop Workstation for SFT and DPO Dataset Engineering"
 authors = ["Mechon AI Team"]
 edition = "2021"

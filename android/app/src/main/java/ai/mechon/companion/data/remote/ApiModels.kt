@@ -19,6 +19,40 @@ data class PairResponse(
     @SerializedName("error") val error: String? = null
 )
 
+// Approval-based Pairing Models (v1.2.5)
+data class ApprovalPairingRequest(
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("device_name") val deviceName: String,
+    @SerializedName("device_platform") val devicePlatform: String = "android",
+    @SerializedName("client_nonce") val clientNonce: String = ""
+)
+
+data class ApprovalPairingInitResponse(
+    @SerializedName("request_id") val requestId: String,
+    @SerializedName("status") val status: String, // "pending"
+    @SerializedName("message") val message: String
+)
+
+data class ApprovalPairingStatusResponse(
+    @SerializedName("request_id") val requestId: String,
+    @SerializedName("status") val status: String, // "pending", "approved", "rejected"
+    @SerializedName("token") val token: String? = null,
+    @SerializedName("device_id") val deviceId: String? = null,
+    @SerializedName("desktop_name") val desktopName: String? = null,
+    @SerializedName("version") val version: String? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+// LAN Auto-Discovery Workstation Beacon
+data class DiscoveredWorkstation(
+    @SerializedName("service") val service: String = "mechon-gateway",
+    @SerializedName("name") val name: String = "Mechon Desktop",
+    @SerializedName("lan_ip") val lanIp: String,
+    @SerializedName("port") val port: Int = 38475,
+    @SerializedName("version") val version: String = "1.2.5",
+    val lastSeenTimestamp: Long = System.currentTimeMillis()
+)
+
 // Desktop Gateway Status
 data class DesktopStatusResponse(
     @SerializedName("is_running") val isRunning: Boolean,

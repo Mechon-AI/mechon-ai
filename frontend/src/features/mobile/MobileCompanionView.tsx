@@ -28,12 +28,16 @@ import {
   listPairedDevices,
   approvePairedDevice,
   revokePairedDevice,
+  listPendingPairingRequests,
+  approvePairingRequest,
+  rejectPairingRequest,
   listMobileImports,
   convertMobileImportToSftDraft,
   commitMobileImportToCorpus,
   deleteMobileImport,
   type MobileGatewayStatus,
   type PairedDevice,
+  type PairingRequestItem,
   type MobileImportedConversation
 } from '../../services/api'
 import { useEditorStore } from '../../editor/stores/useEditorStore'
@@ -47,6 +51,7 @@ export const MobileCompanionView: React.FC = () => {
   const [status, setStatus] = useState<MobileGatewayStatus | null>(null)
   const [portInput, setPortInput] = useState<number>(8088)
   const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([])
+  const [pendingRequests, setPendingRequests] = useState<PairingRequestItem[]>([])
   const [imports, setImports] = useState<MobileImportedConversation[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isTogglingGateway, setIsTogglingGateway] = useState(false)
@@ -68,19 +73,41 @@ export const MobileCompanionView: React.FC = () => {
   const loadAll = async () => {
     setIsLoading(true)
     try {
-      const [st, devs, imps] = await Promise.all([
+      const [st, devs, reqs, imps] = await Promise.all([
         getMobileGatewayStatus(),
         listPairedDevices(),
+        listPendingPairingRequests(),
         listMobileImports()
       ])
       setStatus(st)
       setPortInput(st.port)
       setPairedDevices(devs)
+      setPendingRequests(reqs)
       setImports(imps)
     } catch (err) {
       // ignore on initial load
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleApproveRequest = async (requestId: string) => {
+    try {
+      await approvePairingRequest(requestId)
+      showFeedback('success', 'Device pairing approved successfully.')
+      await loadAll()
+    } catch (err) {
+      showFeedback('error', formatErrorMessage(err))
+    }
+  }
+
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      await rejectPairingRequest(requestId)
+      showFeedback('success', 'Pairing request rejected.')
+      await loadAll()
+    } catch (err) {
+      showFeedback('error', formatErrorMessage(err))
     }
   }
 
@@ -369,9 +396,41 @@ export const MobileCompanionView: React.FC = () => {
           </div>
         </div>
 
-        {/* 3. Paired Devices Card */}
+        {/* 3. Paired Devices & Pending Requests Card */}
         <div className="p-5 rounded-xl bg-card border border-border space-y-4 shadow-sm flex flex-col justify-between">
           <div className="space-y-3">
+            {pendingRequests.length > 0 && (
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 space-y-2">
+                <span className="font-bold uppercase tracking-wider text-primary text-[10px] flex items-center gap-1.5 animate-pulse">
+                  <Radio className="h-3.5 w-3.5 text-primary" /> Incoming Pairing Requests ({pendingRequests.length})
+                </span>
+                <div className="space-y-2">
+                  {pendingRequests.map((req) => (
+                    <div key={req.request_id} className="p-2 rounded bg-card/80 border border-primary/20 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-foreground block">{req.device_name}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{req.device_platform} • {new Date(req.created_at).toLocaleTimeString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleApproveRequest(req.request_id)}
+                          className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-[10px] font-bold cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectRequest(req.request_id)}
+                          className="px-2 py-1 rounded bg-destructive/20 text-destructive hover:bg-destructive/30 text-[10px] font-bold cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <span className="font-bold uppercase tracking-wider text-muted-foreground text-[10px] flex items-center gap-1.5">
                 <Smartphone className="h-3.5 w-3.5 text-primary" /> Paired Android Devices ({pairedDevices.length})

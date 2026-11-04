@@ -9,15 +9,17 @@ import androidx.room.RoomDatabase
     entities = [
         ConversationEntity::class,
         MessageEntity::class,
-        PromptPresetEntity::class
+        PromptPresetEntity::class,
+        CharacterEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
     abstract fun messageDao(): MessageDao
     abstract fun promptPresetDao(): PromptPresetDao
+    abstract fun characterDao(): CharacterDao
 
     companion object {
         @Volatile

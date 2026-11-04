@@ -3,6 +3,7 @@ package ai.mechon.companion
 import android.app.Application
 import ai.mechon.companion.data.local.AppDatabase
 import ai.mechon.companion.data.remote.DesktopApiClient
+import ai.mechon.companion.data.remote.LanDiscoveryService
 import ai.mechon.companion.data.remote.SessionManager
 import ai.mechon.companion.data.repository.ChatRepository
 import ai.mechon.companion.data.repository.RoleplayRepository
@@ -17,6 +18,9 @@ class MechonApplication : Application() {
         private set
 
     lateinit var desktopApiClient: DesktopApiClient
+        private set
+
+    lateinit var lanDiscoveryService: LanDiscoveryService
         private set
 
     lateinit var chatRepository: ChatRepository
@@ -35,6 +39,7 @@ class MechonApplication : Application() {
         database = AppDatabase.getInstance(this)
         sessionManager = SessionManager(this)
         desktopApiClient = DesktopApiClient(sessionManager)
+        lanDiscoveryService = LanDiscoveryService()
 
         chatRepository = ChatRepository(
             conversationDao = database.conversationDao(),
@@ -44,7 +49,8 @@ class MechonApplication : Application() {
         )
 
         roleplayRepository = RoleplayRepository(
-            presetDao = database.promptPresetDao()
+            presetDao = database.promptPresetDao(),
+            characterDao = database.characterDao()
         )
 
         syncRepository = SyncRepository(

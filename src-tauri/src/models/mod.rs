@@ -358,6 +358,19 @@ pub struct MobileImportedConversation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairingRequestItem {
+    pub request_id: String,
+    pub device_id: String,
+    pub device_name: String,
+    pub device_platform: String,
+    pub client_ip: String,
+    pub client_nonce: String,
+    pub status: String,
+    pub token: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MobileGatewayStatus {
     pub is_running: bool,
     pub port: u16,

@@ -1,7 +1,10 @@
 package ai.mechon.companion.ui.screens.pairing
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,6 +17,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.mechon.companion.data.remote.DiscoveredWorkstation
 import ai.mechon.companion.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,18 +28,33 @@ fun PairingScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(1) } // 0 = Scanner, 1 = Manual Key
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Auto LAN Discovery, 1 = Manual Key, 2 = QR Code
+
+    DisposableEffect(Unit) {
+        viewModel.startDiscovery()
+        onDispose {
+            viewModel.stopDiscovery()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Desktop Pairing",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+                    Column {
+                        Text(
+                            text = "Desktop Pairing",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Automatic LAN Discovery & Approval Handshake",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -44,6 +63,17 @@ fun PairingScreen(
                             contentDescription = "Back",
                             tint = TextPrimary
                         )
+                    }
+                },
+                actions = {
+                    if (selectedTab == 0 && !uiState.isPaired) {
+                        IconButton(onClick = { viewModel.startDiscovery() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh Scan",
+                                tint = MechonBlueLight
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -59,7 +89,7 @@ fun PairingScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Success / Error Feedback
+            // Status Feedback Banners
             if (uiState.successMessage != null) {
                 Surface(
                     color = MechonGreen.copy(alpha = 0.2f),
@@ -95,7 +125,7 @@ fun PairingScreen(
                 }
             }
 
-            // Current Status Card
+            // Connection Status Header Card
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MechonSurface,
@@ -121,7 +151,7 @@ fun PairingScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (uiState.isPaired) "Paired with Desktop" else "Not Paired",
+                                text = if (uiState.isPaired) "Connected to Mechon Desktop" else "Gateway Unpaired",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = if (uiState.isPaired) MechonGreen else TextMuted
@@ -131,12 +161,12 @@ fun PairingScreen(
                         if (uiState.isPaired) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Device: ${uiState.pairedDesktopName ?: "Mechon Workstation"}",
+                                text = "Workstation: ${uiState.pairedDesktopName ?: "Mechon Workstation"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
                             Text(
-                                text = "Endpoint: ${uiState.pairedDesktopUrl}",
+                                text = "LAN Endpoint: ${uiState.pairedDesktopUrl}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextMuted,
                                 fontFamily = FontFamily.Monospace
@@ -150,15 +180,15 @@ fun PairingScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MechonRed),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Unpair")
+                            Text("Disconnect")
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Tab Selector
+            // Navigation Tabs
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = MechonSurface,
@@ -167,8 +197,8 @@ fun PairingScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("QR Scanner") },
-                    icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }
+                    text = { Text("Auto LAN Discovery") },
+                    icon = { Icon(Icons.Default.Lan, contentDescription = null) }
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -176,58 +206,163 @@ fun PairingScreen(
                     text = { Text("Manual Key") },
                     icon = { Icon(Icons.Default.Key, contentDescription = null) }
                 )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("QR Code") },
+                    icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
+            // Tab 0: Automatic LAN Discovery & Approval-Based Pairing
             if (selectedTab == 0) {
-                // QR Scanner View / Guidance
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MechonSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
+                // If approval is pending on desktop
+                if (uiState.flowState == PairingFlowState.APPROVAL_PENDING) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MechonSurface,
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(MechonCyan)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = null,
-                                tint = MechonBlueLight,
-                                modifier = Modifier.size(72.dp)
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                strokeWidth = 3.dp,
+                                color = MechonCyan
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "Desktop QR Pairing",
+                                text = "Awaiting Desktop Approval",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Open Mechon AI Desktop → Mobile Companion panel → Click 'Pair New Device' to display the QR code.",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Please click 'Approve' in the Mechon AI Desktop Mobile Companion tab to authorize this device.",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.cancelPendingRequest() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextMuted)
+                            ) {
+                                Text("Cancel Request")
+                            }
+                        }
+                    }
+                } else {
+                    // List of discovered workstations
+                    Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Or switch to the 'Manual Key' tab to enter the 10-character code directly.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                text = "Discovered Workstations (${uiState.discoveredWorkstations.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
                             )
+                            if (uiState.isScanning) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = MechonCyan)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Scanning Wi-Fi...", style = MaterialTheme.typography.labelSmall, color = MechonCyan, fontSize = 10.sp)
+                                }
+                            }
+                        }
+
+                        if (uiState.discoveredWorkstations.isEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MechonSurface,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(Icons.Default.WifiFind, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "Searching for Mechon Desktop on LAN...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextSecondary
+                                    )
+                                    Text(
+                                        text = "Ensure Mechon AI is open on your desktop and the Mobile Gateway is turned ON.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextMuted,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(uiState.discoveredWorkstations) { ws ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MechonSurface,
+                                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                                            brush = androidx.compose.ui.graphics.SolidColor(MechonBorder)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(14.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Default.Computer, contentDescription = null, tint = MechonBlueLight, modifier = Modifier.size(18.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(ws.name, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                                }
+                                                Text(
+                                                    text = "http://${ws.lanIp}:${ws.port} • v${ws.version}",
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 11.sp,
+                                                    color = TextMuted,
+                                                    modifier = Modifier.padding(top = 2.dp)
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = { viewModel.connectWorkstation(ws) },
+                                                enabled = !uiState.isPairing && !uiState.isPaired,
+                                                colors = ButtonDefaults.buttonColors(containerColor = MechonBlue),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text("Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            } else {
-                // Manual Key Form
+            }
+
+            // Tab 1: Manual Key Fallback
+            if (selectedTab == 1) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MechonSurface,
@@ -235,14 +370,13 @@ fun PairingScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Enter Connection Credentials",
+                            text = "Manual Connection Credentials",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // IP Address
                         OutlinedTextField(
                             value = uiState.manualIp,
                             onValueChange = { viewModel.updateManualIp(it) },
@@ -260,11 +394,10 @@ fun PairingScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Port
                         OutlinedTextField(
                             value = uiState.manualPort,
                             onValueChange = { viewModel.updateManualPort(it) },
-                            label = { Text("Port (Default 38475)") },
+                            label = { Text("Port (38475)") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = TextPrimary,
@@ -277,7 +410,6 @@ fun PairingScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Pairing Key
                         OutlinedTextField(
                             value = uiState.manualKey,
                             onValueChange = { viewModel.updateManualKey(it) },
@@ -293,10 +425,10 @@ fun PairingScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Button(
-                            onClick = { viewModel.pairWithManualInput() },
+                            onClick = { viewModel.pairWithManualKey() },
                             enabled = !uiState.isPairing,
                             colors = ButtonDefaults.buttonColors(containerColor = MechonBlue),
                             shape = RoundedCornerShape(8.dp),
@@ -305,21 +437,43 @@ fun PairingScreen(
                                 .height(46.dp)
                         ) {
                             if (uiState.isPairing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = TextPrimary
-                                )
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = TextPrimary)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Connecting...")
+                                Text("Authenticating...")
                             } else {
-                                Icon(
-                                    imageVector = Icons.Default.Link,
-                                    contentDescription = null
-                                )
+                                Icon(Icons.Default.Link, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Connect & Pair Device")
+                                Text("Connect With Key")
                             }
+                        }
+                    }
+                }
+            }
+
+            // Tab 2: QR Code Guidance
+            if (selectedTab == 2) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MechonSurface,
+                    modifier = Modifier.fillMaxWidth().weight(1f)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = MechonBlueLight, modifier = Modifier.size(64.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Desktop QR Pairing",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Use your device camera or an external scanner to read the 15-minute pairing code shown on Mechon Desktop, then enter the key in the Manual Key tab or tap Auto LAN Discovery.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
                         }
                     }
                 }
