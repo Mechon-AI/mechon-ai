@@ -171,7 +171,18 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 sessionManager = app.sessionManager,
                                 desktopApiClient = app.desktopApiClient,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { navController.popBackStack() },
+                                onNavigateToChat = {
+                                    navController.navigate(Screen.Chat.createRoute(null)) {
+                                        popUpTo(Screen.Chat.route) { inclusive = true }
+                                    }
+                                },
+                                onNavigateToHistory = {
+                                    navController.navigate(Screen.Conversations.route)
+                                },
+                                onNavigateToPairing = {
+                                    navController.navigate(Screen.Pairing.route)
+                                }
                             )
                         }
                     }
