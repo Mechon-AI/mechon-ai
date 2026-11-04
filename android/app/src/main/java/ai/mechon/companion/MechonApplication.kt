@@ -8,6 +8,7 @@ import ai.mechon.companion.data.remote.SessionManager
 import ai.mechon.companion.data.repository.ChatRepository
 import ai.mechon.companion.data.repository.RoleplayRepository
 import ai.mechon.companion.data.repository.SyncRepository
+import ai.mechon.companion.data.search.WebSearchManager
 
 class MechonApplication : Application() {
 
@@ -21,6 +22,9 @@ class MechonApplication : Application() {
         private set
 
     lateinit var lanDiscoveryService: LanDiscoveryService
+        private set
+
+    lateinit var webSearchManager: WebSearchManager
         private set
 
     lateinit var chatRepository: ChatRepository
@@ -40,6 +44,7 @@ class MechonApplication : Application() {
         sessionManager = SessionManager(this)
         desktopApiClient = DesktopApiClient(sessionManager)
         lanDiscoveryService = LanDiscoveryService()
+        webSearchManager = WebSearchManager(this)
 
         chatRepository = ChatRepository(
             conversationDao = database.conversationDao(),

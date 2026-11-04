@@ -9,6 +9,8 @@ import ai.mechon.companion.data.remote.ChatInferenceRequest
 import ai.mechon.companion.data.remote.ChatMessagePayload
 import ai.mechon.companion.data.remote.DesktopApiClient
 import ai.mechon.companion.data.remote.SessionManager
+import ai.mechon.companion.data.search.WebSearchManager
+import ai.mechon.companion.data.search.WebSearchResult
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
@@ -125,7 +127,7 @@ class ChatRepository(
         conversationId: String,
         userContent: String,
         attachments: List<AttachmentPayload> = emptyList(),
-        enableWebSearch: Boolean = false
+        webSearchResults: List<WebSearchResult>? = null
     ): Result<MessageEntity> {
         val conv = conversationDao.getConversationById(conversationId)
             ?: return Result.failure(IllegalStateException("Conversation not found"))
@@ -150,12 +152,12 @@ class ChatRepository(
             conversationDao.updateConversation(conv.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
         }
 
-        return executeInference(conv, allExisting, userContent, enableWebSearch)
+        return executeInference(conv, allExisting, userContent, webSearchResults)
     }
 
     suspend fun regenerateResponse(
         conversationId: String,
-        enableWebSearch: Boolean = false
+        webSearchResults: List<WebSearchResult>? = null
     ): Result<MessageEntity> {
         val conv = conversationDao.getConversationById(conversationId)
             ?: return Result.failure(IllegalStateException("Conversation not found"))
@@ -171,14 +173,14 @@ class ChatRepository(
         val remaining = messageDao.getMessages(conversationId)
         val lastUserText = remaining.lastOrNull { it.role == "user" }?.content ?: ""
 
-        return executeInference(conv, remaining, lastUserText, enableWebSearch)
+        return executeInference(conv, remaining, lastUserText, webSearchResults)
     }
 
     private suspend fun executeInference(
         conv: ConversationEntity,
         contextMessages: List<MessageEntity>,
         lastPrompt: String,
-        enableWebSearch: Boolean
+        webSearchResults: List<WebSearchResult>? = null
     ): Result<MessageEntity> {
         val messagePayloads = mutableListOf<ChatMessagePayload>()
         for (m in contextMessages) {
@@ -196,14 +198,15 @@ class ChatRepository(
             )
         }
 
-        // Optional Web Search before inference
+        // Attach standalone web search results as contextual grounding if present
         var searchMetaJson: String? = null
-        if (enableWebSearch && lastPrompt.isNotBlank()) {
-            val searchRes = desktopApiClient.webSearch(lastPrompt, maxResults = 3)
-            searchRes.onSuccess { ws ->
-                if (ws.results.isNotEmpty()) {
-                    searchMetaJson = gson.toJson(ws.results)
-                }
+        if (!webSearchResults.isNullOrEmpty()) {
+            searchMetaJson = gson.toJson(webSearchResults)
+            val lastUserIdx = messagePayloads.indexOfLast { it.role == "user" }
+            if (lastUserIdx != -1) {
+                val original = messagePayloads[lastUserIdx]
+                val groundedContent = original.content + WebSearchManager.formatGroundingPrompt(lastPrompt, webSearchResults)
+                messagePayloads[lastUserIdx] = original.copy(content = groundedContent)
             }
         }
 
@@ -215,7 +218,7 @@ class ChatRepository(
             systemPrompt = conv.systemPrompt.ifBlank { null },
             temperature = 0.7,
             maxTokens = 2048,
-            webSearchEnabled = enableWebSearch
+            webSearchEnabled = !webSearchResults.isNullOrEmpty()
         )
 
         val inferenceResult = desktopApiClient.chatInference(inferenceReq)
