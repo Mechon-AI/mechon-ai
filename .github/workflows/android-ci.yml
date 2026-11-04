@@ -36,11 +36,11 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x android/gradlew
 
-      - name: Verify Version Alignment (1.2.7)
+      - name: Verify Version Alignment (1.2.8)
         run: |
-          grep 'versionName = "1.2.7"' android/app/build.gradle.kts || { echo "versionName mismatch"; exit 1; }
-          grep 'versionCode = 127' android/app/build.gradle.kts || { echo "versionCode mismatch"; exit 1; }
-          echo "Android Companion version 1.2.7 (127) verified."
+          grep 'versionName = "1.2.8"' android/app/build.gradle.kts || { echo "versionName mismatch"; exit 1; }
+          grep 'versionCode = 128' android/app/build.gradle.kts || { echo "versionCode mismatch"; exit 1; }
+          echo "Android Companion version 1.2.8 (128) verified."
 
       - name: Run Unit Tests
         run: |
@@ -66,6 +66,6 @@ jobs:
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mechon-companion-v1.2.7-debug-apk
+          name: mechon-companion-v1.2.8-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
