@@ -194,6 +194,14 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Desktop Connection Indicator / Shortcut
+                        IconButton(onClick = onNavigateToPairing) {
+                            Icon(
+                                imageVector = if (uiState.isPaired) Icons.Default.Lan else Icons.Default.CloudOff,
+                                contentDescription = if (uiState.isPaired) "Desktop Paired" else "Desktop Disconnected",
+                                tint = if (uiState.isPaired) MechonGreen else TextMuted
+                            )
+                        }
                         // Web Search Toggle Action
                         IconButton(onClick = { viewModel.toggleWebSearch() }) {
                             Icon(
@@ -698,6 +706,12 @@ fun ChatScreen(
         ModelSelectorDialog(
             models = uiState.availableModels,
             selectedModelId = uiState.conversation?.modelId ?: "",
+            selectedProviderId = uiState.conversation?.providerId ?: "",
+            isLoading = uiState.isModelLoading,
+            errorMessage = uiState.modelFetchError,
+            searchQuery = uiState.modelSearchQuery,
+            onSearchQueryChange = { q -> viewModel.setModelSearchQuery(q) },
+            onRefresh = { viewModel.fetchAvailableModels(forceRefresh = true) },
             onModelSelect = { item -> viewModel.selectModel(item) },
             onDismiss = { viewModel.setModelDialogOpen(false) }
         )

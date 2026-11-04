@@ -23,7 +23,12 @@ data class ChatUiState(
     val webSearchEnabled: Boolean = false,
     val selectedAttachments: List<AttachmentPayload> = emptyList(),
     val availableModels: List<ProviderModelItem> = emptyList(),
+    val isModelLoading: Boolean = false,
+    val modelFetchError: String? = null,
+    val modelSearchQuery: String = "",
     val isModelDialogOpen: Boolean = false,
+    val isPaired: Boolean = false,
+    val pairedDesktopName: String? = null,
     // Conversation Drawer State
     val conversationsList: List<ConversationEntity> = emptyList(),
     val searchQuery: String = "",
@@ -50,8 +55,15 @@ class ChatViewModel(
     private var inferenceJob: Job? = null
     private var conversationObserveJob: Job? = null
     private var messagesObserveJob: Job? = null
+    private var modelFetchJob: Job? = null
 
     init {
+        _uiState.update { 
+            it.copy(
+                isPaired = sessionManager.isPaired,
+                pairedDesktopName = sessionManager.desktopName
+            ) 
+        }
         observeConversationsList("")
         fetchAvailableModels()
     }
@@ -185,30 +197,96 @@ class ChatViewModel(
         }
     }
 
-    fun fetchAvailableModels() {
-        viewModelScope.launch {
-            if (!sessionManager.isPaired) return@launch
-            desktopApiClient.getProviderModels().onSuccess { resp ->
-                _uiState.update { it.copy(availableModels = resp.models) }
+    fun fetchAvailableModels(forceRefresh: Boolean = false) {
+        val paired = sessionManager.isPaired
+        _uiState.update { 
+            it.copy(
+                isPaired = paired,
+                pairedDesktopName = sessionManager.desktopName
+            ) 
+        }
+
+        if (!paired) {
+            _uiState.update { 
+                it.copy(
+                    isModelLoading = false,
+                    modelFetchError = "Mechon Desktop is not paired. Connect via LAN Pairing in Settings."
+                ) 
             }
+            return
+        }
+
+        if (!forceRefresh && _uiState.value.availableModels.isNotEmpty()) {
+            return
+        }
+
+        modelFetchJob?.cancel()
+        _uiState.update { it.copy(isModelLoading = true, modelFetchError = null) }
+
+        modelFetchJob = viewModelScope.launch {
+            val result = desktopApiClient.getProviderModels()
+            result.fold(
+                onSuccess = { resp ->
+                    val safeList = resp.models ?: emptyList()
+                    _uiState.update {
+                        it.copy(
+                            availableModels = safeList,
+                            isModelLoading = false,
+                            modelFetchError = if (safeList.isEmpty()) "No active models found in Desktop Provider Registry." else null
+                        )
+                    }
+
+                    // Auto-align conversation model if currently invalid or missing
+                    val currentConv = _uiState.value.conversation
+                    if (currentConv != null && safeList.isNotEmpty()) {
+                        val exactMatch = safeList.any { m -> m.modelId == currentConv.modelId && m.providerId == currentConv.providerId }
+                        if (!exactMatch) {
+                            val candidate = safeList.firstOrNull { m -> m.modelId == currentConv.modelId }
+                                ?: safeList.firstOrNull { m -> m.isAvailable }
+                                ?: safeList.first()
+                            selectModel(candidate)
+                        }
+                    }
+                },
+                onFailure = { err ->
+                    _uiState.update {
+                        it.copy(
+                            isModelLoading = false,
+                            modelFetchError = err.message ?: "Failed to connect to Desktop Provider Registry"
+                        )
+                    }
+                }
+            )
         }
     }
 
     fun selectModel(item: ProviderModelItem) {
         val current = _uiState.value.conversation ?: return
         viewModelScope.launch {
+            sessionManager.defaultModel = item.modelId
+            sessionManager.defaultProvider = item.providerId
             val updated = current.copy(
                 modelId = item.modelId,
                 providerId = item.providerId
             )
             chatRepository.updateConversation(updated)
-            _uiState.update { it.copy(conversation = updated, isModelDialogOpen = false) }
+            _uiState.update { 
+                it.copy(
+                    conversation = updated, 
+                    isModelDialogOpen = false,
+                    error = null // Clear any stale inference error when switching to a valid model
+                ) 
+            }
         }
     }
 
     fun setModelDialogOpen(open: Boolean) {
-        _uiState.update { it.copy(isModelDialogOpen = open) }
-        if (open) fetchAvailableModels()
+        _uiState.update { it.copy(isModelDialogOpen = open, modelSearchQuery = "") }
+        if (open) fetchAvailableModels(forceRefresh = true)
+    }
+
+    fun setModelSearchQuery(query: String) {
+        _uiState.update { it.copy(modelSearchQuery = query) }
     }
 
     fun toggleWebSearch() {
