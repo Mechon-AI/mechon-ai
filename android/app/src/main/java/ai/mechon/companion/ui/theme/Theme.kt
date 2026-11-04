@@ -9,22 +9,25 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = MechonBlue,
+private val ObsidianColorScheme = darkColorScheme(
+    primary = ElectricViolet,
     onPrimary = TextPrimary,
-    primaryContainer = MechonBlueDark,
+    primaryContainer = DeepViolet,
     onPrimaryContainer = TextPrimary,
-    secondary = MechonCyan,
-    onSecondary = MechonDarkBg,
-    tertiary = MechonPurple,
-    background = MechonDarkBg,
+    secondary = SoftLavender,
+    onSecondary = ObsidianBlack,
+    secondaryContainer = ElevatedSurfaceHighlight,
+    onSecondaryContainer = TextPrimary,
+    tertiary = SoftLavender,
+    background = ObsidianBlack,
     onBackground = TextPrimary,
-    surface = MechonSurface,
+    surface = ElevatedSurface,
     onSurface = TextPrimary,
-    surfaceVariant = MechonSurfaceVariant,
+    surfaceVariant = ElevatedSurfaceHighlight,
     onSurfaceVariant = TextSecondary,
-    outline = MechonBorder,
-    error = MechonRed,
+    outline = SubtleBorder,
+    outlineVariant = GlassBorder,
+    error = StatusError,
     onError = TextPrimary
 )
 
@@ -32,15 +35,16 @@ private val DarkColorScheme = darkColorScheme(
 fun MechonTheme(
     content: @Composable () -> Unit
 ) {
-    val colorScheme = DarkColorScheme
+    val colorScheme = ObsidianColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = MechonDarkBg.toArgb()
-            window.navigationBarColor = MechonDarkBg.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+            window.statusBarColor = ObsidianBlack.toArgb()
+            window.navigationBarColor = ObsidianBlack.toArgb()
+            val insets = WindowCompat.getInsetsController(window, view)
+            insets.isAppearanceLightStatusBars = false
+            insets.isAppearanceLightNavigationBars = false
         }
     }
 

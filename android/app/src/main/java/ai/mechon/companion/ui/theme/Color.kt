@@ -1,26 +1,86 @@
 package ai.mechon.companion.ui.theme
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-val MechonDarkBg = Color(0xFF0B0F19)
-val MechonSurface = Color(0xFF131B2E)
-val MechonSurfaceVariant = Color(0xFF1E293B)
-val MechonBorder = Color(0xFF334155)
+// ==========================================
+// MECHON MOBILE: Obsidian Design System
+// ==========================================
 
-val MechonBlue = Color(0xFF3B82F6)
-val MechonBlueLight = Color(0xFF60A5FA)
-val MechonBlueDark = Color(0xFF1D4ED8)
+// Primary Surfaces
+val ObsidianBlack = Color(0xFF050509)
+val DeepBlack = Color(0xFF080810)
+val ElevatedSurface = Color(0xFF101019)
+val ElevatedSurfaceHighlight = Color(0xFF181824)
+val GlassSurface = Color(0xE6101019)
+val GlassBorder = Color(0x26B9A0FF)
+val SubtleBorder = Color(0xFF1C1B29)
 
-val MechonCyan = Color(0xFF06B6D4)
-val MechonGreen = Color(0xFF10B981)
-val MechonYellow = Color(0xFFF59E0B)
-val MechonRed = Color(0xFFEF4444)
-val MechonPurple = Color(0xFF8B5CF6)
+// Accent Palette (Violet & Lavender)
+val ElectricViolet = Color(0xFF8B5CF6)
+val DeepViolet = Color(0xFF612CEB)
+val SoftLavender = Color(0xFFB9A0FF)
+val AmbientGlowViolet = Color(0x268B5CF6)
+val AmbientGlowDeep = Color(0x14612CEB)
 
-val TextPrimary = Color(0xFFF8FAFC)
-val TextSecondary = Color(0xFF94A3B8)
-val TextMuted = Color(0xFF64748B)
+// Typography Palette
+val TextPrimary = Color(0xFFF5F3FF)
+val TextSecondary = Color(0xFF9693A8)
+val TextMuted = Color(0xFF626174)
 
-val CodeBlockBg = Color(0xFF0F172A)
-val UserBubbleBg = Color(0xFF1E3A8A)
-val AssistantBubbleBg = Color(0xFF1E293B)
+// Status & Semantic Colors
+val StatusConnected = Color(0xFF10B981) // Emerald Green
+val StatusWarning = Color(0xFFF59E0B)   // Amber
+val StatusError = Color(0xFFEF4444)     // Soft Crimson
+
+// Chat & Message Surfaces
+val UserBubbleBg = Color(0xFF1E1736)
+val UserBubbleBorder = Color(0x4D8B5CF6)
+val AssistantSurface = Color(0xFF0A0A12)
+val CodeBlockBg = Color(0xFF080811)
+val CodeBlockBorder = Color(0xFF1E1B2E)
+
+// Ambient Gradients
+val ObsidianBackgroundGradient = Brush.verticalGradient(
+    colors = listOf(
+        Color(0xFF07060F),
+        Color(0xFF050509),
+        Color(0xFF030306)
+    )
+)
+
+val AmbientVioletRadial = Brush.radialGradient(
+    colors = listOf(
+        Color(0x338B5CF6),
+        Color(0x00050509)
+    )
+)
+
+val FloatingGlassGradient = Brush.verticalGradient(
+    colors = listOf(
+        Color(0xCC161524),
+        Color(0xB3101019)
+    )
+)
+
+val VioletGlowBrush = Brush.horizontalGradient(
+    colors = listOf(
+        ElectricViolet,
+        SoftLavender
+    )
+)
+
+// Legacy compatibility aliases to prevent compile breaks in existing files
+val MechonDarkBg = ObsidianBlack
+val MechonSurface = ElevatedSurface
+val MechonSurfaceVariant = ElevatedSurfaceHighlight
+val MechonBorder = SubtleBorder
+val MechonBlue = ElectricViolet
+val MechonBlueLight = SoftLavender
+val MechonBlueDark = DeepViolet
+val MechonCyan = SoftLavender
+val MechonGreen = StatusConnected
+val MechonYellow = StatusWarning
+val MechonRed = StatusError
+val MechonPurple = ElectricViolet
+val AssistantBubbleBg = AssistantSurface
