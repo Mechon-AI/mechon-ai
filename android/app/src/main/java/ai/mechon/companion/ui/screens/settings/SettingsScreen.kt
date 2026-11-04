@@ -27,6 +27,7 @@ import ai.mechon.companion.data.remote.DesktopApiClient
 import ai.mechon.companion.data.remote.SessionManager
 import ai.mechon.companion.data.search.WebSearchManager
 import ai.mechon.companion.ui.components.*
+import ai.mechon.companion.ui.screens.diagnostics.ConnectionDiagnosticsDialog
 import ai.mechon.companion.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -49,6 +50,9 @@ fun SettingsScreen(
     var deviceNameInput by remember { mutableStateOf(sessionManager.deviceName) }
     var isWebSearchDialogVisible by remember { mutableStateOf(false) }
     var searchConfig by remember { mutableStateOf(webSearchManager.loadConfig()) }
+    var isDiagnosticsVisible by remember { mutableStateOf(false) }
+    val connectionManager = remember { ai.mechon.companion.MechonApplication.instance.connectionManager }
+    val diagnostics by connectionManager.diagnostics.collectAsState()
 
     Scaffold(
         topBar = {
@@ -137,20 +141,38 @@ fun SettingsScreen(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (sessionManager.isPaired) StatusConnected.copy(alpha = 0.15f) else ElevatedSurfaceHighlight)
-                            .border(1.dp, if (sessionManager.isPaired) StatusConnected.copy(alpha = 0.3f) else GlassBorder, RoundedCornerShape(12.dp))
-                            .clickable { onNavigateToPairing() }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = if (sessionManager.isPaired) "Manage Pairing" else "Pair Now",
-                            color = if (sessionManager.isPaired) StatusConnected else SoftLavender,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ElevatedSurfaceHighlight)
+                                .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+                                .clickable { isDiagnosticsVisible = true }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Diagnostics",
+                                color = SoftLavender,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (sessionManager.isPaired) StatusConnected.copy(alpha = 0.15f) else ElevatedSurfaceHighlight)
+                                .border(1.dp, if (sessionManager.isPaired) StatusConnected.copy(alpha = 0.3f) else GlassBorder, RoundedCornerShape(12.dp))
+                                .clickable { onNavigateToPairing() }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = if (sessionManager.isPaired) "Manage Pairing" else "Pair Now",
+                                color = if (sessionManager.isPaired) StatusConnected else SoftLavender,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
@@ -505,5 +527,13 @@ fun SettingsScreen(
                 }
             )
         }
+
+        ConnectionDiagnosticsDialog(
+            isOpen = isDiagnosticsVisible,
+            diagnostics = diagnostics,
+            onDismiss = { isDiagnosticsVisible = false },
+            onTestConnection = { connectionManager.runVerificationPipeline() },
+            onOpenPairing = onNavigateToPairing
+        )
     }
 }

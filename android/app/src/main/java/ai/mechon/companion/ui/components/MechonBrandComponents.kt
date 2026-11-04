@@ -188,8 +188,29 @@ fun MechonMobileHeader(
     isPaired: Boolean,
     workstationName: String?,
     onPairingClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    connectionState: ai.mechon.companion.data.remote.ConnectionState = if (isPaired) ai.mechon.companion.data.remote.ConnectionState.READY else ai.mechon.companion.data.remote.ConnectionState.DISCONNECTED,
+    onDiagnosticsClick: (() -> Unit)? = null
 ) {
+    val statusColor = when (connectionState) {
+        ai.mechon.companion.data.remote.ConnectionState.READY -> StatusConnected
+        ai.mechon.companion.data.remote.ConnectionState.CONNECTED,
+        ai.mechon.companion.data.remote.ConnectionState.SYNCHRONIZING,
+        ai.mechon.companion.data.remote.ConnectionState.DEGRADED -> StatusWarning
+        ai.mechon.companion.data.remote.ConnectionState.ERROR -> StatusError
+        else -> TextMuted
+    }
+
+    val statusText = when (connectionState) {
+        ai.mechon.companion.data.remote.ConnectionState.READY -> workstationName?.take(14) ?: "Ready"
+        ai.mechon.companion.data.remote.ConnectionState.CONNECTED -> "Connected"
+        ai.mechon.companion.data.remote.ConnectionState.SYNCHRONIZING -> "Syncing"
+        ai.mechon.companion.data.remote.ConnectionState.DEGRADED -> "Degraded"
+        ai.mechon.companion.data.remote.ConnectionState.ERROR -> "Error"
+        ai.mechon.companion.data.remote.ConnectionState.RECONNECTING -> "Reconnecting"
+        else -> "Offline"
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -232,8 +253,10 @@ fun MechonMobileHeader(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
                 .background(ElevatedSurface)
-                .border(1.dp, if (isPaired) StatusConnected.copy(alpha = 0.35f) else GlassBorder, RoundedCornerShape(20.dp))
-                .clickable { onPairingClick() }
+                .border(1.dp, if (connectionState == ai.mechon.companion.data.remote.ConnectionState.READY) StatusConnected.copy(alpha = 0.35f) else GlassBorder, RoundedCornerShape(20.dp))
+                .clickable {
+                    if (onDiagnosticsClick != null) onDiagnosticsClick() else onPairingClick()
+                }
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -242,20 +265,20 @@ fun MechonMobileHeader(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(if (isPaired) StatusConnected else TextMuted)
+                    .background(statusColor)
             )
 
             Text(
-                text = if (isPaired) (workstationName?.take(14) ?: "Connected") else "Offline",
-                color = if (isPaired) TextPrimary else TextSecondary,
+                text = statusText,
+                color = if (connectionState == ai.mechon.companion.data.remote.ConnectionState.READY) TextPrimary else TextSecondary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
 
             Icon(
-                imageVector = if (isPaired) Icons.Default.Lan else Icons.Default.CloudOff,
+                imageVector = if (connectionState == ai.mechon.companion.data.remote.ConnectionState.READY) Icons.Default.Lan else Icons.Default.CloudOff,
                 contentDescription = "Desktop Pairing",
-                tint = if (isPaired) StatusConnected else TextMuted,
+                tint = statusColor,
                 modifier = Modifier.size(14.dp)
             )
         }

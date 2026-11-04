@@ -37,6 +37,9 @@ data class ChatUiState(
     val isModelDialogOpen: Boolean = false,
     val isPaired: Boolean = false,
     val pairedDesktopName: String? = null,
+    val connectionState: ai.mechon.companion.data.remote.ConnectionState = ai.mechon.companion.data.remote.ConnectionState.DISCONNECTED,
+    val connectionDiagnostics: ai.mechon.companion.data.remote.ConnectionDiagnostics = ai.mechon.companion.data.remote.ConnectionDiagnostics(),
+    val isDiagnosticsDialogOpen: Boolean = false,
     // Conversation Drawer State
     val conversationsList: List<ConversationEntity> = emptyList(),
     val searchQuery: String = "",
@@ -55,7 +58,8 @@ class ChatViewModel(
     private val syncRepository: SyncRepository,
     private val desktopApiClient: DesktopApiClient,
     private val sessionManager: SessionManager,
-    private val webSearchManager: WebSearchManager
+    private val webSearchManager: WebSearchManager,
+    private val connectionManager: ai.mechon.companion.data.remote.ConnectionManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -72,6 +76,26 @@ class ChatViewModel(
                 isPaired = sessionManager.isPaired,
                 pairedDesktopName = sessionManager.desktopName
             ) 
+        }
+
+        if (connectionManager != null) {
+            viewModelScope.launch {
+                connectionManager.diagnostics.collect { diag ->
+                    _uiState.update {
+                        it.copy(
+                            connectionState = diag.state,
+                            connectionDiagnostics = diag,
+                            isPaired = diag.state == ai.mechon.companion.data.remote.ConnectionState.READY,
+                            pairedDesktopName = diag.desktopName.ifBlank { sessionManager.desktopName }
+                        )
+                    }
+                }
+            }
+            if (sessionManager.isPaired) {
+                viewModelScope.launch {
+                    connectionManager.runVerificationPipeline()
+                }
+            }
         }
         observeConversationsList("")
         fetchAvailableModels()
@@ -296,6 +320,14 @@ class ChatViewModel(
 
     fun setModelSearchQuery(query: String) {
         _uiState.update { it.copy(modelSearchQuery = query) }
+    }
+
+    fun setDiagnosticsDialogOpen(open: Boolean) {
+        _uiState.update { it.copy(isDiagnosticsDialogOpen = open) }
+    }
+
+    suspend fun testConnectionPipeline() {
+        connectionManager?.runVerificationPipeline()
     }
 
     fun onInputTextChanged(text: String) {

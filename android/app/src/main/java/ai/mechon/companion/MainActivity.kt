@@ -67,7 +67,8 @@ class MainActivity : ComponentActivity() {
                                             syncRepository = app.syncRepository,
                                             desktopApiClient = app.desktopApiClient,
                                             sessionManager = app.sessionManager,
-                                            webSearchManager = app.webSearchManager
+                                            webSearchManager = app.webSearchManager,
+                                            connectionManager = app.connectionManager
                                         ) as T
                                     }
                                 }

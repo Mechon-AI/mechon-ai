@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.local.ConversationEntity
 import ai.mechon.companion.data.remote.AttachmentPayload
 import ai.mechon.companion.ui.components.*
+import ai.mechon.companion.ui.screens.diagnostics.ConnectionDiagnosticsDialog
 import ai.mechon.companion.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -100,8 +101,10 @@ fun ChatScreen(
         topBar = {
             MechonMobileHeader(
                 isPaired = uiState.isPaired,
-                workstationName = "Mechon Workstation",
-                onPairingClick = onNavigateToPairing
+                workstationName = uiState.connectionDiagnostics.desktopName.ifBlank { "Mechon Workstation" },
+                connectionState = uiState.connectionState,
+                onPairingClick = onNavigateToPairing,
+                onDiagnosticsClick = { viewModel.setDiagnosticsDialogOpen(true) }
             )
         },
         bottomBar = {
@@ -726,4 +729,13 @@ fun ChatScreen(
             }
         )
     }
+
+    // Connection Health Diagnostics Dialog
+    ConnectionDiagnosticsDialog(
+        isOpen = uiState.isDiagnosticsDialogOpen,
+        diagnostics = uiState.connectionDiagnostics,
+        onDismiss = { viewModel.setDiagnosticsDialogOpen(false) },
+        onTestConnection = { viewModel.testConnectionPipeline() },
+        onOpenPairing = onNavigateToPairing
+    )
 }
