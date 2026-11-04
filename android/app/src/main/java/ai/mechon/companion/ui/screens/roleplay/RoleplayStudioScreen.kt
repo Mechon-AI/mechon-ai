@@ -1,22 +1,30 @@
 package ai.mechon.companion.ui.screens.roleplay
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.repository.RoleplaySection
+import ai.mechon.companion.ui.components.MechonLogoMark
 import ai.mechon.companion.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,9 +37,6 @@ fun RoleplayStudioScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var newPresetName by remember { mutableStateOf("") }
-    var newCharName by remember { mutableStateOf("") }
-    var newCharAvatar by remember { mutableStateOf("🎭") }
-    var newCharDesc by remember { mutableStateOf("") }
     var customSectionTitle by remember { mutableStateOf("") }
     var customSectionContent by remember { mutableStateOf("") }
 
@@ -39,25 +44,37 @@ fun RoleplayStudioScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Roleplay Studio",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = if (uiState.activeCharacter != null) "${uiState.activeCharacter?.avatar} ${uiState.activeCharacter?.name}" else if (uiState.activePreset != null) "Preset: ${uiState.activePreset?.name}" else "10 Modular Sections",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MechonPurple,
-                            fontSize = 11.sp
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        MechonLogoMark(size = 24.dp)
+                        Column {
+                            Text(
+                                text = "Roleplay Context",
+                                color = TextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (uiState.activeCharacter != null) {
+                                    "${uiState.activeCharacter?.avatar} ${uiState.activeCharacter?.name}"
+                                } else if (uiState.activePreset != null) {
+                                    "Preset: ${uiState.activePreset?.name}"
+                                } else {
+                                    "10 Modular Directive Sections"
+                                },
+                                color = SoftLavender,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = TextPrimary
                         )
@@ -67,9 +84,9 @@ fun RoleplayStudioScreen(
                     // Character Library
                     IconButton(onClick = { viewModel.setCharacterLibraryOpen(true) }) {
                         Icon(
-                            imageVector = Icons.Default.Person,
+                            imageVector = Icons.Default.Face,
                             contentDescription = "Character Library",
-                            tint = MechonCyan
+                            tint = SoftLavender
                         )
                     }
                     // Presets List
@@ -77,7 +94,7 @@ fun RoleplayStudioScreen(
                         Icon(
                             imageVector = Icons.Default.Bookmarks,
                             contentDescription = "Presets",
-                            tint = MechonPurple
+                            tint = ElectricViolet
                         )
                     }
                     // Save Preset
@@ -85,20 +102,21 @@ fun RoleplayStudioScreen(
                         Icon(
                             imageVector = Icons.Default.Save,
                             contentDescription = "Save Preset",
-                            tint = MechonBlueLight
+                            tint = TextPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MechonDarkBg
+                    containerColor = ObsidianBlack
                 )
             )
         },
-        containerColor = MechonDarkBg
+        containerColor = ObsidianBlack
     ) { paddingValues ->
         Column(
             modifier = modifier
                 .fillMaxSize()
+                .background(ObsidianBlack)
                 .padding(paddingValues)
         ) {
             LazyColumn(
@@ -106,72 +124,95 @@ fun RoleplayStudioScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                // Live Preview Summary Card
+                // Live Assembled System Prompt Preview Accordion
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MechonSurfaceVariant,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(ElevatedSurface)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(18.dp))
                             .clickable { viewModel.setPreviewExpanded(!uiState.isPreviewExpanded) }
+                            .padding(16.dp)
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(ElectricViolet.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Icon(
-                                        imageVector = Icons.Default.Visibility,
+                                        imageVector = Icons.Default.Terminal,
                                         contentDescription = null,
-                                        tint = MechonCyan,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Live Assembled System Prompt",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
+                                        tint = ElectricViolet,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
-                                Icon(
-                                    imageVector = if (uiState.isPreviewExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = null,
-                                    tint = TextMuted
-                                )
+                                Column {
+                                    Text(
+                                        text = "Assembled System Prompt",
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Preview generated directives before inference",
+                                        color = TextMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
+                            Icon(
+                                imageVector = if (uiState.isPreviewExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = SoftLavender
+                            )
+                        }
 
-                            AnimatedVisibility(visible = uiState.isPreviewExpanded) {
-                                Column(modifier = Modifier.padding(top = 10.dp)) {
-                                    Surface(
-                                        color = CodeBlockBg,
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = uiState.composedPromptPreview,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = TextSecondary,
-                                            fontSize = 11.sp,
-                                            modifier = Modifier.padding(10.dp)
-                                        )
-                                    }
+                        AnimatedVisibility(
+                            visible = uiState.isPreviewExpanded,
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically()
+                        ) {
+                            Column(modifier = Modifier.padding(top = 12.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(CodeBlockBg)
+                                        .border(1.dp, CodeBlockBorder, RoundedCornerShape(12.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = uiState.composedPromptPreview,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = TextSecondary,
+                                        fontSize = 11.5.sp,
+                                        lineHeight = 17.sp
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // 10 Modular Sections + Custom Sections
+                // 10 Modular Sections
                 val sections = uiState.config.toList()
                 items(sections, key = { it.id }) { section ->
-                    SectionCard(
+                    ObsidianSectionCard(
                         section = section,
                         onContentChanged = { content -> viewModel.updateSectionContent(section.id, content) },
                         onToggle = { viewModel.toggleSectionEnabled(section.id) },
@@ -179,114 +220,115 @@ fun RoleplayStudioScreen(
                     )
                 }
 
-                // Add Custom Section Button
+                // Add Custom Section Action
                 item {
-                    OutlinedButton(
-                        onClick = { viewModel.setAddCustomSectionOpen(true) },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MechonPurple),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(ElevatedSurfaceHighlight)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                            .clickable { viewModel.setAddCustomSectionOpen(true) }
+                            .padding(vertical = 14.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Add Custom Section", fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = SoftLavender,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Add Custom Section",
+                            color = SoftLavender,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
 
-            // Bottom Action Bar: "Start Roleplay Session"
-            Surface(
-                color = MechonSurface,
-                modifier = Modifier.fillMaxWidth()
+            // Bottom Floating Bar: Start Session
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
             ) {
-                Row(
+                Button(
+                    onClick = {
+                        viewModel.createChatWithCurrentRoleplay { convId ->
+                            onNavigateToChat(convId)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.Center
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(25.dp))
+                        .background(VioletGlowBrush),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
-                    Button(
-                        onClick = {
-                            viewModel.createChatWithCurrentRoleplay { convId ->
-                                onNavigateToChat(convId)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MechonPurple),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = TextPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Start Roleplay Session",
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Start Roleplay Session",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
     }
 
-    // Add Custom Section Dialog
-    if (uiState.isAddCustomSectionOpen) {
+    // Save Preset Dialog
+    if (uiState.isSaveDialogOpen) {
         AlertDialog(
-            onDismissRequest = { viewModel.setAddCustomSectionOpen(false) },
-            title = { Text("Add Custom Roleplay Section", color = TextPrimary) },
+            onDismissRequest = { viewModel.setSaveDialogOpen(false) },
+            containerColor = ElevatedSurface,
+            title = {
+                Text("Save Roleplay Preset", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = customSectionTitle,
-                        onValueChange = { customSectionTitle = it },
-                        label = { Text("Section Title") },
-                        placeholder = { Text("e.g. Magic System Constraints") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = MechonPurple,
-                            unfocusedBorderColor = MechonBorder
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = customSectionContent,
-                        onValueChange = { customSectionContent = it },
-                        label = { Text("Initial Directives") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = MechonPurple,
-                            unfocusedBorderColor = MechonBorder
-                        ),
-                        modifier = Modifier.fillMaxWidth().height(100.dp)
-                    )
-                }
+                OutlinedTextField(
+                    value = newPresetName,
+                    onValueChange = { newPresetName = it },
+                    placeholder = { Text("Preset Name (e.g. Cyberpunk Detective)", color = TextMuted) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricViolet,
+                        unfocusedBorderColor = GlassBorder
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.addCustomSection(customSectionTitle, customSectionContent)
-                        customSectionTitle = ""
-                        customSectionContent = ""
+                        if (newPresetName.isNotBlank()) {
+                            viewModel.savePreset(newPresetName.trim())
+                            newPresetName = ""
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MechonPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
                 ) {
-                    Text("Add Section")
+                    Text("Save Preset", color = TextPrimary)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.setAddCustomSectionOpen(false) }) {
+                TextButton(onClick = { viewModel.setSaveDialogOpen(false) }) {
                     Text("Cancel", color = TextMuted)
                 }
-            },
-            containerColor = MechonSurface
+            }
         )
     }
 
@@ -294,55 +336,45 @@ fun RoleplayStudioScreen(
     if (uiState.isCharacterLibraryOpen) {
         AlertDialog(
             onDismissRequest = { viewModel.setCharacterLibraryOpen(false) },
+            containerColor = ElevatedSurface,
             title = {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Character Library", color = TextPrimary, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = {
-                        newCharName = ""
-                        newCharAvatar = "🎭"
-                        newCharDesc = ""
-                        viewModel.saveAsCharacter("Elena Vance", "🧭", "Arcane Cartographer")
-                    }) {
-                        Text("+ Quick Save", color = MechonCyan, fontSize = 12.sp)
-                    }
-                }
+                Text("Character Library", color = TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 if (uiState.characters.isEmpty()) {
-                    Text("No saved characters. Configure the 10 sections and save a character.", color = TextMuted)
+                    Text("No saved characters. Configure your directives and save a character.", color = TextMuted)
                 } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(uiState.characters) { char ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (uiState.activeCharacter?.id == char.id) MechonPurple.copy(alpha = 0.2f) else MechonSurfaceVariant,
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (uiState.activeCharacter?.id == char.id) ElectricViolet.copy(alpha = 0.2f) else ElevatedSurfaceHighlight)
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
                                     .clickable { viewModel.loadCharacter(char) }
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(char.avatar, fontSize = 22.sp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(char.name, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                            if (char.description.isNotBlank()) {
-                                                Text(char.description, color = TextMuted, fontSize = 11.sp)
-                                            }
-                                        }
+                                    Text(char.avatar, fontSize = 20.sp)
+                                    Column {
+                                        Text(char.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text(char.description, color = TextMuted, fontSize = 11.sp, maxLines = 1)
                                     }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { viewModel.duplicateCharacter(char.id) }, modifier = Modifier.size(22.dp)) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate", tint = TextMuted, modifier = Modifier.size(14.dp))
-                                        }
-                                        IconButton(onClick = { viewModel.deleteCharacter(char.id) }, modifier = Modifier.size(22.dp)) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MechonRed, modifier = Modifier.size(14.dp))
-                                        }
-                                    }
+                                }
+                                IconButton(
+                                    onClick = { viewModel.deleteCharacter(char.id) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = StatusError, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -351,95 +383,46 @@ fun RoleplayStudioScreen(
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.setCharacterLibraryOpen(false) }) {
-                    Text("Done", color = MechonPurple)
+                    Text("Done", color = SoftLavender)
                 }
-            },
-            containerColor = MechonSurface
+            }
         )
     }
 
-    // Save Preset Dialog
-    if (uiState.isSaveDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { viewModel.setSaveDialogOpen(false) },
-            title = { Text("Save Prompt Preset", color = TextPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = newPresetName,
-                    onValueChange = { newPresetName = it },
-                    label = { Text("Preset Name") },
-                    placeholder = { Text("e.g. Arcane Cartographer Elena") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = MechonPurple,
-                        unfocusedBorderColor = MechonBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.savePreset(newPresetName)
-                        newPresetName = ""
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MechonPurple)
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.setSaveDialogOpen(false) }) {
-                    Text("Cancel", color = TextMuted)
-                }
-            },
-            containerColor = MechonSurface
-        )
-    }
-
-    // Presets List Dialog
+    // Preset List Dialog
     if (uiState.isPresetListOpen) {
         AlertDialog(
             onDismissRequest = { viewModel.setPresetListOpen(false) },
-            title = { Text("Saved Roleplay Presets", color = TextPrimary) },
+            containerColor = ElevatedSurface,
+            title = {
+                Text("Saved Presets", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
             text = {
                 if (uiState.presets.isEmpty()) {
-                    Text("No saved presets found. Customize sections and tap Save.", color = TextMuted)
+                    Text("No presets saved yet.", color = TextMuted)
                 } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(uiState.presets) { preset ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (preset.isActive) MechonPurple.copy(alpha = 0.2f) else MechonSurfaceVariant,
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (uiState.activePreset?.id == preset.id) ElectricViolet.copy(alpha = 0.2f) else ElevatedSurfaceHighlight)
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
                                     .clickable { viewModel.loadPreset(preset) }
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                Text(preset.name, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                IconButton(
+                                    onClick = { viewModel.deletePreset(preset.id) },
+                                    modifier = Modifier.size(24.dp)
                                 ) {
-                                    Text(
-                                        text = preset.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (preset.isActive) MechonPurple else TextPrimary,
-                                        fontWeight = if (preset.isActive) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                    IconButton(
-                                        onClick = { viewModel.deletePreset(preset.id) },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete",
-                                            tint = TextMuted,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = StatusError, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -448,101 +431,170 @@ fun RoleplayStudioScreen(
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.setPresetListOpen(false) }) {
-                    Text("Close", color = MechonPurple)
+                    Text("Done", color = SoftLavender)
+                }
+            }
+        )
+    }
+
+    // Add Custom Section Dialog
+    if (uiState.isAddCustomSectionOpen) {
+        AlertDialog(
+            onDismissRequest = { viewModel.setAddCustomSectionOpen(false) },
+            containerColor = ElevatedSurface,
+            title = { Text("Add Custom Roleplay Section", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = customSectionTitle,
+                        onValueChange = { customSectionTitle = it },
+                        placeholder = { Text("Section Title (e.g. Magic System Rules)", color = TextMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = ElectricViolet,
+                            unfocusedBorderColor = GlassBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customSectionContent,
+                        onValueChange = { customSectionContent = it },
+                        placeholder = { Text("Initial Directives...", color = TextMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = ElectricViolet,
+                            unfocusedBorderColor = GlassBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(100.dp)
+                    )
                 }
             },
-            containerColor = MechonSurface
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (customSectionTitle.isNotBlank()) {
+                            viewModel.addCustomSection(customSectionTitle.trim(), customSectionContent.trim())
+                            customSectionTitle = ""
+                            customSectionContent = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                ) {
+                    Text("Add", color = TextPrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setAddCustomSectionOpen(false) }) {
+                    Text("Cancel", color = TextMuted)
+                }
+            }
         )
     }
 }
 
 @Composable
-fun SectionCard(
+private fun ObsidianSectionCard(
     section: RoleplaySection,
     onContentChanged: (String) -> Unit,
     onToggle: () -> Unit,
     onDeleteCustom: (() -> Unit)? = null
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
 
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MechonSurface,
-        border = ButtonDefaults.outlinedButtonBorder.copy(
-            brush = androidx.compose.ui.graphics.SolidColor(if (section.isEnabled) MechonBorder else MechonDarkBg)
-        ),
-        modifier = Modifier.fillMaxWidth()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(ElevatedSurface)
+            .border(1.dp, if (section.isEnabled) GlassBorder else SubtleBorder, RoundedCornerShape(16.dp))
+            .padding(14.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { isExpanded = !isExpanded }
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { expanded = !expanded }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = section.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (section.isEnabled) TextPrimary else TextMuted
-                        )
-                        if (section.isCustom) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(color = MechonPurple.copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
-                                Text("Custom", color = MechonPurple, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
-                            }
-                        }
-                    }
                     Text(
-                        text = section.description,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted,
-                        fontSize = 11.sp
+                        text = section.title,
+                        color = if (section.isEnabled) TextPrimary else TextMuted,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (onDeleteCustom != null) {
-                        IconButton(onClick = onDeleteCustom, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Section", tint = MechonRed, modifier = Modifier.size(16.dp))
+                    if (section.isCustom) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(ElectricViolet.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("Custom", color = SoftLavender, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Switch(
-                        checked = section.isEnabled,
-                        onCheckedChange = { onToggle() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = TextPrimary,
-                            checkedTrackColor = MechonPurple,
-                            uncheckedThumbColor = TextMuted,
-                            uncheckedTrackColor = MechonSurfaceVariant
-                        )
-                    )
                 }
+                Text(
+                    text = section.description,
+                    color = TextMuted,
+                    fontSize = 11.sp
+                )
             }
 
-            AnimatedVisibility(visible = expanded || section.isEnabled) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (onDeleteCustom != null) {
+                    IconButton(
+                        onClick = onDeleteCustom,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = StatusError, modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                Switch(
+                    checked = section.isEnabled,
+                    onCheckedChange = { onToggle() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = TextPrimary,
+                        checkedTrackColor = ElectricViolet,
+                        uncheckedThumbColor = TextMuted,
+                        uncheckedTrackColor = ElevatedSurfaceHighlight
+                    )
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded || section.isEnabled,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(modifier = Modifier.padding(top = 10.dp)) {
                 OutlinedTextField(
                     value = section.content,
                     onValueChange = onContentChanged,
                     enabled = section.isEnabled,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary,
                         disabledTextColor = TextMuted,
-                        focusedBorderColor = MechonPurple,
-                        unfocusedBorderColor = MechonBorder,
-                        disabledBorderColor = MechonSurfaceVariant
+                        focusedBorderColor = ElectricViolet,
+                        unfocusedBorderColor = GlassBorder,
+                        disabledBorderColor = Color.Transparent
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 180.dp)
                 )
             }
         }
