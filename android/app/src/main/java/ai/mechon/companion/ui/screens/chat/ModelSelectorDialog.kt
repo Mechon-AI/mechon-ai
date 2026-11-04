@@ -22,8 +22,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.remote.ProviderModelItem
+import ai.mechon.companion.ui.components.MechonLogoMark
 import ai.mechon.companion.ui.theme.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelSelectorDialog(
     models: List<ProviderModelItem>,
@@ -37,15 +39,16 @@ fun ModelSelectorDialog(
     onModelSelect: (ProviderModelItem) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val safeModels = remember(models) { models.filterNotNull() }
     var selectedProviderFilter by remember { mutableStateOf<String?>(null) }
 
-    // Distinct list of provider names for filter chips
+    // Distinct sorted list of provider names for filter chips
     val providerNames = remember(safeModels) {
         safeModels.map { it.providerName }.distinct().sorted()
     }
 
-    // Filter models based on search query and provider chip filter
+    // Filter models based on search query and selected provider chip
     val filteredModels = remember(safeModels, searchQuery, selectedProviderFilter) {
         safeModels.filter { item ->
             val matchesProvider = selectedProviderFilter == null || item.providerName == selectedProviderFilter
@@ -59,320 +62,395 @@ fun ModelSelectorDialog(
         }
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = {
+        sheetState = sheetState,
+        containerColor = ElevatedSurface,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = GlassBorder
+            )
+        },
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(horizontal = 20.dp)
+                .navigationBarsPadding()
+        ) {
+            // Header: Title & Desktop Status
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = MechonBlueLight,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Remote Model Catalog",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                }
-                IconButton(
-                    onClick = onRefresh,
-                    enabled = !isLoading,
-                    modifier = Modifier.size(28.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp),
-                            color = MechonBlueLight
+                    MechonLogoMark(size = 24.dp)
+                    Column {
+                        Text(
+                            text = "Model Catalog",
+                            color = TextPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
+                        Text(
+                            text = "Discovered via Mechon Desktop API",
+                            color = SoftLavender,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isLoading,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp),
+                                color = ElectricViolet
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = SoftLavender,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
                             tint = TextMuted,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
-        },
-        text = {
-            Column(
+
+            // Search Bar
+            TextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                placeholder = {
+                    Text(
+                        text = "Search models (e.g. gemini, llama, claude)...",
+                        color = TextMuted,
+                        fontSize = 13.sp
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = SoftLavender,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onSearchQueryChange("") },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear",
+                                tint = TextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = ObsidianBlack,
+                    unfocusedContainerColor = ObsidianBlack,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    cursorColor = ElectricViolet,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                ),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 480.dp)
-            ) {
-                // Search Input
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    placeholder = {
-                        Text("Search models or providers...", color = TextMuted, fontSize = 13.sp)
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(18.dp)
+                    .height(48.dp)
+                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Provider Category Filter Chips
+            if (providerNames.size > 1) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedProviderFilter == null,
+                            onClick = { selectedProviderFilter = null },
+                            label = { Text("All (${safeModels.size})", fontSize = 11.5.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = ElectricViolet.copy(alpha = 0.25f),
+                                selectedLabelColor = TextPrimary,
+                                containerColor = ElevatedSurfaceHighlight,
+                                labelColor = TextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selectedProviderFilter == null,
+                                borderColor = GlassBorder,
+                                selectedBorderColor = ElectricViolet
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear search",
-                                    tint = TextMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MechonSurfaceVariant,
-                        unfocusedContainerColor = MechonSurfaceVariant,
-                        focusedBorderColor = MechonBlueLight,
-                        unfocusedBorderColor = MechonBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    shape = RoundedCornerShape(8.dp),
+                    }
+
+                    items(providerNames) { providerName ->
+                        val count = safeModels.count { it.providerName == providerName }
+                        FilterChip(
+                            selected = selectedProviderFilter == providerName,
+                            onClick = {
+                                selectedProviderFilter = if (selectedProviderFilter == providerName) null else providerName
+                            },
+                            label = { Text("$providerName ($count)", fontSize = 11.5.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = ElectricViolet.copy(alpha = 0.25f),
+                                selectedLabelColor = TextPrimary,
+                                containerColor = ElevatedSurfaceHighlight,
+                                labelColor = TextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selectedProviderFilter == providerName,
+                                borderColor = GlassBorder,
+                                selectedBorderColor = ElectricViolet
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // Error Message Banner with Retry
+            if (errorMessage != null) {
+                Surface(
+                    color = StatusError.copy(alpha = 0.15f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                )
-
-                // Provider Filter Chips
-                if (providerNames.size > 1) {
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, StatusError.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item {
-                            FilterChip(
-                                selected = selectedProviderFilter == null,
-                                onClick = { selectedProviderFilter = null },
-                                label = { Text("All (${safeModels.size})", fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MechonBlueLight.copy(alpha = 0.2f),
-                                    selectedLabelColor = MechonBlueLight
-                                )
-                            )
-                        }
-                        items(providerNames) { prov ->
-                            val count = safeModels.count { it.providerName == prov }
-                            FilterChip(
-                                selected = selectedProviderFilter == prov,
-                                onClick = {
-                                    selectedProviderFilter = if (selectedProviderFilter == prov) null else prov
-                                },
-                                label = { Text("$prov ($count)", fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MechonBlueLight.copy(alpha = 0.2f),
-                                    selectedLabelColor = MechonBlueLight
-                                )
-                            )
+                        Text(
+                            text = errorMessage,
+                            color = StatusError,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onRefresh) {
+                            Text("Retry", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-                // Error Banner if present
-                if (errorMessage != null && safeModels.isEmpty()) {
-                    Surface(
-                        color = MechonRed.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp)
+            // Model List or Empty State
+            if (filteredModels.isEmpty() && !isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = errorMessage,
-                                color = MechonRed,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Button(
-                                onClick = onRefresh,
-                                colors = ButtonDefaults.buttonColors(containerColor = MechonRed),
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text("Retry Connection", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                } else if (isLoading && safeModels.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = MechonBlueLight)
-                    }
-                } else if (filteredModels.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SearchOff,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(40.dp)
+                        )
                         Text(
-                            text = if (searchQuery.isNotEmpty()) {
-                                "No models matching \"$searchQuery\""
-                            } else {
-                                "No active providers registered on Desktop.\nConfigure API keys in Mechon Desktop Settings."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = if (safeModels.isEmpty()) "No remote models discovered" else "No models match your search",
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (safeModels.isEmpty()) "Ensure Mechon AI Desktop is running and providers are configured in Settings." else "Try a different search term or reset filter.",
                             color = TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 32.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                    ) {
-                        items(filteredModels, key = { "${it.providerId}_${it.modelId}" }) { item ->
-                            val isSelected = item.modelId == selectedModelId &&
-                                (selectedProviderId.isEmpty() || item.providerId == selectedProviderId)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    items(filteredModels, key = { "${it.providerId}:${it.modelId}" }) { item ->
+                        val isSelected = item.modelId == selectedModelId
 
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) MechonSurfaceVariant else MechonSurface,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 3.dp)
-                                    .clickable { onModelSelect(item) }
-                                    .then(
-                                        if (isSelected) Modifier.border(1.dp, MechonBlueLight, RoundedCornerShape(8.dp))
-                                        else Modifier
-                                    )
-                            ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) ElectricViolet.copy(alpha = 0.16f) else ElevatedSurfaceHighlight)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) ElectricViolet else GlassBorder,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .clickable { onModelSelect(item) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Availability status dot
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(if (item.isAvailable) StatusConnected else StatusWarning)
+                                    )
+
+                                    Text(
+                                        text = item.modelName.ifBlank { item.modelId },
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = item.providerName,
+                                        color = SoftLavender,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    Text(
+                                        text = "•",
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
+
+                                    Text(
+                                        text = item.modelId,
+                                        color = TextMuted,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Capability badges
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            // Availability status dot
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(7.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (item.isAvailable) MechonGreen else MechonYellow)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = item.modelName.ifBlank { item.modelId },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) MechonBlueLight else TextPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "${item.providerName} (${item.providerId})",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TextMuted,
-                                                fontSize = 11.sp
-                                            )
-
-                                            // Vision Badge
-                                            if (item.supportsVision) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = MechonCyan.copy(alpha = 0.15f)
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Visibility,
-                                                            contentDescription = null,
-                                                            tint = MechonCyan,
-                                                            modifier = Modifier.size(10.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(2.dp))
-                                                        Text(
-                                                            text = "Vision",
-                                                            fontSize = 9.sp,
-                                                            color = MechonCyan,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            // Context Window Badge
-                                            if (item.contextLength > 0) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                val ctxLabel = if (item.contextLength >= 1000000) {
-                                                    "${item.contextLength / 1000000}M ctx"
-                                                } else {
-                                                    "${item.contextLength / 1000}k ctx"
-                                                }
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = MechonPurple.copy(alpha = 0.15f)
-                                                ) {
-                                                    Text(
-                                                        text = ctxLabel,
-                                                        fontSize = 9.sp,
-                                                        color = MechonPurple,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
+                                    if (item.supportsVision) {
+                                        CapabilityPill("Vision", ElectricViolet)
                                     }
-
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = "Selected",
-                                            tint = MechonBlueLight,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                    if (item.contextLength > 0) {
+                                        val contextLabel = when {
+                                            item.contextLength >= 1_000_000 -> "${item.contextLength / 1_000_000}M ctx"
+                                            item.contextLength >= 1_000 -> "${item.contextLength / 1_000}K ctx"
+                                            else -> "${item.contextLength} ctx"
+                                        }
+                                        CapabilityPill(contextLabel, SoftLavender)
                                     }
+                                }
+                            }
+
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(ElectricViolet),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", color = MechonBlueLight)
-            }
-        },
-        containerColor = MechonSurface,
-        shape = RoundedCornerShape(12.dp)
-    )
+        }
+    }
+}
+
+@Composable
+private fun CapabilityPill(text: String, accentColor: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(accentColor.copy(alpha = 0.12f))
+            .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            color = accentColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
 }
