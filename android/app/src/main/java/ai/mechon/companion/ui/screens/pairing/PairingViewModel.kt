@@ -64,7 +64,7 @@ class PairingViewModel(
         viewModelScope.launch {
             lanDiscoveryService.discovered.collectLatest { list ->
                 _uiState.update {
-                    val nextState = if (it.isNotEmpty() && it.flowState == PairingFlowState.DISCOVERING) {
+                    val nextState = if (list.isNotEmpty() && it.flowState == PairingFlowState.DISCOVERING) {
                         PairingFlowState.AVAILABLE
                     } else it.flowState
                     it.copy(
