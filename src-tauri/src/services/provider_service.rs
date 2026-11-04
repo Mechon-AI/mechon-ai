@@ -108,6 +108,102 @@ impl ProviderService {
         })
     }
 
+    /// Resolves a provider canonical entry by exact ID, known alias, case-insensitive match, or model ownership
+    pub async fn resolve(
+        pool: &SqlitePool,
+        id_or_alias: Option<&str>,
+        requested_model: Option<&str>,
+        vault: &dyn CredentialStore,
+    ) -> Result<Provider, AppError> {
+        let needle = id_or_alias.unwrap_or("").trim();
+
+        // 1. Direct match if exact ID provided
+        if !needle.is_empty() {
+            if let Ok(p) = Self::get(pool, needle, vault).await {
+                return Ok(p);
+            }
+
+            // 2. Canonical alias mapping
+            let alias_target = match needle.to_lowercase().as_str() {
+                "google" | "google-gemini" | "gemini-api" => "gemini",
+                "claude" | "anthropic-claude" => "anthropic",
+                "chatgpt" | "openai-api" => "openai",
+                "local" | "ollama-local" => "ollama",
+                "mock-provider" => "mock",
+                _ => needle,
+            };
+
+            if alias_target != needle {
+                if let Ok(p) = Self::get(pool, alias_target, vault).await {
+                    return Ok(p);
+                }
+            }
+
+            // 3. Search DB case-insensitively by id, provider_type, or name
+            let needle_lower = needle.to_lowercase();
+            let row = sqlx::query_as::<_, (String,)>(
+                "SELECT id FROM providers 
+                 WHERE lower(id) = ? OR lower(provider_type) = ? OR lower(name) = ?
+                 ORDER BY is_active DESC, updated_at DESC LIMIT 1"
+            )
+            .bind(&needle_lower)
+            .bind(&needle_lower)
+            .bind(&needle_lower)
+            .fetch_optional(pool)
+            .await?;
+
+            if let Some((matched_id,)) = row {
+                if let Ok(p) = Self::get(pool, &matched_id, vault).await {
+                    return Ok(p);
+                }
+            }
+        }
+
+        // 4. Model-based resolution fallback: if a model was specified, find an active provider that owns it
+        if let Some(model) = requested_model {
+            let m_trim = model.trim();
+            if !m_trim.is_empty() {
+                let pattern = format!("%\"{}\"%", m_trim);
+                let row = sqlx::query_as::<_, (String,)>(
+                    "SELECT id FROM providers 
+                     WHERE is_active = 1 AND (models_cache_json LIKE ? OR default_model = ?)
+                     ORDER BY updated_at DESC LIMIT 1"
+                )
+                .bind(&pattern)
+                .bind(m_trim)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((matched_id,)) = row {
+                    if let Ok(p) = Self::get(pool, &matched_id, vault).await {
+                        return Ok(p);
+                    }
+                }
+
+                // If model name contains "gemini", try resolving to gemini provider
+                if m_trim.to_lowercase().contains("gemini") {
+                    if let Ok(p) = Self::get(pool, "gemini", vault).await {
+                        return Ok(p);
+                    }
+                }
+            }
+        }
+
+        // 5. Default provider fallback: first active provider with an API key, or first active provider
+        let all = Self::list(pool, vault).await?;
+        if let Some(p) = all.iter().find(|p| p.is_active && p.has_api_key) {
+            return Ok(p.clone());
+        }
+        if let Some(p) = all.iter().find(|p| p.is_active) {
+            return Ok(p.clone());
+        }
+
+        Err(AppError::NotFound(format!(
+            "Provider '{}' not found in desktop registry. Ensure a provider is registered and active in Desktop Settings.",
+            needle
+        )))
+    }
+
     pub async fn get_raw_key(
         pool: &SqlitePool,
         id: &str,

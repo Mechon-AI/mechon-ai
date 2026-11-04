@@ -778,26 +778,51 @@ async fn handle_get_providers_models(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": e.to_string() }).to_string()))?;
 
     let mut result_providers = Vec::new();
-    for p in providers {
+    let mut flat_models = Vec::new();
+    let mut default_prov_id: Option<String> = None;
+    let mut default_model_id: Option<String> = None;
+
+    for p in &providers {
         if !p.is_active {
             continue;
         }
 
-        let models = p.models_cache.into_iter().map(|m| {
+        if default_prov_id.is_none() && (p.has_api_key || p.provider_type == "mock" || p.provider_type == "ollama") {
+            default_prov_id = Some(p.id.clone());
+            default_model_id = p.default_model.clone();
+        }
+
+        let mut p_models = Vec::new();
+        for m in &p.models_cache {
             let m_lower = m.to_lowercase();
             let supports_vision = m_lower.contains("vision")
                 || m_lower.contains("flash")
                 || m_lower.contains("claude-3")
                 || m_lower.contains("gpt-4o")
                 || m_lower.contains("gemini");
-            json!({
+            let ctx = if m_lower.contains("gemini") { 1048576 } else { 128000 };
+
+            p_models.push(json!({
                 "id": m,
                 "name": m,
                 "supports_vision": supports_vision,
                 "supports_streaming": true,
-                "context_length": if m_lower.contains("gemini") { 1048576 } else { 128000 }
-            })
-        }).collect::<Vec<_>>();
+                "context_length": ctx
+            }));
+
+            flat_models.push(json!({
+                "provider_id": p.id,
+                "provider_name": p.name,
+                "provider_type": p.provider_type,
+                "model_id": m,
+                "model_name": m,
+                "supports_vision": supports_vision,
+                "supports_streaming": true,
+                "context_length": ctx,
+                "is_active": p.is_active,
+                "is_available": p.has_api_key || p.provider_type == "mock" || p.provider_type == "ollama"
+            }));
+        }
 
         result_providers.push(json!({
             "id": p.id,
@@ -806,25 +831,42 @@ async fn handle_get_providers_models(
             "is_active": p.is_active,
             "has_api_key": p.has_api_key,
             "default_model": p.default_model,
-            "models": models
+            "models": p_models
         }));
+    }
+
+    if default_model_id.is_none() {
+        default_model_id = flat_models.first().and_then(|m| m.get("model_id").and_then(|v| v.as_str().map(String::from)));
+    }
+    if default_prov_id.is_none() {
+        default_prov_id = flat_models.first().and_then(|m| m.get("provider_id").and_then(|v| v.as_str().map(String::from)));
     }
 
     Ok((
         StatusCode::OK,
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
-        json!({ "providers": result_providers }).to_string(),
+        json!({
+            "providers": result_providers,
+            "models": flat_models,
+            "default_provider": default_prov_id,
+            "default_model": default_model_id
+        }).to_string(),
     ))
 }
 
 #[derive(Deserialize)]
 struct InferenceChatPayload {
-    provider_id: String,
+    #[serde(alias = "providerId")]
+    provider_id: Option<String>,
+    #[serde(alias = "model_id")]
+    #[serde(alias = "modelId")]
     model: Option<String>,
+    #[serde(alias = "systemPrompt")]
     system_prompt: Option<String>,
     messages: Vec<ChatMessage>,
     temperature: Option<f64>,
     top_p: Option<f64>,
+    #[serde(alias = "maxTokens")]
     max_tokens: Option<i64>,
 }
 
@@ -835,24 +877,29 @@ async fn handle_inference_chat(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     authenticate_device(&headers, &state.pool).await?;
 
-    let p_id = payload.provider_id.trim();
-    if p_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, json!({ "error": "Provider ID is required" }).to_string()));
-    }
+    let p_id_opt = payload.provider_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let model_opt = payload.model.as_deref().map(str::trim).filter(|s| !s.is_empty());
 
-    let provider = ProviderService::get(&state.pool, p_id, state.vault.as_ref())
+    let provider = ProviderService::resolve(&state.pool, p_id_opt, model_opt, state.vault.as_ref())
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, json!({ "error": e.to_string() }).to_string()))?;
 
-    let api_key = ProviderService::get_raw_key(&state.pool, p_id, state.vault.as_ref())
+    let api_key = ProviderService::get_raw_key(&state.pool, &provider.id, state.vault.as_ref())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": e.to_string() }).to_string()))?;
 
-    let selected_model = payload.model
-        .filter(|m| !m.trim().is_empty())
-        .or_else(|| provider.default_model.filter(|m| !m.trim().is_empty()))
+    let selected_model = model_opt
+        .map(String::from)
+        .or_else(|| provider.default_model.clone().filter(|m| !m.trim().is_empty()))
         .or_else(|| provider.models_cache.first().cloned())
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, json!({ "error": "No model available for provider" }).to_string()))?;
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, json!({ "error": format!("No model available for provider '{}'", provider.name) }).to_string()))?;
+
+    // Check API key requirement
+    if provider.provider_type != "mock" && provider.provider_type != "ollama" && api_key.is_none() {
+        return Err((StatusCode::BAD_REQUEST, json!({
+            "error": format!("Provider '{}' ({}) requires an API key configured in Mechon Desktop.", provider.name, provider.id)
+        }).to_string()));
+    }
 
     let mut messages = Vec::new();
     if let Some(sys) = payload.system_prompt {
@@ -891,6 +938,8 @@ async fn handle_inference_chat(
             "role": resp.role,
             "content": resp.content,
             "model": resp.model,
+            "provider_id": provider.id,
+            "provider_name": provider.name,
             "finish_reason": resp.finish_reason
         }).to_string(),
     ))

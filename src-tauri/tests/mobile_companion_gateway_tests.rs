@@ -119,8 +119,51 @@ async fn test_gateway_pairing_and_token_authentication() {
     let prov_bytes = axum::body::to_bytes(auth_resp.into_body(), 1024 * 64).await.unwrap();
     let prov_json: Value = serde_json::from_slice(&prov_bytes).unwrap();
     assert!(prov_json["providers"].as_array().unwrap().len() >= 1);
+    assert!(prov_json["models"].as_array().unwrap().len() >= 1);
+    assert!(prov_json["default_provider"].is_string());
+    assert!(prov_json["default_model"].is_string());
 
-    // 4. Test authenticated endpoint with invalid token
+    // 4. Test authenticated chat inference with canonical provider
+    let chat_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/inference/chat")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(json!({
+            "provider_id": "mock",
+            "model_id": "mock-llama-3-8b",
+            "messages": [
+                { "role": "user", "content": "Hello from companion test" }
+            ]
+        }).to_string()))
+        .unwrap();
+
+    let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
+    assert_eq!(chat_resp.status(), StatusCode::OK);
+    let chat_bytes = axum::body::to_bytes(chat_resp.into_body(), 1024 * 64).await.unwrap();
+    let chat_json: Value = serde_json::from_slice(&chat_bytes).unwrap();
+    assert_eq!(chat_json["role"], "assistant");
+    assert!(!chat_json["content"].as_str().unwrap().is_empty());
+
+    // 5. Test authenticated chat inference with provider alias resolution (e.g. "mock-provider")
+    let alias_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/inference/chat")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(json!({
+            "provider_id": "mock-provider",
+            "model": "mock-llama-3-8b",
+            "messages": [
+                { "role": "user", "content": "Hello via alias" }
+            ]
+        }).to_string()))
+        .unwrap();
+
+    let alias_resp = app.clone().oneshot(alias_req).await.unwrap();
+    assert_eq!(alias_resp.status(), StatusCode::OK);
+
+    // 6. Test authenticated endpoint with invalid token
     let unauth_req = Request::builder()
         .method("GET")
         .uri("/api/v1/providers/models")
