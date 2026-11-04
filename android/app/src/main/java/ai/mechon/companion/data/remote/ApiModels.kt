@@ -226,3 +226,18 @@ data class SyncConversationsResponse(
     @SerializedName("received_count") val receivedCount: Int,
     @SerializedName("message") val message: String
 )
+
+// Authenticated Health & Diagnostics
+data class AuthenticatedHealthResponse(
+    @SerializedName("status") val status: String = "ok",
+    @SerializedName("version") val version: String = "",
+    @SerializedName("authenticated") val authenticated: Boolean = false,
+    @SerializedName("device_id") val deviceId: String? = null,
+    @SerializedName("desktop_name") val desktopName: String? = null,
+    @SerializedName("active_providers_count") val activeProvidersCount: Int = 0,
+    @SerializedName("available_models_count") val availableModelsCount: Int = 0
+)
+
+class PairingRevokedException(message: String = "Device pairing revoked by Mechon Desktop") : java.io.IOException(message)
+class InvalidTokenException(message: String = "Invalid or expired authentication token") : java.io.IOException(message)
+

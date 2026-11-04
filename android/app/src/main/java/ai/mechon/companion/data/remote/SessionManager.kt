@@ -59,6 +59,8 @@ class SessionManager(context: Context) {
         get() = prefs.getString(KEY_DEFAULT_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
         set(value) = prefs.edit().putString(KEY_DEFAULT_MODEL, value).apply()
 
+    var isSessionVerified: Boolean = false
+
     val isPaired: Boolean
         get() = !authToken.isNullOrBlank()
 
@@ -71,6 +73,7 @@ class SessionManager(context: Context) {
         }
 
     fun clearPairing() {
+        isSessionVerified = false
         prefs.edit()
             .remove(KEY_AUTH_TOKEN)
             .remove(KEY_DESKTOP_NAME)

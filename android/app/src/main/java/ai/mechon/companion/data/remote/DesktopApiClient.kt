@@ -59,6 +59,50 @@ class DesktopApiClient(
         }
     }
 
+    suspend fun verifySession(targetUrl: String? = null, token: String? = null): Result<AuthenticatedHealthResponse> = withContext(Dispatchers.IO) {
+        val t = token ?: sessionManager.authToken ?: return@withContext Result.failure(InvalidTokenException("No authentication token available"))
+        val base = (targetUrl ?: sessionManager.desktopUrl).trimEnd('/')
+
+        val endpoints = listOf("$base/api/mobile/v1/health", "$base/api/v1/health")
+        var lastException: Exception? = null
+
+        for (endpoint in endpoints) {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $t")
+                .get()
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
+                    when (response.code) {
+                        200 -> {
+                            val health = gson.fromJson(body, AuthenticatedHealthResponse::class.java)
+                            return@withContext Result.success(health)
+                        }
+                        403 -> {
+                            return@withContext Result.failure(PairingRevokedException("Device pairing revoked by Mechon Desktop: $body"))
+                        }
+                        401 -> {
+                            return@withContext Result.failure(InvalidTokenException("Invalid or expired authentication token: $body"))
+                        }
+                        404 -> {
+                            lastException = IOException("Endpoint not found: $endpoint")
+                        }
+                        else -> {
+                            return@withContext Result.failure(IOException("Health check failed (${response.code}): $body"))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+
+        Result.failure(lastException ?: IOException("Failed to reach health endpoint at $base"))
+    }
+
     suspend fun pair(
         baseUrl: String,
         pairingKey: String
@@ -81,9 +125,6 @@ class DesktopApiClient(
                 val respStr = response.body?.string() ?: ""
                 val pairResp = gson.fromJson(respStr, PairResponse::class.java)
                 if (response.isSuccessful && pairResp.success && pairResp.token != null) {
-                    sessionManager.desktopUrl = cleanUrl
-                    sessionManager.authToken = pairResp.token
-                    sessionManager.desktopName = pairResp.desktopName ?: "Mechon Desktop"
                     Result.success(pairResp)
                 } else {
                     val errMsg = pairResp.error ?: "Pairing failed (Code ${response.code})"
@@ -141,11 +182,6 @@ class DesktopApiClient(
             client.newCall(request).execute().use { response ->
                 val respStr = response.body?.string() ?: ""
                 val statusResp = gson.fromJson(respStr, ApprovalPairingStatusResponse::class.java)
-                if (response.isSuccessful && statusResp.status == "approved" && statusResp.token != null) {
-                    sessionManager.desktopUrl = cleanUrl
-                    sessionManager.authToken = statusResp.token
-                    sessionManager.desktopName = statusResp.desktopName ?: "Mechon Desktop"
-                }
                 Result.success(statusResp)
             }
         } catch (e: Exception) {

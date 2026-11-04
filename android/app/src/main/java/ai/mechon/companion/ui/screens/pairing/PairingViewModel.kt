@@ -24,6 +24,7 @@ enum class PairingFlowState {
     AWAITING_APPROVAL,
     APPROVAL_PENDING,
     PAIRING,
+    AUTHENTICATING,
     CONNECTED,
     RECONNECTING,
     CONNECTION_LOST,
@@ -177,17 +178,52 @@ class PairingViewModel(
                 statusResult.onSuccess { statusResp ->
                     when (statusResp.status) {
                         "approved" -> {
+                            val token = statusResp.token
+                            if (token.isNullOrBlank()) {
+                                _uiState.update {
+                                    it.copy(
+                                        flowState = PairingFlowState.FAILED,
+                                        errorMessage = "Desktop approved pairing but returned no session token.",
+                                        pendingRequestId = null
+                                    )
+                                }
+                                return@launch
+                            }
                             _uiState.update {
                                 it.copy(
-                                    isPaired = true,
-                                    flowState = PairingFlowState.CONNECTED,
-                                    pairedDesktopName = statusResp.desktopName ?: "Mechon Workstation",
-                                    pairedDesktopUrl = targetUrl,
-                                    successMessage = "Connected successfully to ${statusResp.desktopName ?: "Mechon Workstation"}!",
-                                    pendingRequestId = null
+                                    flowState = PairingFlowState.AUTHENTICATING,
+                                    successMessage = "Approved! Verifying application session token..."
                                 )
                             }
-                            stopDiscovery()
+                            val verifyRes = desktopApiClient.verifySession(targetUrl, token)
+                            verifyRes.fold(
+                                onSuccess = { health ->
+                                    sessionManager.desktopUrl = targetUrl
+                                    sessionManager.authToken = token
+                                    sessionManager.desktopName = health.desktopName ?: statusResp.desktopName ?: "Mechon Workstation"
+                                    _uiState.update {
+                                        it.copy(
+                                            isPaired = true,
+                                            flowState = PairingFlowState.CONNECTED,
+                                            pairedDesktopName = sessionManager.desktopName,
+                                            pairedDesktopUrl = targetUrl,
+                                            successMessage = "Connected and authenticated with ${sessionManager.desktopName}!",
+                                            pendingRequestId = null
+                                        )
+                                    }
+                                    stopDiscovery()
+                                },
+                                onFailure = { err ->
+                                    sessionManager.clearPairing()
+                                    _uiState.update {
+                                        it.copy(
+                                            flowState = PairingFlowState.FAILED,
+                                            errorMessage = "Application token verification failed: ${err.message}",
+                                            pendingRequestId = null
+                                        )
+                                    }
+                                }
+                            )
                             return@launch
                         }
                         "rejected" -> {
@@ -371,17 +407,47 @@ class PairingViewModel(
             val result = desktopApiClient.pair(url, key)
             result.fold(
                 onSuccess = { resp ->
-                    _uiState.update {
-                        it.copy(
-                            isPairing = false,
-                            isPaired = true,
-                            flowState = PairingFlowState.CONNECTED,
-                            pairedDesktopName = resp.desktopName,
-                            pairedDesktopUrl = url,
-                            successMessage = "Connected to ${resp.desktopName ?: "Desktop"}!"
-                        )
+                    val token = resp.token
+                    if (token.isNullOrBlank()) {
+                        _uiState.update {
+                            it.copy(
+                                isPairing = false,
+                                flowState = PairingFlowState.FAILED,
+                                errorMessage = "Desktop returned no session token"
+                            )
+                        }
+                        return@launch
                     }
-                    stopDiscovery()
+                    _uiState.update { it.copy(flowState = PairingFlowState.AUTHENTICATING) }
+                    val verifyRes = desktopApiClient.verifySession(url, token)
+                    verifyRes.fold(
+                        onSuccess = { health ->
+                            sessionManager.desktopUrl = url
+                            sessionManager.authToken = token
+                            sessionManager.desktopName = health.desktopName ?: resp.desktopName ?: "Mechon Desktop"
+                            _uiState.update {
+                                it.copy(
+                                    isPairing = false,
+                                    isPaired = true,
+                                    flowState = PairingFlowState.CONNECTED,
+                                    pairedDesktopName = sessionManager.desktopName,
+                                    pairedDesktopUrl = url,
+                                    successMessage = "Connected and authenticated with ${sessionManager.desktopName}!"
+                                )
+                            }
+                            stopDiscovery()
+                        },
+                        onFailure = { err ->
+                            sessionManager.clearPairing()
+                            _uiState.update {
+                                it.copy(
+                                    isPairing = false,
+                                    flowState = PairingFlowState.FAILED,
+                                    errorMessage = "Application token verification failed: ${err.message}"
+                                )
+                            }
+                        }
+                    )
                 },
                 onFailure = { err ->
                     _uiState.update {

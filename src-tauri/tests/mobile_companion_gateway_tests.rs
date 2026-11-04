@@ -180,7 +180,7 @@ async fn test_gateway_pairing_and_token_authentication() {
     let unauth_resp = app.clone().oneshot(unauth_req).await.unwrap();
     assert_eq!(unauth_resp.status(), StatusCode::UNAUTHORIZED);
 
-    // 5. Revocation test
+    // 5. Revocation test: revoked device must return 403 Forbidden
     MobileGatewayService::revoke_paired_device(&pool, &device_id).await.unwrap();
 
     let revoked_req = Request::builder()
@@ -191,7 +191,17 @@ async fn test_gateway_pairing_and_token_authentication() {
         .unwrap();
 
     let revoked_resp = app.clone().oneshot(revoked_req).await.unwrap();
-    assert_eq!(revoked_resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(revoked_resp.status(), StatusCode::FORBIDDEN);
+
+    // 6. Invalid token must return 401 Unauthorized
+    let invalid_token_req = Request::builder()
+        .method("GET")
+        .uri("/api/mobile/v1/health")
+        .header("Authorization", "Bearer invalid_nonexistent_token")
+        .body(Body::empty())
+        .unwrap();
+    let invalid_resp = app.clone().oneshot(invalid_token_req).await.unwrap();
+    assert_eq!(invalid_resp.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

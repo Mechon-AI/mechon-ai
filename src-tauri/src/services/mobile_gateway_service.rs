@@ -563,10 +563,17 @@ pub fn create_gateway_router(state: GatewayAppState) -> Router {
     Router::new()
         // Public endpoints
         .route("/api/v1/ping", get(handle_ping))
+        .route("/api/mobile/v1/ping", get(handle_ping))
         .route("/api/v1/status", get(handle_status))
+        .route("/api/mobile/v1/status", get(handle_status))
+        .route("/api/v1/health", get(handle_authenticated_health))
+        .route("/api/mobile/v1/health", get(handle_authenticated_health))
         .route("/api/v1/pair", post(handle_pair))
+        .route("/api/mobile/v1/pair", post(handle_pair))
         .route("/api/v1/pairing/request", post(handle_pairing_request))
+        .route("/api/mobile/v1/pairing/request", post(handle_pairing_request))
         .route("/api/v1/pairing/status/{request_id}", get(handle_pairing_status))
+        .route("/api/mobile/v1/pairing/status/{request_id}", get(handle_pairing_status))
         // Authenticated endpoints
         .route("/api/v1/providers/models", get(handle_get_providers_models))
         .route("/api/v1/inference/chat", post(handle_inference_chat))
@@ -678,7 +685,7 @@ async fn handle_pairing_status(
                     "token": req.token,
                     "device_id": req.device_id,
                     "desktop_name": "Mechon Workstation",
-                    "version": "1.2.7"
+                    "version": "1.2.8"
                 }).to_string(),
             ))
         }
@@ -771,6 +778,38 @@ async fn handle_pair(
     ))
 }
 
+// Authenticated Health Check
+async fn handle_authenticated_health(
+    State(state): State<GatewayAppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let dev_id = authenticate_device(&headers, &state.pool).await?;
+
+    let prov_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM providers WHERE is_active = 1")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or((0,));
+
+    let model_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM providers WHERE is_active = 1 AND default_model IS NOT NULL")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or((0,));
+
+    Ok((
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+        json!({
+            "status": "ok",
+            "version": "1.2.8",
+            "authenticated": true,
+            "device_id": dev_id,
+            "desktop_name": "Mechon Workstation",
+            "active_providers_count": prov_count.0,
+            "available_models_count": model_count.0
+        }).to_string(),
+    ))
+}
+
 // Authentication Helper
 async fn authenticate_device(headers: &HeaderMap, pool: &SqlitePool) -> Result<String, (StatusCode, String)> {
     let auth_header = headers.get("Authorization")
@@ -800,7 +839,8 @@ async fn authenticate_device(headers: &HeaderMap, pool: &SqlitePool) -> Result<S
                 .await;
             Ok(dev_id)
         }
-        _ => Err((StatusCode::UNAUTHORIZED, json!({ "error": "Unauthorized or revoked device token" }).to_string())),
+        Some((_, _, _)) => Err((StatusCode::FORBIDDEN, json!({ "error": "Device pairing revoked by Mechon Desktop" }).to_string())),
+        None => Err((StatusCode::UNAUTHORIZED, json!({ "error": "Invalid or expired authentication token" }).to_string())),
     }
 }
 
