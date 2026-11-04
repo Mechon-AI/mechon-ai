@@ -156,7 +156,8 @@ class MainActivity : ComponentActivity() {
                                         return PairingViewModel(
                                             sessionManager = app.sessionManager,
                                             desktopApiClient = app.desktopApiClient,
-                                            lanDiscoveryService = app.lanDiscoveryService
+                                            lanDiscoveryService = app.lanDiscoveryService,
+                                            tailscaleManager = app.tailscaleManager
                                         ) as T
                                     }
                                 }

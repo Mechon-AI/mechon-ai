@@ -24,6 +24,9 @@ class MechonApplication : Application() {
     lateinit var lanDiscoveryService: LanDiscoveryService
         private set
 
+    lateinit var tailscaleManager: ai.mechon.companion.data.remote.TailscaleManager
+        private set
+
     lateinit var webSearchManager: WebSearchManager
         private set
 
@@ -44,6 +47,7 @@ class MechonApplication : Application() {
         sessionManager = SessionManager(this)
         desktopApiClient = DesktopApiClient(sessionManager)
         lanDiscoveryService = LanDiscoveryService(this)
+        tailscaleManager = ai.mechon.companion.data.remote.TailscaleManager(this, desktopApiClient, sessionManager)
         webSearchManager = WebSearchManager(this)
 
         chatRepository = ChatRepository(

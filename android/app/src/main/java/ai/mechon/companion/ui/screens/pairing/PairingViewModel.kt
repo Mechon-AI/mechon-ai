@@ -58,7 +58,8 @@ data class PairingUiState(
 class PairingViewModel(
     private val sessionManager: SessionManager,
     private val desktopApiClient: DesktopApiClient,
-    private val lanDiscoveryService: LanDiscoveryService
+    private val lanDiscoveryService: LanDiscoveryService,
+    private val tailscaleManager: ai.mechon.companion.data.remote.TailscaleManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -286,16 +287,35 @@ class PairingViewModel(
             _uiState.update { it.copy(tailscaleTestResult = "Please enter Tailscale 100.x.y.z IP or MagicDNS hostname") }
             return
         }
-        val url = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port"
+        val portInt = port.toIntOrNull() ?: 38475
+        val url = tailscaleManager?.parseTailscaleUrl(host, portInt)
+            ?: (if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port")
+
         _uiState.update { it.copy(isTailscaleTesting = true, tailscaleTestResult = null) }
 
         viewModelScope.launch {
-            val pingOk = desktopApiClient.ping(url)
-            _uiState.update {
-                it.copy(
-                    isTailscaleTesting = false,
-                    tailscaleTestResult = if (pingOk) "Mesh Online: Mechon Gateway is reachable via Tailscale!" else "Offline: Could not connect to $url"
-                )
+            if (tailscaleManager != null) {
+                val report = tailscaleManager.validateMesh(url)
+                val statusText = buildString {
+                    if (!report.vpnActive) {
+                        append("⚠ Local VPN interface inactive. ")
+                    }
+                    append(report.details)
+                }
+                _uiState.update {
+                    it.copy(
+                        isTailscaleTesting = false,
+                        tailscaleTestResult = statusText
+                    )
+                }
+            } else {
+                val pingOk = desktopApiClient.ping(url)
+                _uiState.update {
+                    it.copy(
+                        isTailscaleTesting = false,
+                        tailscaleTestResult = if (pingOk) "Mesh Online: Mechon Gateway is reachable via Tailscale!" else "Offline: Could not connect to $url"
+                    )
+                }
             }
         }
     }
@@ -310,7 +330,9 @@ class PairingViewModel(
             return
         }
 
-        val url = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port"
+        val portInt = port.toIntOrNull() ?: 38475
+        val url = tailscaleManager?.parseTailscaleUrl(host, portInt)
+            ?: (if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host:$port")
 
         if (useApproval) {
             _uiState.update {
