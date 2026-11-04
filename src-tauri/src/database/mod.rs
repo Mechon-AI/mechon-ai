@@ -234,7 +234,23 @@ pub async fn seed_defaults(pool: &SqlitePool) -> Result<(), AppError> {
         .execute(pool)
         .await?;
 
-        info!("Seeded default providers: Mechon Offline Mock Provider and Ollama Local");
+        // Google Gemini canonical cloud definition
+        sqlx::query(
+            "INSERT INTO providers (id, name, provider_type, base_url, credential_ref, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, 60, 1, '{}', ?, ?)"
+        )
+        .bind("gemini")
+        .bind("Google Gemini")
+        .bind("gemini")
+        .bind("https://generativelanguage.googleapis.com/v1beta")
+        .bind("gemini-2.5-flash")
+        .bind(r#"["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]"#)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await?;
+
+        info!("Seeded default providers: Mechon Offline Mock Provider, Ollama Local, and Google Gemini");
     }
 
     Ok(())

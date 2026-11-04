@@ -139,6 +139,44 @@ impl ProviderService {
                 }
             }
 
+            // Check if alias_target or needle matches a canonical provider in ProviderRegistry
+            let registry = ProviderRegistry::global();
+            let all_defs = registry.all();
+            let matched_def = all_defs.iter().find(|d| {
+                d.id.eq_ignore_ascii_case(alias_target)
+                    || d.id.eq_ignore_ascii_case(needle)
+                    || d.provider_type.as_str().eq_ignore_ascii_case(needle)
+                    || d.name.eq_ignore_ascii_case(needle)
+            });
+
+            if let Some(def) = matched_def {
+                let now = chrono::Utc::now().to_rfc3339();
+                let cache_json = serde_json::to_string(&def.curated_models).unwrap_or_else(|_| "[]".to_string());
+                let base_url = if def.default_path.is_empty() {
+                    def.default_host.clone()
+                } else {
+                    format!("{}{}", def.default_host, def.default_path)
+                };
+                let _ = sqlx::query(
+                    "INSERT OR IGNORE INTO providers (id, name, provider_type, base_url, credential_ref, default_model, models_cache_json, timeout_seconds, is_active, settings_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, NULL, ?, ?, 60, 1, '{}', ?, ?)"
+                )
+                .bind(&def.id)
+                .bind(&def.name)
+                .bind(def.provider_type.as_str())
+                .bind(&base_url)
+                .bind(&def.default_model)
+                .bind(&cache_json)
+                .bind(&now)
+                .bind(&now)
+                .execute(pool)
+                .await;
+
+                if let Ok(p) = Self::get(pool, &def.id, vault).await {
+                    return Ok(p);
+                }
+            }
+
             // 3. Search DB case-insensitively by id, provider_type, or name
             let needle_lower = needle.to_lowercase();
             let row = sqlx::query_as::<_, (String,)>(
