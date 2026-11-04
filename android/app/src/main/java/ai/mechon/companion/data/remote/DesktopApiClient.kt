@@ -154,7 +154,7 @@ class DesktopApiClient(
     }
 
     suspend fun getProviderModels(): Result<ProviderModelsResponse> = withContext(Dispatchers.IO) {
-        val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired"))
+        val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired with Mechon Desktop"))
         val base = sessionManager.desktopUrl.trimEnd('/')
 
         val request = Request.Builder()
@@ -167,16 +167,31 @@ class DesktopApiClient(
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val models = gson.fromJson(body, ProviderModelsResponse::class.java)
-                    if (models.defaultModel != null) {
-                        sessionManager.defaultModel = models.defaultModel
+                    val rawResp = try {
+                        gson.fromJson(body, ProviderModelsResponse::class.java)
+                    } catch (e: Exception) {
+                        null
                     }
-                    if (models.defaultProvider != null) {
-                        sessionManager.defaultProvider = models.defaultProvider
+                    val normalizedModels = rawResp?.getNormalizedModels() ?: emptyList()
+                    val defaultMod = rawResp?.defaultModel ?: normalizedModels.firstOrNull()?.modelId
+                    val defaultProv = rawResp?.defaultProvider ?: normalizedModels.firstOrNull()?.providerId
+
+                    val finalResp = ProviderModelsResponse(
+                        models = normalizedModels,
+                        providers = rawResp?.providers ?: emptyList(),
+                        defaultModel = defaultMod,
+                        defaultProvider = defaultProv
+                    )
+
+                    if (defaultMod != null) {
+                        sessionManager.defaultModel = defaultMod
                     }
-                    Result.success(models)
+                    if (defaultProv != null) {
+                        sessionManager.defaultProvider = defaultProv
+                    }
+                    Result.success(finalResp)
                 } else {
-                    Result.failure(IOException("Failed to fetch models: ${response.code} $body"))
+                    Result.failure(IOException("Failed to fetch models (${response.code}): $body"))
                 }
             }
         } catch (e: Exception) {

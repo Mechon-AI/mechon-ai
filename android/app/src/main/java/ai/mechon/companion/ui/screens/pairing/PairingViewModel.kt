@@ -15,13 +15,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 enum class PairingFlowState {
+    DISCONNECTED,
     DISCOVERING,
     AVAILABLE,
     CONNECTING,
+    PAIRING_REQUESTED,
+    AWAITING_APPROVAL,
     APPROVAL_PENDING,
     PAIRING,
     CONNECTED,
-    DISCONNECTED,
+    RECONNECTING,
+    CONNECTION_LOST,
+    ERROR,
     REJECTED,
     FAILED
 }

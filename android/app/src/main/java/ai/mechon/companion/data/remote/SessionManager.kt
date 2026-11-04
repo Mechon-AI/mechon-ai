@@ -52,7 +52,7 @@ class SessionManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_DESKTOP_NAME, value).apply()
 
     var defaultProvider: String
-        get() = prefs.getString(KEY_DEFAULT_PROVIDER, "google") ?: "google"
+        get() = prefs.getString(KEY_DEFAULT_PROVIDER, "gemini") ?: "gemini"
         set(value) = prefs.edit().putString(KEY_DEFAULT_PROVIDER, value).apply()
 
     var defaultModel: String

@@ -64,18 +64,74 @@ data class DesktopStatusResponse(
 )
 
 // Providers & Models
+data class RemoteModelItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("supports_vision") val supportsVision: Boolean = false,
+    @SerializedName("supports_streaming") val supportsStreaming: Boolean = true,
+    @SerializedName("context_length") val contextLength: Int = 128000
+)
+
+data class RemoteProviderItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("provider_type") val providerType: String = "",
+    @SerializedName("is_active") val isActive: Boolean = true,
+    @SerializedName("has_api_key") val hasApiKey: Boolean = false,
+    @SerializedName("default_model") val defaultModel: String? = null,
+    @SerializedName("models") val models: List<RemoteModelItem>? = null
+)
+
 data class ProviderModelItem(
     @SerializedName("provider_id") val providerId: String,
     @SerializedName("provider_name") val providerName: String,
+    @SerializedName("provider_type") val providerType: String = "",
     @SerializedName("model_id") val modelId: String,
-    @SerializedName("supports_vision") val supportsVision: Boolean = false
+    @SerializedName("model_name") val modelName: String = modelId,
+    @SerializedName("supports_vision") val supportsVision: Boolean = false,
+    @SerializedName("supports_streaming") val supportsStreaming: Boolean = true,
+    @SerializedName("context_length") val contextLength: Int = 128000,
+    @SerializedName("is_active") val isActive: Boolean = true,
+    @SerializedName("is_available") val isAvailable: Boolean = true
 )
 
 data class ProviderModelsResponse(
-    @SerializedName("models") val models: List<ProviderModelItem>,
-    @SerializedName("default_model") val defaultModel: String?,
-    @SerializedName("default_provider") val defaultProvider: String?
-)
+    @SerializedName("models") val models: List<ProviderModelItem>? = null,
+    @SerializedName("providers") val providers: List<RemoteProviderItem>? = null,
+    @SerializedName("default_model") val defaultModel: String? = null,
+    @SerializedName("default_provider") val defaultProvider: String? = null
+) {
+    fun getNormalizedModels(): List<ProviderModelItem> {
+        val result = mutableListOf<ProviderModelItem>()
+        models?.filterNotNull()?.forEach { result.add(it) }
+
+        if (result.isEmpty() && providers != null) {
+            for (p in providers.filterNotNull()) {
+                if (!p.isActive) continue
+                val pModels = p.models?.filterNotNull() ?: emptyList()
+                for (m in pModels) {
+                    val mLower = m.id.lowercase()
+                    val vision = m.supportsVision || mLower.contains("vision") || mLower.contains("flash") || mLower.contains("gemini")
+                    result.add(
+                        ProviderModelItem(
+                            providerId = p.id,
+                            providerName = p.name,
+                            providerType = p.providerType,
+                            modelId = m.id,
+                            modelName = if (!m.name.isNullOrBlank()) m.name else m.id,
+                            supportsVision = vision,
+                            supportsStreaming = m.supportsStreaming,
+                            contextLength = m.contextLength,
+                            isActive = p.isActive,
+                            isAvailable = p.hasApiKey || p.providerType == "mock" || p.providerType == "ollama"
+                        )
+                    )
+                }
+            }
+        }
+        return result
+    }
+}
 
 // Attachments
 data class AttachmentPayload(
@@ -93,7 +149,8 @@ data class ChatMessagePayload(
 )
 
 data class ChatInferenceRequest(
-    @SerializedName("model_id") val modelId: String,
+    @SerializedName("model") val model: String,
+    @SerializedName("model_id") val modelId: String = model,
     @SerializedName("provider_id") val providerId: String,
     @SerializedName("messages") val messages: List<ChatMessagePayload>,
     @SerializedName("system_prompt") val systemPrompt: String? = null,
@@ -104,14 +161,20 @@ data class ChatInferenceRequest(
 
 data class ChatInferenceResponse(
     @SerializedName("role") val role: String = "assistant",
-    @SerializedName("content") val content: String,
-    @SerializedName("provider_id") val providerId: String,
-    @SerializedName("model_id") val modelId: String,
+    @SerializedName("content") val content: String = "",
+    @SerializedName("provider_id") val providerId: String? = null,
+    @SerializedName("model") private val _model: String? = null,
+    @SerializedName("model_id") private val _modelId: String? = null,
     @SerializedName("search_results") val searchResults: List<SearchResultItem>? = null,
     @SerializedName("prompt_tokens") val promptTokens: Int? = null,
     @SerializedName("completion_tokens") val completionTokens: Int? = null,
     @SerializedName("latency_ms") val latencyMs: Long? = null
-)
+) {
+    val modelId: String
+        get() = _modelId ?: _model ?: ""
+    val model: String
+        get() = _model ?: _modelId ?: ""
+}
 
 // Web Search
 data class WebSearchRequest(

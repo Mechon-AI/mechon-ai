@@ -219,7 +219,7 @@ fun PairingScreen(
             // Tab 0: Automatic LAN Discovery & Approval-Based Pairing
             if (selectedTab == 0) {
                 // If approval is pending on desktop
-                if (uiState.flowState == PairingFlowState.APPROVAL_PENDING) {
+                if (uiState.flowState == PairingFlowState.APPROVAL_PENDING || uiState.flowState == PairingFlowState.AWAITING_APPROVAL) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = MechonSurface,

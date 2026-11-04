@@ -104,7 +104,7 @@ class RoleplayRepository(
         description: String,
         config: RoleplayConfig,
         defaultModelId: String = "gemini-2.5-flash",
-        defaultProviderId: String = "google"
+        defaultProviderId: String = "gemini"
     ): CharacterEntity {
         val entity = CharacterEntity(
             id = UUID.randomUUID().toString(),

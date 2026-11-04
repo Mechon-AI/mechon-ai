@@ -14,7 +14,7 @@ data class CharacterEntity(
     val sectionsJson: String = "[]",
     val composedPrompt: String = "",
     val defaultModelId: String = "gemini-2.5-flash",
-    val defaultProviderId: String = "google",
+    val defaultProviderId: String = "gemini",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

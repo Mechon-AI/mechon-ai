@@ -10,7 +10,7 @@ data class ConversationEntity(
     val id: String = UUID.randomUUID().toString(),
     val title: String = "New Conversation",
     val modelId: String = "gemini-2.5-flash",
-    val providerId: String = "google",
+    val providerId: String = "gemini",
     val systemPrompt: String = "",
     val characterId: String? = null,
     val characterName: String? = null,
