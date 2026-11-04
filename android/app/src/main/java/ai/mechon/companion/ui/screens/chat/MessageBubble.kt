@@ -1,5 +1,12 @@
 package ai.mechon.companion.ui.screens.chat
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,19 +18,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.local.MessageEntity
 import ai.mechon.companion.data.remote.AttachmentPayload
-import ai.mechon.companion.data.remote.SearchResultItem
+import ai.mechon.companion.data.search.WebSearchResult
 import ai.mechon.companion.ui.components.MechonLogoMark
 import ai.mechon.companion.ui.theme.*
 import com.google.gson.Gson
@@ -54,16 +62,18 @@ fun MessageBubble(
     }
 
     // Parse search results if any
-    val searchResults: List<SearchResultItem> = remember(message.searchMetadataJson) {
+    val searchResults: List<WebSearchResult> = remember(message.searchMetadataJson) {
         try {
             if (!message.searchMetadataJson.isNullOrBlank()) {
-                val listType = object : TypeToken<List<SearchResultItem>>() {}.type
+                val listType = object : TypeToken<List<WebSearchResult>>() {}.type
                 Gson().fromJson(message.searchMetadataJson, listType) ?: emptyList()
             } else emptyList()
         } catch (e: Exception) {
             emptyList()
         }
     }
+    var isSourcesExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     if (isUser) {
         // User Message: Elegant rounded bubble on right
@@ -223,31 +233,146 @@ fun MessageBubble(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Web Search Grounding Citation Header
+            // Web Search Grounding Citation Header & Expandable Obsidian Source Cards
             if (searchResults.isNotEmpty()) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(ElevatedSurface)
-                        .border(1.dp, GlassBorder, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = null,
-                        tint = SoftLavender,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "Grounded via ${searchResults.size} web sources",
-                        color = SoftLavender,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ElevatedSurface)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(10.dp))
+                            .clickable { isSourcesExpanded = !isSourcesExpanded }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = SoftLavender,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Grounded via ${searchResults.size} web sources",
+                                color = SoftLavender,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Icon(
+                            imageVector = if (isSourcesExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isSourcesExpanded) "Collapse Sources" else "Expand Sources",
+                            tint = SoftLavender,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = isSourcesExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            searchResults.forEach { result ->
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.url))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                // ignore
+                                            }
+                                        },
+                                    color = ElevatedSurfaceHighlight,
+                                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                                        brush = androidx.compose.ui.graphics.SolidColor(GlassBorder)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Surface(
+                                                color = ElectricViolet.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = result.domain.ifBlank { "source" },
+                                                    color = SoftLavender,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                if (!result.publishedDate.isNullOrBlank()) {
+                                                    Text(
+                                                        text = result.publishedDate,
+                                                        color = TextMuted,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                                Icon(
+                                                    imageVector = Icons.Default.OpenInNew,
+                                                    contentDescription = "Open Source",
+                                                    tint = SoftLavender,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            text = result.title,
+                                            color = TextPrimary,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        if (result.snippet.isNotBlank()) {
+                                            Text(
+                                                text = result.snippet.trim(),
+                                                color = TextSecondary,
+                                                fontSize = 11.sp,
+                                                lineHeight = 15.sp,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

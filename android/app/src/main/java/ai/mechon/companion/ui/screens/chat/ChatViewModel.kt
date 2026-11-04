@@ -11,6 +11,11 @@ import ai.mechon.companion.data.remote.SessionManager
 import ai.mechon.companion.data.repository.ChatRepository
 import ai.mechon.companion.data.repository.RoleplayRepository
 import ai.mechon.companion.data.repository.SyncRepository
+import ai.mechon.companion.data.search.WebSearchCommandParser
+import ai.mechon.companion.data.search.WebSearchManager
+import ai.mechon.companion.data.search.WebSearchResult
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,6 +24,9 @@ data class ChatUiState(
     val conversation: ConversationEntity? = null,
     val messages: List<MessageEntity> = emptyList(),
     val isInferring: Boolean = false,
+    val isSearchingWeb: Boolean = false,
+    val webSearchStatus: String? = null,
+    val webSearchAutocompleteVisible: Boolean = false,
     val error: String? = null,
     val webSearchEnabled: Boolean = false,
     val selectedAttachments: List<AttachmentPayload> = emptyList(),
@@ -46,7 +54,8 @@ class ChatViewModel(
     private val roleplayRepository: RoleplayRepository,
     private val syncRepository: SyncRepository,
     private val desktopApiClient: DesktopApiClient,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val webSearchManager: WebSearchManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -289,8 +298,13 @@ class ChatViewModel(
         _uiState.update { it.copy(modelSearchQuery = query) }
     }
 
-    fun toggleWebSearch() {
-        _uiState.update { it.copy(webSearchEnabled = !it.webSearchEnabled) }
+    fun onInputTextChanged(text: String) {
+        val show = WebSearchCommandParser.shouldShowAutocomplete(text)
+        _uiState.update { it.copy(webSearchAutocompleteVisible = show) }
+    }
+
+    fun dismissAutocomplete() {
+        _uiState.update { it.copy(webSearchAutocompleteVisible = false) }
     }
 
     fun addAttachment(attachment: AttachmentPayload) {
@@ -312,32 +326,74 @@ class ChatViewModel(
         if (text.isBlank() && _uiState.value.selectedAttachments.isEmpty()) return
 
         val currentAttachments = _uiState.value.selectedAttachments
-        val searchEnabled = _uiState.value.webSearchEnabled
+        val isSearchCommand = WebSearchCommandParser.isWebSearchCommand(text)
+        val searchQuery = if (isSearchCommand) WebSearchCommandParser.extractQuery(text) else null
 
         _uiState.update {
             it.copy(
                 isInferring = true,
+                isSearchingWeb = isSearchCommand,
+                webSearchStatus = if (isSearchCommand) "Searching the web for '$searchQuery'..." else null,
+                webSearchAutocompleteVisible = false,
                 error = null,
                 selectedAttachments = emptyList()
             )
         }
 
         inferenceJob = viewModelScope.launch {
+            var searchResults: List<WebSearchResult>? = null
+            if (isSearchCommand) {
+                if (searchQuery.isNullOrBlank()) {
+                    _uiState.update {
+                        it.copy(
+                            isInferring = false,
+                            isSearchingWeb = false,
+                            webSearchStatus = null,
+                            error = "Please specify a search query after @Web Search"
+                        )
+                    }
+                    return@launch
+                }
+
+                val searchRes = webSearchManager.search(searchQuery)
+                if (searchRes.isFailure) {
+                    val errMsg = searchRes.exceptionOrNull()?.message ?: "Web search failed"
+                    _uiState.update {
+                        it.copy(
+                            isInferring = false,
+                            isSearchingWeb = false,
+                            webSearchStatus = null,
+                            error = "Web Search Error: $errMsg"
+                        )
+                    }
+                    return@launch
+                }
+                searchResults = searchRes.getOrNull()
+                _uiState.update {
+                    it.copy(
+                        isSearchingWeb = false,
+                        webSearchStatus = null
+                    )
+                }
+            }
+
             val result = chatRepository.sendMessage(
                 conversationId = conv.id,
                 userContent = text,
                 attachments = currentAttachments,
-                enableWebSearch = searchEnabled
+                webSearchResults = searchResults
             )
 
             result.fold(
                 onSuccess = {
-                    _uiState.update { it.copy(isInferring = false) }
+                    _uiState.update { it.copy(isInferring = false, isSearchingWeb = false, webSearchStatus = null) }
                 },
                 onFailure = { err ->
                     _uiState.update {
                         it.copy(
                             isInferring = false,
+                            isSearchingWeb = false,
+                            webSearchStatus = null,
                             error = err.message ?: "Failed to generate inference response"
                         )
                     }
@@ -349,17 +405,28 @@ class ChatViewModel(
     fun stopGeneration() {
         inferenceJob?.cancel()
         inferenceJob = null
-        _uiState.update { it.copy(isInferring = false) }
+        _uiState.update { it.copy(isInferring = false, isSearchingWeb = false, webSearchStatus = null) }
     }
 
     fun regenerateLastResponse() {
         val conv = _uiState.value.conversation ?: return
+        val lastAssistant = _uiState.value.messages.lastOrNull { it.role == "assistant" }
+        var previousSearchResults: List<WebSearchResult>? = null
+        if (!lastAssistant?.searchMetadataJson.isNullOrBlank()) {
+            try {
+                val listType = object : TypeToken<List<WebSearchResult>>() {}.type
+                previousSearchResults = Gson().fromJson(lastAssistant?.searchMetadataJson, listType)
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
         _uiState.update { it.copy(isInferring = true, error = null) }
 
         inferenceJob = viewModelScope.launch {
             val result = chatRepository.regenerateResponse(
                 conversationId = conv.id,
-                enableWebSearch = _uiState.value.webSearchEnabled
+                webSearchResults = previousSearchResults
             )
             result.fold(
                 onSuccess = {

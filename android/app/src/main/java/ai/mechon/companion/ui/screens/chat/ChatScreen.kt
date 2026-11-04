@@ -368,57 +368,99 @@ fun ChatScreen(
                                 )
                             }
 
-                            // Secondary Controls: Roleplay Studio & Web Search Pills
+                            // Secondary Controls: Roleplay Studio Pill
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(ElevatedSurfaceHighlight)
+                                    .clickable { onNavigateToRoleplay() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                // Roleplay Studio Pill
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "Roleplay Context",
+                                    tint = SoftLavender,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Roleplay",
+                                    color = SoftLavender,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        // Web Search In-Flight Progress Indicator
+                        if (uiState.isSearchingWeb && uiState.webSearchStatus != null) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                color = ElevatedSurfaceHighlight,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricViolet.copy(alpha = 0.5f))
+                            ) {
                                 Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(ElevatedSurfaceHighlight)
-                                        .clickable { onNavigateToRoleplay() }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = "Roleplay Context",
-                                        tint = SoftLavender,
-                                        modifier = Modifier.size(12.dp)
-                                    )
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = SoftLavender)
                                     Text(
-                                        text = "Roleplay",
+                                        text = uiState.webSearchStatus ?: "Searching the web...",
                                         color = SoftLavender,
-                                        fontSize = 11.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
+                            }
+                        }
 
-                                // Web Search Toggle Pill
+                        // @Web Search Autocomplete Popup
+                        if (uiState.webSearchAutocompleteVisible) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clickable {
+                                        inputText = "@Web Search "
+                                        viewModel.dismissAutocomplete()
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = ElevatedSurfaceHighlight,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricViolet)
+                            ) {
                                 Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(if (uiState.webSearchEnabled) ElectricViolet.copy(alpha = 0.25f) else ElevatedSurfaceHighlight)
-                                        .clickable { viewModel.toggleWebSearch() }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Language,
-                                        contentDescription = "Web Search",
-                                        tint = if (uiState.webSearchEnabled) SoftLavender else TextMuted,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Text(
-                                        text = if (uiState.webSearchEnabled) "Search ON" else "Search",
-                                        color = if (uiState.webSearchEnabled) TextPrimary else TextMuted,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(ElectricViolet.copy(alpha = 0.25f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Language, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(16.dp))
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "@Web Search <query>",
+                                            color = SoftLavender,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Perform standalone web search to ground answer",
+                                            color = TextMuted,
+                                            fontSize = 10.5.sp
+                                        )
+                                    }
+                                    Icon(Icons.Default.NorthWest, contentDescription = null, tint = SoftLavender, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -449,10 +491,13 @@ fun ChatScreen(
                             // Multiline Message Input
                             TextField(
                                 value = inputText,
-                                onValueChange = { inputText = it },
+                                onValueChange = {
+                                    inputText = it
+                                    viewModel.onInputTextChanged(it)
+                                },
                                 placeholder = {
                                     Text(
-                                        text = if (uiState.webSearchEnabled) "Search the web and ask..." else "Message MECHON...",
+                                        text = "Message MECHON or @Web Search...",
                                         color = TextMuted,
                                         fontSize = 14.sp
                                     )

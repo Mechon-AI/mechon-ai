@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.mechon.companion.data.remote.DesktopApiClient
 import ai.mechon.companion.data.remote.SessionManager
+import ai.mechon.companion.data.search.WebSearchManager
 import ai.mechon.companion.ui.components.*
 import ai.mechon.companion.ui.theme.*
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     sessionManager: SessionManager,
     desktopApiClient: DesktopApiClient,
+    webSearchManager: WebSearchManager,
     onNavigateBack: () -> Unit,
     onNavigateToChat: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
@@ -45,6 +47,8 @@ fun SettingsScreen(
     var isPinging by remember { mutableStateOf(false) }
     var pingResult by remember { mutableStateOf<String?>(null) }
     var deviceNameInput by remember { mutableStateOf(sessionManager.deviceName) }
+    var isWebSearchDialogVisible by remember { mutableStateOf(false) }
+    var searchConfig by remember { mutableStateOf(webSearchManager.loadConfig()) }
 
     Scaffold(
         topBar = {
@@ -257,7 +261,92 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 2: Mobile Device Identity
+            // Section 2: Standalone Web Search Engine
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(ElevatedSurface)
+                    .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (searchConfig.isConfigured) StatusConnected else SoftLavender)
+                        )
+                        Text(
+                            text = "Standalone Web Search",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ElectricViolet.copy(alpha = 0.15f))
+                            .border(1.dp, ElectricViolet.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable { isWebSearchDialogVisible = true }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "Configure",
+                            color = SoftLavender,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(ElevatedSurfaceHighlight)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Active Provider: ${searchConfig.provider.displayName}",
+                        color = TextPrimary,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Endpoint: ${searchConfig.endpoint}",
+                        color = TextMuted,
+                        fontSize = 11.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "Security: Android Keystore AES-256 (Independent)",
+                        color = SoftLavender,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Text(
+                    text = "Invoke by typing @Web Search <query> in chat. Operates 100% standalone on Android without desktop or LLM provider dependency.",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+            }
+
+            // Section 3: Mobile Device Identity
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -405,6 +494,16 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(60.dp))
+        }
+
+        if (isWebSearchDialogVisible) {
+            WebSearchSettingsDialog(
+                webSearchManager = webSearchManager,
+                onDismiss = {
+                    isWebSearchDialogVisible = false
+                    searchConfig = webSearchManager.loadConfig()
+                }
+            )
         }
     }
 }

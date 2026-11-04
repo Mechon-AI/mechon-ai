@@ -66,7 +66,8 @@ class MainActivity : ComponentActivity() {
                                             roleplayRepository = app.roleplayRepository,
                                             syncRepository = app.syncRepository,
                                             desktopApiClient = app.desktopApiClient,
-                                            sessionManager = app.sessionManager
+                                            sessionManager = app.sessionManager,
+                                            webSearchManager = app.webSearchManager
                                         ) as T
                                     }
                                 }
@@ -171,6 +172,7 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 sessionManager = app.sessionManager,
                                 desktopApiClient = app.desktopApiClient,
+                                webSearchManager = app.webSearchManager,
                                 onNavigateBack = { navController.popBackStack() },
                                 onNavigateToChat = {
                                     navController.navigate(Screen.Chat.createRoute(null)) {
