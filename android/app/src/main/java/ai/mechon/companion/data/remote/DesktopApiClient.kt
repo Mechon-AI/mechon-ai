@@ -189,12 +189,45 @@ class DesktopApiClient(
         }
     }
 
-    suspend fun getProviderModels(): Result<ProviderModelsResponse> = withContext(Dispatchers.IO) {
+    suspend fun getCapabilities(): Result<CapabilitiesResponse> = withContext(Dispatchers.IO) {
         val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired with Mechon Desktop"))
         val base = sessionManager.desktopUrl.trimEnd('/')
 
+        val endpoints = listOf("$base/api/mobile/v1/capabilities", "$base/api/v1/capabilities")
+        var lastErr: Exception? = null
+
+        for (endpoint in endpoints) {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val caps = gson.fromJson(body, CapabilitiesResponse::class.java)
+                        return@withContext Result.success(caps)
+                    } else if (response.code == 403) {
+                        return@withContext Result.failure(PairingRevokedException("Pairing revoked by desktop"))
+                    } else if (response.code != 404) {
+                        return@withContext Result.failure(IOException("Capabilities failed (${response.code}): $body"))
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e
+            }
+        }
+        Result.failure(lastErr ?: IOException("Failed to fetch capabilities"))
+    }
+
+    suspend fun getProviders(): Result<List<ProviderSummaryItem>> = withContext(Dispatchers.IO) {
+        val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired"))
+        val base = sessionManager.desktopUrl.trimEnd('/')
+
         val request = Request.Builder()
-            .url("$base/api/v1/providers/models")
+            .url("$base/api/mobile/v1/providers")
             .header("Authorization", "Bearer $token")
             .get()
             .build()
@@ -203,31 +236,13 @@ class DesktopApiClient(
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val rawResp = try {
-                        gson.fromJson(body, ProviderModelsResponse::class.java)
-                    } catch (e: Exception) {
-                        null
-                    }
-                    val normalizedModels = rawResp?.getNormalizedModels() ?: emptyList()
-                    val defaultMod = rawResp?.defaultModel ?: normalizedModels.firstOrNull()?.modelId
-                    val defaultProv = rawResp?.defaultProvider ?: normalizedModels.firstOrNull()?.providerId
-
-                    val finalResp = ProviderModelsResponse(
-                        models = normalizedModels,
-                        providers = rawResp?.providers ?: emptyList(),
-                        defaultModel = defaultMod,
-                        defaultProvider = defaultProv
-                    )
-
-                    if (defaultMod != null) {
-                        sessionManager.defaultModel = defaultMod
-                    }
-                    if (defaultProv != null) {
-                        sessionManager.defaultProvider = defaultProv
-                    }
-                    Result.success(finalResp)
+                    val map = gson.fromJson(body, Map::class.java)
+                    val provJson = gson.toJson(map["providers"])
+                    val listType = object : com.google.gson.reflect.TypeToken<List<ProviderSummaryItem>>() {}.type
+                    val list: List<ProviderSummaryItem> = gson.fromJson(provJson, listType) ?: emptyList()
+                    Result.success(list)
                 } else {
-                    Result.failure(IOException("Failed to fetch models (${response.code}): $body"))
+                    Result.failure(IOException("Failed to fetch providers (${response.code}): $body"))
                 }
             }
         } catch (e: Exception) {
@@ -235,30 +250,90 @@ class DesktopApiClient(
         }
     }
 
+    suspend fun getProviderModels(): Result<ProviderModelsResponse> = withContext(Dispatchers.IO) {
+        val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired with Mechon Desktop"))
+        val base = sessionManager.desktopUrl.trimEnd('/')
+
+        val endpoints = listOf("$base/api/mobile/v1/models", "$base/api/v1/providers/models")
+        var lastErr: Exception? = null
+
+        for (endpoint in endpoints) {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val rawResp = try {
+                            gson.fromJson(body, ProviderModelsResponse::class.java)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        val normalizedModels = rawResp?.getNormalizedModels() ?: emptyList()
+                        val defaultMod = rawResp?.defaultModel ?: normalizedModels.firstOrNull()?.modelId
+                        val defaultProv = rawResp?.defaultProvider ?: normalizedModels.firstOrNull()?.providerId
+
+                        val finalResp = ProviderModelsResponse(
+                            models = normalizedModels,
+                            providers = rawResp?.providers ?: emptyList(),
+                            defaultModel = defaultMod,
+                            defaultProvider = defaultProv
+                        )
+
+                        if (defaultMod != null) {
+                            sessionManager.defaultModel = defaultMod
+                        }
+                        if (defaultProv != null) {
+                            sessionManager.defaultProvider = defaultProv
+                        }
+                        return@withContext Result.success(finalResp)
+                    } else if (response.code != 404) {
+                        return@withContext Result.failure(IOException("Failed to fetch models (${response.code}): $body"))
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e
+            }
+        }
+
+        Result.failure(lastErr ?: IOException("Failed to fetch models from desktop"))
+    }
+
     suspend fun chatInference(inferenceRequest: ChatInferenceRequest): Result<ChatInferenceResponse> = withContext(Dispatchers.IO) {
         val token = sessionManager.authToken ?: return@withContext Result.failure(IllegalStateException("Device is not paired"))
         val base = sessionManager.desktopUrl.trimEnd('/')
 
         val body = gson.toJson(inferenceRequest).toRequestBody(jsonMediaType)
-        val request = Request.Builder()
-            .url("$base/api/v1/inference/chat")
-            .header("Authorization", "Bearer $token")
-            .post(body)
-            .build()
+        val endpoints = listOf("$base/api/mobile/v1/inference", "$base/api/v1/inference/chat")
+        var lastErr: Exception? = null
 
-        try {
-            client.newCall(request).execute().use { response ->
-                val respStr = response.body?.string() ?: ""
-                if (response.isSuccessful) {
-                    val chatResp = gson.fromJson(respStr, ChatInferenceResponse::class.java)
-                    Result.success(chatResp)
-                } else {
-                    Result.failure(IOException("Inference failed (${response.code}): $respStr"))
+        for (endpoint in endpoints) {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val respStr = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val chatResp = gson.fromJson(respStr, ChatInferenceResponse::class.java)
+                        return@withContext Result.success(chatResp)
+                    } else if (response.code != 404) {
+                        return@withContext Result.failure(IOException("Inference failed (${response.code}): $respStr"))
+                    }
                 }
+            } catch (e: Exception) {
+                lastErr = e
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
+
+        Result.failure(lastErr ?: IOException("Inference failed: endpoint unreachable"))
     }
 
     suspend fun webSearch(query: String, maxResults: Int = 5): Result<WebSearchResponse> = withContext(Dispatchers.IO) {

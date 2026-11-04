@@ -227,6 +227,34 @@ data class SyncConversationsResponse(
     @SerializedName("message") val message: String
 )
 
+// Capabilities
+data class CapabilitiesResponse(
+    @SerializedName("version") val version: String = "1.2.8",
+    @SerializedName("streaming") val streaming: Boolean = true,
+    @SerializedName("vision") val vision: Boolean = true,
+    @SerializedName("web_search") val webSearch: Boolean = true,
+    @SerializedName("sft_export") val sftExport: Boolean = true,
+    @SerializedName("pairing_method") val pairingMethod: String = "approval",
+    @SerializedName("gateway_port") val gatewayPort: Int = 38475,
+    @SerializedName("tailscale_supported") val tailscaleSupported: Boolean = true
+)
+
+data class ProviderSummaryItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("provider_type") val providerType: String,
+    @SerializedName("is_active") val isActive: Boolean = true,
+    @SerializedName("has_api_key") val hasApiKey: Boolean = false,
+    @SerializedName("default_model") val defaultModel: String? = null,
+    @SerializedName("models_count") val modelsCount: Int = 0
+)
+
+data class ProviderScopedModelsResponse(
+    @SerializedName("provider_id") val providerId: String,
+    @SerializedName("provider_name") val providerName: String,
+    @SerializedName("models") val models: List<RemoteModelItem> = emptyList()
+)
+
 // Authenticated Health & Diagnostics
 data class AuthenticatedHealthResponse(
     @SerializedName("status") val status: String = "ok",

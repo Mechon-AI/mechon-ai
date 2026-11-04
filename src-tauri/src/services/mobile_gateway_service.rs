@@ -575,11 +575,20 @@ pub fn create_gateway_router(state: GatewayAppState) -> Router {
         .route("/api/v1/pairing/status/{request_id}", get(handle_pairing_status))
         .route("/api/mobile/v1/pairing/status/{request_id}", get(handle_pairing_status))
         // Authenticated endpoints
+        .route("/api/v1/capabilities", get(handle_get_capabilities))
+        .route("/api/mobile/v1/capabilities", get(handle_get_capabilities))
         .route("/api/v1/providers/models", get(handle_get_providers_models))
+        .route("/api/mobile/v1/providers", get(handle_get_providers))
+        .route("/api/mobile/v1/models", get(handle_get_models))
+        .route("/api/mobile/v1/providers/{provider_id}/models", get(handle_get_provider_models))
         .route("/api/v1/inference/chat", post(handle_inference_chat))
+        .route("/api/mobile/v1/inference", post(handle_inference_chat))
         .route("/api/v1/search", post(handle_web_search))
+        .route("/api/mobile/v1/search", post(handle_web_search))
         .route("/api/v1/sync/conversations", post(handle_sync_conversations))
+        .route("/api/mobile/v1/sync/conversations", post(handle_sync_conversations))
         .route("/api/v1/sync/transfers/{transfer_id}", get(handle_get_transfer_status))
+        .route("/api/mobile/v1/sync/transfers/{transfer_id}", get(handle_get_transfer_status))
         .with_state(state)
 }
 
@@ -591,7 +600,7 @@ async fn handle_ping() -> impl IntoResponse {
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.7",
+            "version": "1.2.8",
             "workstation": "Mechon AI Desktop",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }).to_string(),
@@ -605,7 +614,7 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "online",
-            "version": "1.2.7",
+            "version": "1.2.8",
             "local_ip": internal.local_ip,
             "tailscale_ip": internal.tailscale_ip,
             "port": internal.port,
@@ -927,6 +936,107 @@ async fn handle_get_providers_models(
             "models": flat_models,
             "default_provider": default_prov_id,
             "default_model": default_model_id
+        }).to_string(),
+    ))
+}
+
+async fn handle_get_capabilities(
+    State(state): State<GatewayAppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authenticate_device(&headers, &state.pool).await?;
+    let internal = state.internal.read().await;
+
+    Ok((
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+        json!({
+            "version": "1.2.8",
+            "streaming": true,
+            "vision": true,
+            "web_search": true,
+            "sft_export": true,
+            "pairing_method": "approval",
+            "gateway_port": internal.port,
+            "tailscale_supported": true
+        }).to_string(),
+    ))
+}
+
+async fn handle_get_providers(
+    State(state): State<GatewayAppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authenticate_device(&headers, &state.pool).await?;
+
+    let providers = ProviderService::list(&state.pool, state.vault.as_ref())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": e.to_string() }).to_string()))?;
+
+    let result_providers: Vec<Value> = providers.into_iter()
+        .filter(|p| p.is_active)
+        .map(|p| {
+            json!({
+                "id": p.id,
+                "name": p.name,
+                "provider_type": p.provider_type,
+                "is_active": p.is_active,
+                "has_api_key": p.has_api_key,
+                "default_model": p.default_model,
+                "models_count": p.models_cache.len()
+            })
+        })
+        .collect();
+
+    Ok((
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+        json!({ "providers": result_providers }).to_string(),
+    ))
+}
+
+async fn handle_get_models(
+    State(state): State<GatewayAppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    handle_get_providers_models(State(state), headers).await
+}
+
+async fn handle_get_provider_models(
+    State(state): State<GatewayAppState>,
+    Path(provider_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    authenticate_device(&headers, &state.pool).await?;
+
+    let provider = ProviderService::resolve(&state.pool, Some(&provider_id), None, state.vault.as_ref())
+        .await
+        .map_err(|e| (StatusCode::NOT_FOUND, json!({ "error": e.to_string() }).to_string()))?;
+
+    let models: Vec<Value> = provider.models_cache.iter().map(|m| {
+        let m_lower = m.to_lowercase();
+        let supports_vision = m_lower.contains("vision")
+            || m_lower.contains("flash")
+            || m_lower.contains("claude-3")
+            || m_lower.contains("gpt-4o")
+            || m_lower.contains("gemini");
+        let ctx = if m_lower.contains("gemini") { 1048576 } else { 128000 };
+        json!({
+            "id": m,
+            "name": m,
+            "supports_vision": supports_vision,
+            "supports_streaming": true,
+            "context_length": ctx
+        })
+    }).collect();
+
+    Ok((
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
+        json!({
+            "provider_id": provider.id,
+            "provider_name": provider.name,
+            "models": models
         }).to_string(),
     ))
 }
