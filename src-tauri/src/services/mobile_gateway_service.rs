@@ -252,7 +252,7 @@ impl MobileGatewayService {
                 "lan_ip": b_ip,
                 "tailscale_ip": b_tailscale_ip,
                 "port": b_port,
-                "version": "1.2.8",
+                "version": "1.2.9",
                 "is_tailscale": b_tailscale_ip.is_some()
             }).to_string();
 
@@ -601,7 +601,7 @@ async fn handle_ping() -> impl IntoResponse {
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.8",
+            "version": "1.2.9",
             "workstation": "Mechon AI Desktop",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }).to_string(),
@@ -615,7 +615,7 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "online",
-            "version": "1.2.8",
+            "version": "1.2.9",
             "local_ip": internal.local_ip,
             "tailscale_ip": internal.tailscale_ip,
             "port": internal.port,
@@ -695,7 +695,7 @@ async fn handle_pairing_status(
                     "token": req.token,
                     "device_id": req.device_id,
                     "desktop_name": "Mechon Workstation",
-                    "version": "1.2.8"
+                    "version": "1.2.9"
                 }).to_string(),
             ))
         }
@@ -810,7 +810,7 @@ async fn handle_authenticated_health(
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.8",
+            "version": "1.2.9",
             "authenticated": true,
             "device_id": dev_id,
             "desktop_name": "Mechon Workstation",
@@ -952,7 +952,7 @@ async fn handle_get_capabilities(
         StatusCode::OK,
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
-            "version": "1.2.8",
+            "version": "1.2.9",
             "streaming": true,
             "vision": true,
             "web_search": true,
@@ -1269,6 +1269,7 @@ fn urlencoding_encode(s: &str) -> String {
 
 #[derive(Deserialize)]
 struct SyncConversationItem {
+    #[serde(alias = "mobile_session_id")]
     original_session_id: String,
     title: String,
     system_prompt: Option<String>,
@@ -1280,6 +1281,7 @@ struct SyncConversationItem {
 
 #[derive(Deserialize)]
 struct SyncPayload {
+    #[serde(alias = "idempotency_key")]
     transfer_id: String,
     conversations: Vec<SyncConversationItem>,
 }
@@ -1367,8 +1369,10 @@ async fn handle_sync_conversations(
             "success": true,
             "transfer_id": payload.transfer_id,
             "imported_count": imported_ids.len(),
+            "received_count": imported_ids.len(),
             "imported_ids": imported_ids,
-            "status": "received"
+            "status": "received",
+            "message": format!("Successfully transferred {} session(s) to workstation.", imported_ids.len())
         }).to_string(),
     ))
 }

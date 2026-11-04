@@ -207,8 +207,11 @@ data class SyncMessagePayload(
 
 data class SyncConversationPayload(
     @SerializedName("mobile_session_id") val mobileSessionId: String,
+    @SerializedName("original_session_id") val originalSessionId: String = mobileSessionId,
     @SerializedName("title") val title: String,
     @SerializedName("system_prompt") val systemPrompt: String,
+    @SerializedName("model_id") val modelId: String? = null,
+    @SerializedName("provider_id") val providerId: String? = null,
     @SerializedName("tags") val tags: List<String>,
     @SerializedName("messages") val messages: List<SyncMessagePayload>,
     @SerializedName("created_at") val createdAt: String,
@@ -217,19 +220,27 @@ data class SyncConversationPayload(
 
 data class SyncConversationsRequest(
     @SerializedName("conversations") val conversations: List<SyncConversationPayload>,
-    @SerializedName("idempotency_key") val idempotencyKey: String
+    @SerializedName("idempotency_key") val idempotencyKey: String,
+    @SerializedName("transfer_id") val transferId: String = idempotencyKey
 )
 
 data class SyncConversationsResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("transfer_id") val transferId: String,
-    @SerializedName("received_count") val receivedCount: Int,
-    @SerializedName("message") val message: String
-)
+    @SerializedName("received_count") private val _receivedCount: Int? = null,
+    @SerializedName("imported_count") private val _importedCount: Int? = null,
+    @SerializedName("message") private val _message: String? = null
+) {
+    val receivedCount: Int
+        get() = _receivedCount ?: _importedCount ?: 0
+
+    val message: String
+        get() = _message ?: "Conversations successfully synced to desktop."
+}
 
 // Capabilities
 data class CapabilitiesResponse(
-    @SerializedName("version") val version: String = "1.2.8",
+    @SerializedName("version") val version: String = "1.2.9",
     @SerializedName("streaming") val streaming: Boolean = true,
     @SerializedName("vision") val vision: Boolean = true,
     @SerializedName("web_search") val webSearch: Boolean = true,

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.9] - 2026-11-04
+
+### Fixed
+- **Mobile-Desktop Conversation Export & Sync Serialization (HTTP 422):**
+  - Resolved `missing field original_session_id` deserialization failure when exporting/syncing conversations from Android Companion to Desktop.
+  - Added serde alias `#[serde(alias = "mobile_session_id")]` to `SyncConversationItem.original_session_id` and `#[serde(alias = "idempotency_key")]` to `SyncPayload.transfer_id` on the Rust Gateway.
+  - Android `SyncConversationPayload` now simultaneously sends both `mobile_session_id` and `original_session_id` for bidirectional forward and backward compatibility.
+  - Aligned response models: Rust returns both `imported_count` and `received_count`, preventing null/zero counts in Android sync toasts and status indicators.
+
 ## [1.2.8] - 2026-11-04
 
 ### Fixed

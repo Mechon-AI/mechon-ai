@@ -42,8 +42,11 @@ class SyncRepository(
             payloads.add(
                 SyncConversationPayload(
                     mobileSessionId = conv.id,
+                    originalSessionId = conv.id,
                     title = conv.title,
                     systemPrompt = conv.systemPrompt,
+                    modelId = conv.modelId,
+                    providerId = conv.providerId,
                     tags = tagsList,
                     messages = msgPayloads,
                     createdAt = dateFormat.format(Date(conv.createdAt)),
