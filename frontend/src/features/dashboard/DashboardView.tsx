@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { getDashboardAnalytics } from '../../services/api'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 import {
   AreaChart,
   Area,
@@ -32,6 +34,8 @@ export const DashboardView: React.FC = () => {
   useEffect(() => {
     loadAnalytics()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadAnalytics(), { enabled: true })
 
   const loadAnalytics = async () => {
     setLoading(true)
@@ -71,6 +75,10 @@ export const DashboardView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <StudioRefreshButton
+            onRefresh={() => loadAnalytics()}
+            isRefreshing={loading}
+          />
           <button
             onClick={() => navigate('/sft')}
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-medium flex items-center gap-2 shadow-sm transition-all"

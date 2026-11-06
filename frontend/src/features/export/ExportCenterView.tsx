@@ -28,6 +28,8 @@ import {
 } from '../../services/api'
 import type { SplitSummary } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 interface ExportCenterViewProps {
   tab?: { params?: Record<string, any> }
@@ -81,6 +83,13 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ tab }) => {
   useEffect(() => {
     initView()
   }, [activeProjectId, pipeline, dpoFormat, format, includeMetadata, exportSource, bilingualMode, selectedSftIds, selectedDpoIds])
+
+  useAutoDatasetSync(() => {
+    if (activeProjectId) {
+      loadSplits(activeProjectId)
+      loadPreview(activeProjectId)
+    }
+  }, { enabled: true })
 
   const initView = async () => {
     let pId = activeProjectId
@@ -477,13 +486,11 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ tab }) => {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadPreview()}
-                  className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                  title="Refresh Preview"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isLoadingPreview ? 'animate-spin' : ''}`} />
-                </button>
+                <StudioRefreshButton
+                  onRefresh={() => loadPreview()}
+                  isRefreshing={isLoadingPreview}
+                  size="sm"
+                />
                 <button
                   onClick={handleCopy}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground text-xs flex items-center gap-1 cursor-pointer"

@@ -1,7 +1,8 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 use sqlx::SqlitePool;
 use serde_json::json;
 use crate::errors::AppError;
+use crate::events::emit_dataset_change;
 use crate::models::{
     SFTCommitInput, SFTMessage, SFTMessageCreateInput, SFTRecord, SFTRecordUpdateInput,
     SFTSession, SFTSessionCreateInput, SFTSessionUpdateInput,
@@ -96,11 +97,14 @@ pub async fn truncate_sft_downstream(
 
 #[tauri::command]
 pub async fn commit_sft_session(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     session_id: String,
     data: SFTCommitInput,
 ) -> Result<SFTRecord, AppError> {
-    SFTService::commit_session(&pool, &session_id, data).await
+    let record = SFTService::commit_session(&pool, &session_id, data).await?;
+    emit_dataset_change(&app, "sft", "commit", Some(&record.project_id), Some(&record.id));
+    Ok(record)
 }
 
 #[tauri::command]
@@ -140,27 +144,38 @@ pub async fn get_sft_record(
 
 #[tauri::command]
 pub async fn update_sft_record(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     record_id: String,
     data: SFTRecordUpdateInput,
 ) -> Result<SFTRecord, AppError> {
-    DatasetService::update_sft_record(&pool, &record_id, data).await
+    let rec = DatasetService::update_sft_record(&pool, &record_id, data).await?;
+    emit_dataset_change(&app, "sft", "update", Some(&rec.project_id), Some(&rec.id));
+    Ok(rec)
 }
 
 #[tauri::command]
 pub async fn delete_sft_record(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     record_id: String,
 ) -> Result<(), AppError> {
-    DatasetService::delete_sft_record(&pool, &record_id).await
+    let rec_opt = DatasetService::get_sft_record(&pool, &record_id).await.ok();
+    let project_id = rec_opt.as_ref().map(|r| r.project_id.clone());
+    DatasetService::delete_sft_record(&pool, &record_id).await?;
+    emit_dataset_change(&app, "sft", "delete", project_id.as_deref(), Some(&record_id));
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn duplicate_sft_record(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     record_id: String,
 ) -> Result<SFTRecord, AppError> {
-    DatasetService::duplicate_sft_record(&pool, &record_id).await
+    let rec = DatasetService::duplicate_sft_record(&pool, &record_id).await?;
+    emit_dataset_change(&app, "sft", "duplicate", Some(&rec.project_id), Some(&rec.id));
+    Ok(rec)
 }
 
 #[tauri::command]

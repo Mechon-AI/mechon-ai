@@ -15,6 +15,8 @@ import {
 import { useProjectStore } from '../../stores/useProjectStore'
 import { runDeduplication, saveDuplicateDecision } from '../../services/api'
 import type { DeduplicationReport, DuplicateGroup, DuplicateRecordEntry } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const DeduplicationView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -28,6 +30,8 @@ export const DeduplicationView: React.FC = () => {
   useEffect(() => {
     fetchDeduplication()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => fetchDeduplication(), { enabled: true })
 
   const fetchDeduplication = async (overrideThreshold?: number) => {
     let pId = activeProjectId
@@ -115,14 +119,11 @@ export const DeduplicationView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => fetchDeduplication()}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 shadow-sm"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Run Audit
-          </button>
+          <StudioRefreshButton
+            onRefresh={() => fetchDeduplication()}
+            isRefreshing={isLoading}
+            label="Run Audit"
+          />
         </div>
       </div>
 

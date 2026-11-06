@@ -13,6 +13,8 @@ import {
 import { useProjectStore } from '../../stores/useProjectStore'
 import { runSequenceAnalytics } from '../../services/api'
 import type { SequenceAnalyticsReport } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const SequenceAnalyticsView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -26,6 +28,8 @@ export const SequenceAnalyticsView: React.FC = () => {
   useEffect(() => {
     fetchAnalytics()
   }, [activeProjectId, modelFamily, maxSeqLen, truncationStrategy])
+
+  useAutoDatasetSync(() => fetchAnalytics(), { enabled: true })
 
   const fetchAnalytics = async () => {
     let pId = activeProjectId
@@ -74,14 +78,11 @@ export const SequenceAnalyticsView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => fetchAnalytics()}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 shadow-sm"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Recalculate
-          </button>
+          <StudioRefreshButton
+            onRefresh={() => fetchAnalytics()}
+            isRefreshing={isLoading}
+            label="Recalculate"
+          />
         </div>
       </div>
 

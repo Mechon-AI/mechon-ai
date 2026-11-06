@@ -37,6 +37,8 @@ import {
 } from '../../services/api'
 import type { DPOTask } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const DPOStudioView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -114,6 +116,8 @@ export const DPOStudioView: React.FC = () => {
     fetchProviders()
     initView()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadTasks(), { datasetType: 'dpo', enabled: true })
 
   // Synchronize candidate selections when providers load
   useEffect(() => {
@@ -558,13 +562,20 @@ export const DPOStudioView: React.FC = () => {
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">DPO Tasks</span>
-            <button
-              onClick={() => handleNewTask()}
-              className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all"
-              title="New Comparison Task"
-            >
-              <Plus className="h-3.5 w-3.5" /> New Task
-            </button>
+            <div className="flex items-center gap-1.5">
+              <StudioRefreshButton
+                onRefresh={() => loadTasks()}
+                size="sm"
+                label=""
+              />
+              <button
+                onClick={() => handleNewTask()}
+                className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all"
+                title="New Comparison Task"
+              >
+                <Plus className="h-3.5 w-3.5" /> New Task
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center rounded-lg bg-secondary p-0.5 border border-border text-[11px]">

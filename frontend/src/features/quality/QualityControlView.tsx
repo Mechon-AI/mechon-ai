@@ -12,6 +12,8 @@ import {
 import { useProjectStore } from '../../stores/useProjectStore'
 import { validateDataset } from '../../services/api'
 import type { ValidationReport } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const QualityControlView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -24,6 +26,8 @@ export const QualityControlView: React.FC = () => {
   useEffect(() => {
     initView()
   }, [activeProjectId, datasetType])
+
+  useAutoDatasetSync(() => runValidation(), { enabled: true })
 
   const initView = async () => {
     let pId = activeProjectId
@@ -87,14 +91,11 @@ export const QualityControlView: React.FC = () => {
             </button>
           </div>
 
-          <button
-            onClick={() => runValidation()}
-            disabled={isLoading}
-            className="p-2 rounded-lg bg-secondary hover:bg-accent border border-border text-muted-foreground hover:text-foreground"
-            title="Re-run validation"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+          <StudioRefreshButton
+            onRefresh={() => runValidation()}
+            isRefreshing={isLoading}
+            label="Re-run Validation"
+          />
         </div>
       </div>
 

@@ -17,6 +17,8 @@ import {
 import { useProjectStore } from '../../stores/useProjectStore'
 import { generateTrainingReadinessReport, listReadinessReports } from '../../services/api'
 import type { TrainingReadinessReport, ReadinessCheckItem } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const TrainingReadinessView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -31,6 +33,8 @@ export const TrainingReadinessView: React.FC = () => {
   useEffect(() => {
     loadReports()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadReports(), { enabled: true })
 
   const loadReports = async () => {
     let pId = activeProjectId
@@ -139,6 +143,11 @@ export const TrainingReadinessView: React.FC = () => {
             </>
           )}
 
+          <StudioRefreshButton
+            onRefresh={() => loadReports()}
+            isRefreshing={isLoading}
+            label="Refresh History"
+          />
           <button
             onClick={() => handleGenerateReport()}
             disabled={isLoading}

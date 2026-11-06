@@ -62,6 +62,8 @@ import {
 } from '../../services/api'
 import type { SFTSession, SFTMessage, SFTCommitInput } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 import { lookupLanguage, isRTL } from '../../types/languages'
 import { LoadFromCorpusModal } from './LoadFromCorpusModal'
 import { DynamicLanguageBar } from './DynamicLanguageBar'
@@ -123,6 +125,8 @@ export const SFTStudioView: React.FC = () => {
     fetchProviders()
     initView()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadSessions(), { datasetType: 'sft', enabled: true })
 
   useEffect(() => {
     if (activeSession) {
@@ -765,6 +769,11 @@ export const SFTStudioView: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversations</span>
             <div className="flex items-center gap-1.5">
+              <StudioRefreshButton
+                onRefresh={() => loadSessions()}
+                size="sm"
+                label=""
+              />
               <button
                 onClick={() => setShowCorpusModal(true)}
                 className="p-1.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs flex items-center gap-1 font-semibold transition-all cursor-pointer"

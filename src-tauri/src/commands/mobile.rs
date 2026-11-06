@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use sqlx::SqlitePool;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
+use crate::events::emit_dataset_change;
 use crate::models::{MobileGatewayStatus, MobileImportedConversation, PairedDevice, PairingRequestItem};
 use crate::services::mobile_gateway_service::MobileGatewayService;
 
@@ -110,11 +111,15 @@ pub async fn convert_mobile_import_to_sft_draft(
 
 #[tauri::command]
 pub async fn commit_mobile_import_to_corpus(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     import_id: String,
     target_project_id: Option<String>,
 ) -> Result<String, AppError> {
-    MobileGatewayService::commit_mobile_import_to_corpus(&pool, &import_id, target_project_id).await
+    let target_proj = target_project_id.clone();
+    let record_id = MobileGatewayService::commit_mobile_import_to_corpus(&pool, &import_id, target_project_id).await?;
+    emit_dataset_change(&app, "sft", "commit", target_proj.as_deref(), Some(&record_id));
+    Ok(record_id)
 }
 
 #[tauri::command]

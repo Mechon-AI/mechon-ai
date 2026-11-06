@@ -15,6 +15,8 @@ import {
 import { useProjectStore } from '../../stores/useProjectStore'
 import { createDatasetSplit, listDatasetSplits } from '../../services/api'
 import type { SplitSummary } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const SplitManagerView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -31,6 +33,8 @@ export const SplitManagerView: React.FC = () => {
   useEffect(() => {
     loadSplits()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadSplits(), { enabled: true })
 
   const loadSplits = async () => {
     let pId = activeProjectId
@@ -105,14 +109,10 @@ export const SplitManagerView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => loadSplits()}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 border border-border bg-secondary/60 hover:bg-secondary text-sm font-medium rounded-lg transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <StudioRefreshButton
+            onRefresh={() => loadSplits()}
+            isRefreshing={isLoading}
+          />
         </div>
       </div>
 

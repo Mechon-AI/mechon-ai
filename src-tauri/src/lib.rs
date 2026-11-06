@@ -3,6 +3,7 @@ pub mod credentials;
 pub mod database;
 pub mod errors;
 pub mod engineering;
+pub mod events;
 pub mod languages;
 pub mod models;
 pub mod providers;

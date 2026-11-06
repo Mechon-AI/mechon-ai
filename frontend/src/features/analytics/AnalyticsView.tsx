@@ -22,6 +22,8 @@ import {
 } from 'recharts'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { getDashboardAnalytics } from '../../services/api'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const AnalyticsView: React.FC = () => {
   const { activeProjectId } = useProjectStore()
@@ -31,6 +33,8 @@ export const AnalyticsView: React.FC = () => {
   useEffect(() => {
     loadAnalytics()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadAnalytics(), { enabled: true })
 
   const loadAnalytics = async () => {
     setIsLoading(true)
@@ -63,13 +67,19 @@ export const AnalyticsView: React.FC = () => {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" /> Dataset Analytics & Intelligence
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Quantitative statistics, turn distribution analysis, and preference ratios calculated from local records.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" /> Dataset Analytics & Intelligence
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Quantitative statistics, turn distribution analysis, and preference ratios calculated from local records.
+          </p>
+        </div>
+        <StudioRefreshButton
+          onRefresh={() => loadAnalytics()}
+          isRefreshing={isLoading}
+        />
       </div>
 
       {/* KPI Overview */}

@@ -22,6 +22,8 @@ import { useProjectStore } from '../../stores/useProjectStore'
 import { useProviderStore } from '../../stores/useProviderStore'
 import { useSubsystemConfigStore } from '../../editor/stores/useSubsystemConfigStore'
 import { ResizeDivider } from '../../components/common/ResizeDivider'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 import type {
   StorySession,
   PlanningSpecification,
@@ -224,6 +226,12 @@ export const StoryArchitectView: React.FC = () => {
       loadSessions(activeProjectId)
     }
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => {
+    if (activeProjectId) {
+      loadSessions(activeProjectId)
+    }
+  }, { enabled: true })
 
   // Setup streaming and turn-completed listener when activeSession changes
   useEffect(() => {

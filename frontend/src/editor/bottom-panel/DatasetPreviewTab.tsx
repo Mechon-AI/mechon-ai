@@ -4,6 +4,8 @@ import { useProjectStore } from '../../stores/useProjectStore'
 import { getSFTRecords } from '../../services/api'
 import { useEditorStore } from '../stores/useEditorStore'
 import { useInspectorStore } from '../stores/useInspectorStore'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const DatasetPreviewTab: React.FC = () => {
   const { getActiveProject } = useProjectStore()
@@ -31,6 +33,8 @@ export const DatasetPreviewTab: React.FC = () => {
   useEffect(() => {
     fetchPreview()
   }, [activeProject?.id])
+
+  useAutoDatasetSync(() => fetchPreview(), { datasetType: 'sft', enabled: true })
 
   const filtered = records.filter((r) => {
     if (!search) return true
@@ -60,14 +64,12 @@ export const DatasetPreviewTab: React.FC = () => {
             />
           </div>
 
-          <button
-            onClick={fetchPreview}
-            disabled={loading || !activeProject}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title="Refresh preview"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <StudioRefreshButton
+            onRefresh={fetchPreview}
+            isRefreshing={loading}
+            size="sm"
+            label=""
+          />
         </div>
       </div>
 

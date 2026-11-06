@@ -48,6 +48,8 @@ import { LanguageFilter, LanguageIdentityBadge } from '../../components/language
 import { lookupLanguage, isRTL } from '../../types/languages'
 import { useInspectorStore } from '../../editor/stores/useInspectorStore'
 import { useEditorStore } from '../../editor/stores/useEditorStore'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const DatasetExplorerView: React.FC = () => {
   const navigate = useNavigate()
@@ -97,6 +99,8 @@ export const DatasetExplorerView: React.FC = () => {
   useEffect(() => {
     initView()
   }, [activeProjectId, activeTab, search, languageFilter, selectedPair])
+
+  useAutoDatasetSync(() => loadData(), { datasetType: 'all', enabled: true })
 
   const initView = async () => {
     let pId = activeProjectId
@@ -341,6 +345,11 @@ export const DatasetExplorerView: React.FC = () => {
                 DPO Tasks ({dpoTasks.length})
               </button>
             </div>
+            <StudioRefreshButton
+              onRefresh={() => loadData()}
+              isRefreshing={isLoading}
+              size="sm"
+            />
           </div>
 
           <div className="relative">

@@ -19,6 +19,8 @@ import {
   compareSnapshots
 } from '../../services/api'
 import type { DatasetVersion } from '../../types'
+import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
+import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
 
 export const VersionHistoryView: React.FC = () => {
   const { activeProjectId, ensureActiveProject } = useProjectStore()
@@ -47,6 +49,8 @@ export const VersionHistoryView: React.FC = () => {
   useEffect(() => {
     initView()
   }, [activeProjectId])
+
+  useAutoDatasetSync(() => loadVersions(), { enabled: true })
 
   const initView = async () => {
     let pId = activeProjectId
@@ -130,6 +134,10 @@ export const VersionHistoryView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <StudioRefreshButton
+            onRefresh={() => loadVersions()}
+            size="sm"
+          />
           {versions.length >= 2 && (
             <button
               onClick={handleCompare}

@@ -1,6 +1,7 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 use sqlx::SqlitePool;
 use crate::errors::AppError;
+use crate::events::emit_dataset_change;
 use crate::services::export_service::ExportService;
 
 #[tauri::command]
@@ -43,11 +44,14 @@ pub async fn export_dpo_dataset(
 
 #[tauri::command]
 pub async fn import_dataset_file(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     project_id: String,
     content: String,
 ) -> Result<serde_json::Value, AppError> {
-    ExportService::import_content(&pool, &project_id, &content).await
+    let res = ExportService::import_content(&pool, &project_id, &content).await?;
+    emit_dataset_change(&app, "all", "import", Some(&project_id), None);
+    Ok(res)
 }
 
 #[derive(serde::Deserialize)]

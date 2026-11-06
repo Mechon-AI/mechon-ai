@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
 use crate::credentials::CredentialStore;
 use crate::errors::AppError;
+use crate::events::emit_dataset_change;
 use crate::story_architect::models::*;
 use crate::story_architect::session_service::StorySessionService;
 use crate::story_architect::planning_service::PlanningAgentService;
@@ -196,10 +197,13 @@ pub async fn get_narrative_state(
 
 #[tauri::command]
 pub async fn commit_story_to_sft(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     data: CommitToSFTInput,
 ) -> Result<CommitToSFTResult, AppError> {
-    StorySessionService::commit_to_sft(&pool, data).await
+    let res = StorySessionService::commit_to_sft(&pool, data).await?;
+    emit_dataset_change(&app, "sft", "commit", None, Some(&res.sft_record_id));
+    Ok(res)
 }
 
 #[tauri::command]
