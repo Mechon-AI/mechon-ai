@@ -489,7 +489,7 @@ async fn test_unified_mobile_v1_api_and_inference() {
     let h_json: Value = serde_json::from_slice(&h_bytes).unwrap();
     assert_eq!(h_json["status"], "ok");
     assert_eq!(h_json["authenticated"], true);
-    assert_eq!(h_json["version"], "1.2.9");
+    assert_eq!(h_json["version"], "1.3.0");
 
     // 3. Capabilities (/api/mobile/v1/capabilities)
     let caps_req = Request::builder()

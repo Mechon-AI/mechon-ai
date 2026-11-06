@@ -252,7 +252,7 @@ impl MobileGatewayService {
                 "lan_ip": b_ip,
                 "tailscale_ip": b_tailscale_ip,
                 "port": b_port,
-                "version": "1.2.9",
+                "version": "1.3.0",
                 "is_tailscale": b_tailscale_ip.is_some()
             }).to_string();
 
@@ -601,7 +601,7 @@ async fn handle_ping() -> impl IntoResponse {
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.9",
+            "version": "1.3.0",
             "workstation": "Mechon AI Desktop",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }).to_string(),
@@ -615,7 +615,7 @@ async fn handle_status(State(state): State<GatewayAppState>) -> impl IntoRespons
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "online",
-            "version": "1.2.9",
+            "version": "1.3.0",
             "local_ip": internal.local_ip,
             "tailscale_ip": internal.tailscale_ip,
             "port": internal.port,
@@ -695,7 +695,7 @@ async fn handle_pairing_status(
                     "token": req.token,
                     "device_id": req.device_id,
                     "desktop_name": "Mechon Workstation",
-                    "version": "1.2.9"
+                    "version": "1.3.0"
                 }).to_string(),
             ))
         }
@@ -810,7 +810,7 @@ async fn handle_authenticated_health(
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
             "status": "ok",
-            "version": "1.2.9",
+            "version": "1.3.0",
             "authenticated": true,
             "device_id": dev_id,
             "desktop_name": "Mechon Workstation",
@@ -952,7 +952,7 @@ async fn handle_get_capabilities(
         StatusCode::OK,
         [("Access-Control-Allow-Origin", "*"), ("Content-Type", "application/json")],
         json!({
-            "version": "1.2.9",
+            "version": "1.3.0",
             "streaming": true,
             "vision": true,
             "web_search": true,
