@@ -64,6 +64,7 @@ import type { SFTSession, SFTMessage, SFTCommitInput } from '../../types'
 import { formatErrorMessage } from '../../utils/errors'
 import { StudioRefreshButton } from '../../components/common/StudioRefreshButton'
 import { useAutoDatasetSync } from '../../hooks/useAutoDatasetSync'
+import { TranslationProgressModal, TranslationTurnStatus } from './TranslationProgressModal'
 import { lookupLanguage, isRTL } from '../../types/languages'
 import { LoadFromCorpusModal } from './LoadFromCorpusModal'
 import { DynamicLanguageBar } from './DynamicLanguageBar'
@@ -113,6 +114,10 @@ export const SFTStudioView: React.FC = () => {
   const [isTranslatingAll, setIsTranslatingAll] = useState(false)
   const [selectedTurnIds, setSelectedTurnIds] = useState<string[]>([])
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Sequential Translation Progress State
+  const [translationProgress, setTranslationProgress] = useState<TranslationTurnStatus | null>(null)
+  const isCancelledRef = useRef(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -528,37 +533,108 @@ export const SFTStudioView: React.FC = () => {
   }
 
   const resolveTranslationModel = () => {
+    const transConfig = useSubsystemConfigStore.getState().configs.translation
     const mainInf = useSubsystemConfigStore.getState().configs.main_inference
-    const pId = mainInf?.provider_id || activeProviderId || activeSession?.provider_id
-    const targetModel = mainInf?.model_id || activeModel || activeSession?.model
+    const pId = transConfig?.provider_id || mainInf?.provider_id || activeProviderId || activeSession?.provider_id
+    const targetModel = transConfig?.model_id || mainInf?.model_id || activeModel || activeSession?.model
     return { pId, targetModel }
   }
 
   const handleTranslateAll = async (forceRegenerate = false) => {
-    if (!activeSession) return
+    if (!activeSession || activeSession.messages.length === 0) return
     const targetLang = activeLanguageTab !== activeSession.primary_language
       ? activeLanguageTab
       : activeSession.secondary_language || 'en'
     const { pId, targetModel } = resolveTranslationModel()
+    const prov = providers.find(p => p.id === pId)
+    const provName = prov?.name || pId || 'Default'
 
-    setIsTranslatingAll(true)
-    try {
-      const updated = await translateSFTSession({
-        session_id: activeSession.id,
-        target_language: targetLang,
-        provider_id: pId,
-        model: targetModel,
-        force_regenerate: forceRegenerate
-      })
-      setActiveSession(updated)
-      showFeedback('success', `Translation completed for ${lookupLanguage(targetLang).name}.`)
-      useConsoleStore.getState().addLog('info', 'inference', `Translated conversation into ${targetLang} using ${targetModel}`)
-    } catch (err: any) {
-      showFeedback('error', formatErrorMessage(err, 'Translation failed'))
-      useConsoleStore.getState().addLog('error', 'inference', `Translation failed: ${err?.message || err}`)
-    } finally {
-      setIsTranslatingAll(false)
+    // Filter untranslated or forceRegenerate messages
+    const targetMessages = activeSession.messages.filter(m => {
+      if (forceRegenerate) return true
+      const st = m.translation_status?.[targetLang] || 'pending'
+      const hasText = m.translations?.[targetLang]?.trim()
+      return st === 'pending' || st === 'failed' || !hasText
+    })
+
+    if (targetMessages.length === 0) {
+      showFeedback('success', `All turns are already translated for ${lookupLanguage(targetLang).name}.`)
+      return
     }
+
+    isCancelledRef.current = false
+    setIsTranslatingAll(true)
+
+    const totalTurns = targetMessages.length
+    let successCount = 0
+    let failedCount = 0
+
+    setTranslationProgress({
+      turnIndex: 0,
+      totalTurns,
+      currentTurnId: targetMessages[0]?.id,
+      successCount: 0,
+      failedCount: 0,
+      remainingCount: totalTurns,
+      providerName: provName,
+      modelName: targetModel || 'default',
+      isCancelled: false,
+      isCompleted: false,
+      error: null
+    })
+
+    for (let i = 0; i < totalTurns; i++) {
+      if (isCancelledRef.current) {
+        setTranslationProgress(prev => prev ? { ...prev, isCancelled: true } : null)
+        break
+      }
+
+      const msg = targetMessages[i]
+      setTranslationProgress(prev => prev ? {
+        ...prev,
+        turnIndex: i + 1,
+        currentTurnId: msg.id,
+        remainingCount: totalTurns - (successCount + failedCount)
+      } : null)
+
+      try {
+        const updatedMsg = await translateSFTMessage({
+          session_id: activeSession.id,
+          message_id: msg.id,
+          target_language: targetLang,
+          provider_id: pId,
+          model: targetModel
+        })
+
+        successCount++
+        setActiveSession(prev => prev ? {
+          ...prev,
+          messages: prev.messages.map(m => m.id === msg.id ? updatedMsg : m)
+        } : null)
+      } catch (err: any) {
+        failedCount++
+        console.warn(`[TranslateAll] Turn ${msg.id} translation failed:`, err)
+      }
+
+      setTranslationProgress(prev => prev ? {
+        ...prev,
+        successCount,
+        failedCount,
+        remainingCount: totalTurns - (successCount + failedCount)
+      } : null)
+    }
+
+    // Refresh full session from backend to persist updated language mode
+    await loadSessionDetails(activeSession.id)
+
+    setTranslationProgress(prev => prev ? {
+      ...prev,
+      isCompleted: true,
+      remainingCount: 0
+    } : null)
+
+    setIsTranslatingAll(false)
+    useConsoleStore.getState().addLog('info', 'inference', `Sequential translation finished: ${successCount} successful, ${failedCount} failed into ${targetLang}`)
   }
 
   const handleTranslateSelected = async () => {
@@ -1662,6 +1738,23 @@ export const SFTStudioView: React.FC = () => {
           onSuccess={updated => {
             setActiveSession(updated)
             showFeedback('success', 'Full conversation translated.')
+          }}
+        />
+      )}
+
+      {/* Translation Progress Modal */}
+      {translationProgress && (
+        <TranslationProgressModal
+          isOpen={true}
+          status={translationProgress}
+          onCancel={() => {
+            isCancelledRef.current = true
+            setTranslationProgress(prev => prev ? { ...prev, isCancelled: true } : null)
+          }}
+          onClose={() => setTranslationProgress(null)}
+          onRetryFailed={() => {
+            setTranslationProgress(null)
+            handleRetryFailedTurns()
           }}
         />
       )}

@@ -114,32 +114,11 @@ export const useSubsystemConfigStore = create<SubsystemConfigState>((set, get) =
         model_id: modelId
       }
     }
-    // Translation Agent is kept strictly in sync with Main Inference
-    if (subsystem === 'main_inference' || subsystem === 'translation') {
-      updated.main_inference = {
-        ...updated.main_inference,
-        provider_id: providerId,
-        model_id: modelId
-      }
-      updated.translation = {
-        ...updated.translation,
-        provider_id: providerId,
-        model_id: modelId
-      }
-    }
     set({ configs: updated })
     persistConfigs(updated)
   },
 
   getSubsystemConfig: (subsystem: SubsystemId) => {
-    // Translation Agent always uses the Main Inference configuration
-    if (subsystem === 'translation') {
-      const mainInf = get().configs.main_inference
-      return {
-        provider_id: mainInf?.provider_id || '',
-        model_id: mainInf?.model_id || ''
-      }
-    }
     const item = get().configs[subsystem]
     return {
       provider_id: item?.provider_id || '',

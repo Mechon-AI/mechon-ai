@@ -10,5 +10,6 @@ pub mod sft_service;
 pub mod validation_service;
 pub mod version_service;
 pub mod translation_service;
+pub mod translation_parser;
 pub mod engineering_service;
 pub mod mobile_gateway_service;
