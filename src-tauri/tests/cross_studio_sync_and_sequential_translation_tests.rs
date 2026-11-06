@@ -225,3 +225,143 @@ async fn test_cross_studio_commit_and_query_sync() {
     assert!(recs_multi.iter().any(|r| r.id == committed_record.id));
     assert!(recs_multi.iter().any(|r| r.id == committed2.id));
 }
+
+#[tokio::test]
+async fn test_sft_new_conversation_isolation_and_no_overwrite() {
+    let pool = setup_test_db().await;
+
+    let project = ProjectService::create(&pool, ProjectCreateInput {
+        name: "SFT Isolation Test".to_string(),
+        description: Some("Ensuring new session creation does not overwrite existing drafts or records".to_string()),
+        settings: None,
+    }).await.unwrap();
+
+    // 1. Create initial draft session and add turns
+    let session1 = SFTService::create_session(&pool, SFTSessionCreateInput {
+        project_id: project.id.clone(),
+        title: Some("Original Conversation #1".to_string()),
+        system_prompt: Some("You are an assistant.".to_string()),
+        provider_id: Some("mock".to_string()),
+        model: Some("mock-model".to_string()),
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        max_tokens: Some(2048),
+        language_mode: Some("monolingual".to_string()),
+        primary_language: Some("id".to_string()),
+        secondary_language: Some("en".to_string()),
+        language_metadata: None,
+    }).await.unwrap();
+
+    let msg1_user = SFTService::add_message(&pool, &session1.id, SFTMessageCreateInput {
+        role: "user".to_string(),
+        content: "Draft message from user 1".to_string(),
+        model: None,
+    }).await.unwrap();
+
+    let msg1_asst = SFTService::add_message(&pool, &session1.id, SFTMessageCreateInput {
+        role: "assistant".to_string(),
+        content: "Draft message from assistant 1".to_string(),
+        model: None,
+    }).await.unwrap();
+
+    // 2. Commit Session 1 into Corpus
+    let committed_record = SFTService::commit_session(&pool, &session1.id, SFTCommitInput {
+        tags: Some(vec!["committed-session-1".to_string()]),
+        ..Default::default()
+    }).await.unwrap();
+    assert_eq!(committed_record.turn_count, 2);
+
+    // 3. Create Session 2 draft with its own turns (uncommitted)
+    let session2 = SFTService::create_session(&pool, SFTSessionCreateInput {
+        project_id: project.id.clone(),
+        title: Some("Active Draft #2".to_string()),
+        system_prompt: Some("System #2".to_string()),
+        provider_id: Some("mock".to_string()),
+        model: Some("mock-model".to_string()),
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        max_tokens: Some(2048),
+        language_mode: Some("monolingual".to_string()),
+        primary_language: Some("id".to_string()),
+        secondary_language: Some("en".to_string()),
+        language_metadata: None,
+    }).await.unwrap();
+
+    let msg2_user = SFTService::add_message(&pool, &session2.id, SFTMessageCreateInput {
+        role: "user".to_string(),
+        content: "Draft #2 turn".to_string(),
+        model: None,
+    }).await.unwrap();
+
+    // 4. User triggers "New Conversation (Bikin Percakapan Baru)" -> creates genuinely new session 3
+    let session3 = SFTService::create_session(&pool, SFTSessionCreateInput {
+        project_id: project.id.clone(),
+        title: Some("New Conversation Draft".to_string()),
+        system_prompt: Some("You are a helpful, respectful, and honest assistant.".to_string()),
+        provider_id: Some("mock".to_string()),
+        model: Some("mock-model".to_string()),
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        max_tokens: Some(2048),
+        language_mode: Some("monolingual".to_string()),
+        primary_language: Some("id".to_string()),
+        secondary_language: Some("en".to_string()),
+        language_metadata: None,
+    }).await.unwrap();
+
+    // Verify session 3 has a distinct UUID
+    assert_ne!(session3.id, session1.id);
+    assert_ne!(session3.id, session2.id);
+
+    // Verify Session 1 is completely preserved (messages and committed record unchanged)
+    let session1_reloaded = SFTService::get_session(&pool, &session1.id).await.unwrap();
+    assert_eq!(session1_reloaded.messages.len(), 2);
+    assert_eq!(session1_reloaded.messages[0].id, msg1_user.id);
+    assert_eq!(session1_reloaded.messages[1].id, msg1_asst.id);
+    assert_eq!(session1_reloaded.committed_record_id, Some(committed_record.id.clone()));
+
+    // Verify Session 2 is completely preserved (draft messages intact)
+    let session2_reloaded = SFTService::get_session(&pool, &session2.id).await.unwrap();
+    assert_eq!(session2_reloaded.messages.len(), 1);
+    assert_eq!(session2_reloaded.messages[0].id, msg2_user.id);
+    assert_eq!(session2_reloaded.status, "in_progress");
+
+    // Verify Session 3 starts clean with 0 messages
+    let session3_reloaded = SFTService::get_session(&pool, &session3.id).await.unwrap();
+    assert_eq!(session3_reloaded.messages.len(), 0);
+    assert_eq!(session3_reloaded.title, "New Conversation Draft");
+
+    // Verify list_sessions returns all 3 sessions
+    let all_sessions = SFTService::list_sessions(&pool, &project.id, None).await.unwrap();
+    assert_eq!(all_sessions.len(), 3);
+    assert!(all_sessions.iter().any(|s| s.id == session1.id));
+    assert!(all_sessions.iter().any(|s| s.id == session2.id));
+    assert!(all_sessions.iter().any(|s| s.id == session3.id));
+}
+
+#[test]
+fn test_sft_studio_ui_regression_guard_new_conversation_buttons_present() {
+    let sft_view_src = include_str!("../../frontend/src/features/sft/SFTStudioView.tsx");
+
+    // Guard: Sidebar dedicated New Conversation button must exist
+    assert!(
+        sft_view_src.contains("data-testid=\"sft-new-conversation-sidebar-btn\""),
+        "Regression detected: SFT Studio sidebar New Conversation button data-testid missing!"
+    );
+    assert!(
+        sft_view_src.contains("New Conversation (Bikin Percakapan Baru)"),
+        "Regression detected: SFT Studio sidebar New Conversation title/label missing!"
+    );
+
+    // Guard: Top bar workspace New Chat button must exist
+    assert!(
+        sft_view_src.contains("data-testid=\"sft-topbar-new-chat-btn\""),
+        "Regression detected: SFT Studio top bar New Chat button missing!"
+    );
+
+    // Guard: Empty state Create New Conversation button must exist
+    assert!(
+        sft_view_src.contains("data-testid=\"sft-empty-new-conversation-btn\""),
+        "Regression detected: SFT Studio empty state New Conversation button missing!"
+    );
+}

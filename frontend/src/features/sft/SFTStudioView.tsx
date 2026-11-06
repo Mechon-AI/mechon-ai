@@ -246,6 +246,7 @@ export const SFTStudioView: React.FC = () => {
       setSessions(prev => [created, ...prev])
       setActiveSession(created)
       setActiveLanguageTab(created.primary_language || 'id')
+      setSessionSearch('')
       showFeedback('success', 'New conversation draft created.')
     } catch (err: any) {
       showFeedback('error', formatErrorMessage(err, 'Failed to create conversation'))
@@ -843,8 +844,8 @@ export const SFTStudioView: React.FC = () => {
       <aside className="w-72 border-r border-border bg-card/40 flex flex-col shrink-0 select-none">
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversations</span>
-            <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground truncate">Conversations</span>
+            <div className="flex items-center gap-1.5 shrink-0">
               <StudioRefreshButton
                 onRefresh={() => loadSessions()}
                 size="sm"
@@ -858,17 +859,19 @@ export const SFTStudioView: React.FC = () => {
                 <Database className="h-3.5 w-3.5 text-primary" />
                 <span>Corpus</span>
               </button>
-
-              <button
-                onClick={() => handleNewSession()}
-                className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center gap-1 shadow-sm font-semibold transition-all cursor-pointer"
-                title="New Conversation Draft"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>New</span>
-              </button>
             </div>
           </div>
+
+          {/* Dedicated New Conversation (Bikin Percakapan Baru) Action Button */}
+          <button
+            onClick={() => handleNewSession()}
+            className="w-full py-2 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs flex items-center justify-center gap-2 font-semibold shadow-xs transition-all cursor-pointer"
+            title="Create New Conversation Draft (Bikin Percakapan Baru)"
+            data-testid="sft-new-conversation-sidebar-btn"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Conversation</span>
+          </button>
 
           <div className="relative">
             <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -982,6 +985,16 @@ export const SFTStudioView: React.FC = () => {
 
               {/* Top Controls */}
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => handleNewSession()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-secondary hover:bg-secondary/80 text-foreground border border-border font-medium text-xs shadow-xs transition-colors cursor-pointer shrink-0"
+                  title="Create New Conversation Draft (Bikin Percakapan Baru)"
+                  data-testid="sft-topbar-new-chat-btn"
+                >
+                  <Plus className="h-3.5 w-3.5 text-primary" />
+                  <span>New Chat</span>
+                </button>
+
                 {/* Active Model Indicator Badge */}
                 <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary/80 border border-border text-[11px] font-mono text-muted-foreground">
                   <Cpu className="h-3 w-3 text-primary shrink-0" />
@@ -1647,9 +1660,12 @@ export const SFTStudioView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleNewSession()}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-bold cursor-pointer flex items-center gap-1.5"
+                  title="Create New Conversation Draft (Bikin Percakapan Baru)"
+                  data-testid="sft-empty-new-conversation-btn"
                 >
-                  Create New Conversation
+                  <Plus className="w-4 h-4" />
+                  <span>Create New Conversation</span>
                 </button>
               </div>
             </div>
